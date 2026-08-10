@@ -1,0 +1,66 @@
+# HTTP 服务配置；端口可由部署环境变量覆盖。
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /glxt-service-contract-change
+
+spring:
+  # Oracle 连接池配置。生产环境必须通过环境变量提供真实账号密码。
+  datasource:
+    driver-class-name: oracle.jdbc.OracleDriver
+    url: ${ORACLE_URL:jdbc:oracle:thin:@127.0.0.1:1521:ORCL}
+    username: ${ORACLE_USERNAME:glxt}
+    password: ${ORACLE_PASSWORD:change-me}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:10}
+      minimum-idle: ${DB_POOL_MIN:1}
+      connection-timeout: 30000
+  # 历史 Excel 上传限制，与业务层的最大行数限制共同生效。
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 21MB
+
+# Mapper 只加载 XML 文件，核心 SQL 不写在 Java 注解中。
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.citics.glxt.contractchange.domain
+  configuration:
+    map-underscore-to-camel-case: true
+    jdbc-type-for-null: NULL
+
+# 本次合同段落识别需求的全部可调业务参数。
+contract-change:
+  # 内网 Hugging Face Embedding 容器配置。
+  embedding:
+    url: ${EMBEDDING_URL:http://127.0.0.1:8081/embed}
+    health-url: ${EMBEDDING_HEALTH_URL:http://127.0.0.1:8081/health}
+    model-version: ${EMBEDDING_MODEL_VERSION:bge-base-zh-768-v1}
+    dimension: ${EMBEDDING_DIMENSION:768}
+    batch-size: ${EMBEDDING_BATCH_SIZE:8}
+    connect-timeout-ms: ${EMBEDDING_CONNECT_TIMEOUT_MS:3000}
+    read-timeout-ms: ${EMBEDDING_READ_TIMEOUT_MS:30000}
+    max-retries: ${EMBEDDING_MAX_RETRIES:1}
+  # 单份 Excel 最大非空数据行数。
+  import-config:
+    max-rows: ${IMPORT_MAX_ROWS:1000}
+  # 内存精确检索、多标签投票和证据返回参数。
+  search:
+    retrieve-top-k: ${SEARCH_RETRIEVE_TOP_K:20}
+    vote-top-k: ${SEARCH_VOTE_TOP_K:10}
+    evidence-top-k: ${SEARCH_EVIDENCE_TOP_K:5}
+    max-paragraph-length: ${SEARCH_MAX_PARAGRAPH_LENGTH:4000}
+    min-similarity: ${SEARCH_MIN_SIMILARITY:0.60}
+    high-threshold: ${SEARCH_HIGH_THRESHOLD:0.80}
+    candidate-threshold: ${SEARCH_CANDIDATE_THRESHOLD:0.55}
+    min-support-count: ${SEARCH_MIN_SUPPORT_COUNT:2}
+
+# 日志只记录 Hash、数量、耗时和状态，不记录合同正文或向量。
+logging:
+  level:
+    # 业务日志默认 INFO；需要性能排查时可临时将 service/embedding 包调整为 DEBUG。
+    com.citics.glxt.contractchange: info
+    # 禁止生产环境开启 Mapper DEBUG，避免 SQL 参数打印合同正文和向量内容。
+    com.citics.glxt.contractchange.mapper: info
+    # RestTemplate 的 DEBUG 日志会打印 Embedding 请求体，因此显式锁定为 INFO。
+    org.springframework.web.client.RestTemplate: info

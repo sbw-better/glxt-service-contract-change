@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.citics.glxt.contractchange.mapper.ContractParagraphMapper">
+
+    <!-- Oracle 字段与 Java 数据对象的完整映射，CLOB/BLOB 显式指定 JDBC 类型。 -->
+    <resultMap id="ContractParagraphResultMap"
+               type="com.citics.glxt.contractchange.domain.ContractParagraphDO">
+        <id column="ID" property="id"/>
+        <result column="YWBW" property="originalText" jdbcType="CLOB"/>
+        <result column="GFBW" property="normalizedText" jdbcType="CLOB"/>
+        <result column="TEXT_HASH" property="textHash"/>
+        <result column="BGLX_CODES" property="changeTypeCodes"/>
+        <result column="VECTOR_DATA" property="vectorData" jdbcType="BLOB"/>
+        <result column="VECTOR_DIM" property="vectorDim"/>
+        <result column="MODEL_VERSION" property="modelVersion"/>
+        <result column="SOURCE_FILE" property="sourceFile"/>
+        <result column="SFSX" property="enabled"/>
+        <result column="CREATE_TIME" property="createTime"/>
+    </resultMap>
+
+    <!-- 所有查询共用字段清单，避免新增字段时出现不同查询映射不一致。 -->
+    <sql id="AllColumns">
+        ID, YWBW, GFBW, TEXT_HASH, BGLX_CODES, VECTOR_DATA, VECTOR_DIM,
+        MODEL_VERSION, SOURCE_FILE, SFSX, CREATE_TIME
+    </sql>
+
+    <!-- 先读取 Sequence 并回填实体主键，再插入一条已经完成向量化的历史样本。 -->
+    <insert id="insertParagraph"
+            parameterType="com.citics.glxt.contractchange.domain.ContractParagraphDO">
+        <selectKey keyProperty="id" resultType="java.lang.Long" order="BEFORE">
+            SELECT SEQ_TPIF_HTDLYB.NEXTVAL FROM DUAL
+        </selectKey>
+        INSERT INTO TPIF_HTDLYB (
+            ID, YWBW, GFBW, TEXT_HASH, BGLX_CODES, VECTOR_DATA, VECTOR_DIM,
+            MODEL_VERSION, SOURCE_FILE, SFSX, CREATE_TIME
+        ) VALUES (
+            #{id}, #{originalText,jdbcType=CLOB}, #{normalizedText,jdbcType=CLOB},
+            #{textHash}, #{changeTypeCodes}, #{vectorData,jdbcType=BLOB}, #{vectorDim},
+            #{modelVersion}, #{sourceFile}, #{enabled}, SYSDATE
+        )
+    </insert>
+
+    <!-- 规范化文本 Hash 精确查重，仅有效记录参与业务。 -->
+    <select id="selectByTextHash" resultMap="ContractParagraphResultMap">
+        SELECT <include refid="AllColumns"/>
+        FROM TPIF_HTDLYB
+        WHERE TEXT_HASH = #{textHash}
+          AND SFSX = 1
+    </select>
+
+    <!-- 应用启动/手工重载时，只加载当前模型版本和向量维度的数据。 -->
+    <select id="selectActiveParagraphs" resultMap="ContractParagraphResultMap">
+        SELECT <include refid="AllColumns"/>
+        FROM TPIF_HTDLYB
+        WHERE MODEL_VERSION = #{modelVersion}
+          AND VECTOR_DIM = #{vectorDim}
+          AND SFSX = 1
+        ORDER BY ID
+    </select>
+
+</mapper>
