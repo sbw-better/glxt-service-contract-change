@@ -1,7 +1,36 @@
+# Maven构建产物
 /target/
+*.class
+dependency-reduced-pom.xml
+
+# IDE配置
 /.idea/
 /.vscode/
-/*.iml
+/out/
+*.iml
+*.ipr
+*.iws
+
+# 日志和运行时文件
 /logs/
 /work/
 *.log
+
+# 本地环境及敏感配置
+.env
+.env.*
+!.env.example
+application-local.yml
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# 编辑器和临时文件
+*.tmp
+*.swp
+*.swo
+*~
+*.orig
+*.rej
