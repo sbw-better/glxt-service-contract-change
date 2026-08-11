@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.controller;
 
-import com.citics.glxt.contractchange.common.ResultModel;
+import com.citics.glxt.contractchange.common.ContractChangeResult;
 import com.citics.glxt.contractchange.model.ImportResponse;
 import com.citics.glxt.contractchange.model.IndexStatusResponse;
 import com.citics.glxt.contractchange.model.PredictRequest;
@@ -47,28 +47,28 @@ public class ContractChangeController {
     /** 导入历史段落与变更类型编码对应关系。 */
     @PostMapping(value = "/samples/import", consumes = "multipart/form-data")
     @ApiOperation("导入历史合同段落Excel")
-    public ResultModel<ImportResponse> importSamples(@RequestPart("file") MultipartFile file) {
-        return ResultModel.success(importService.importExcel(file));
+    public ContractChangeResult<ImportResponse> importSamples(@RequestPart("file") MultipartFile file) {
+        return ContractChangeResult.success(importService.importExcel(file));
     }
 
     /** 识别一个新合同段落可能对应的多个变更类型。 */
     @PostMapping("/predict")
     @ApiOperation("预测新合同段落的变更类型")
-    public ResultModel<PredictionResponse> predict(@Valid @RequestBody PredictRequest request) {
-        return ResultModel.success(predictionService.predict(request.getParagraph()));
+    public ContractChangeResult<PredictionResponse> predict(@Valid @RequestBody PredictRequest request) {
+        return ContractChangeResult.success(predictionService.predict(request.getParagraph()));
     }
 
     /** 原子重建 JVM 内存向量索引，不重新生成向量。 */
     @PostMapping("/index/reload")
     @ApiOperation("从Oracle重新加载历史段落向量索引")
-    public ResultModel<IndexStatusResponse> reloadIndex() {
-        return ResultModel.success(indexService.reload());
+    public ContractChangeResult<IndexStatusResponse> reloadIndex() {
+        return ContractChangeResult.success(indexService.reload());
     }
 
     /** 查询当前实际提供检索服务的索引快照状态。 */
     @GetMapping("/index/status")
     @ApiOperation("查询内存向量索引状态")
-    public ResultModel<IndexStatusResponse> indexStatus() {
-        return ResultModel.success(indexService.status());
+    public ContractChangeResult<IndexStatusResponse> indexStatus() {
+        return ContractChangeResult.success(indexService.status());
     }
 }

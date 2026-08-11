@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.service;
 
-import com.citics.glxt.contractchange.common.BusinessException;
+import com.citics.glxt.contractchange.common.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.config.ContractChangeProperties;
 import com.citics.glxt.contractchange.domain.ContractParagraphDO;
 import com.citics.glxt.contractchange.mapper.ContractParagraphMapper;
@@ -115,7 +115,7 @@ public class ParagraphVectorIndexService {
     public List<ParagraphSearchResult> search(float[] query, int topK, double minSimilarity) {
         long started = System.currentTimeMillis();
         if (query == null || query.length != properties.getEmbedding().getDimension()) {
-            throw new BusinessException("查询向量维度不正确");
+            throw new ContractChangeBusinessException("查询向量维度不正确");
         }
         if (topK <= 0) return Collections.emptyList();
         PriorityQueue<ParagraphSearchResult> heap = new PriorityQueue<ParagraphSearchResult>(topK,

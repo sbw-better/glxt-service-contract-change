@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.util;
 
-import com.citics.glxt.contractchange.common.BusinessException;
+import com.citics.glxt.contractchange.common.ContractChangeBusinessException;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -24,7 +24,7 @@ public class CoreUtilitiesTest {
         assertEquals(Arrays.asList("TYPE01", "TYPE02", "TYPE03"), ChangeTypeCodes.parse(codes));
     }
 
-    @Test(expected = BusinessException.class)
+    @Test(expected = ContractChangeBusinessException.class)
     public void shouldRejectCodeContainingWhitespace() {
         ChangeTypeCodes.canonicalize("TYPE 01");
     }

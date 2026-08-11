@@ -71,6 +71,43 @@ public class PredictionAndIndexServiceTest {
                 .anyMatch(value -> "TYPE_B".equals(value.getCode()) && "CANDIDATE".equals(value.getLevel())));
     }
 
+    /**
+     * 已召回相似历史段落、但没有任何类型达到候选阈值时，应明确返回无可靠匹配。
+     * 参考段落仍然保留，调用方可以据此展示相近案例，而不会误认为类型识别已经成功。
+     */
+    @Test
+    public void shouldReturnNoReliableMatchWhenAllTypeScoresAreBelowCandidateThreshold() {
+        double firstSimilarity = 0.7021242132970985D;
+        double secondSimilarity = 0.6374979584748034D;
+        ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
+        when(mapper.selectActiveParagraphs("test-v1", 3)).thenReturn(Arrays.asList(
+                paragraph(3L, "风险揭示段落", "TYPE_20;TYPE_25;TYPE_28",
+                        vectorWithSimilarity(secondSimilarity)),
+                paragraph(4L, "管理人义务段落", "TYPE_35;TYPE_40;TYPE_45",
+                        vectorWithSimilarity(firstSimilarity))
+        ));
+        ParagraphVectorIndexService disjointTypeIndex = new ParagraphVectorIndexService(mapper, properties);
+        disjointTypeIndex.reload();
+
+        EmbeddingClient client = mock(EmbeddingClient.class);
+        when(client.embed(anyList())).thenReturn(new EmbeddingBatchResult(3,
+                Collections.singletonList(new float[]{1F, 0F, 0F})));
+        ContractParagraphPredictionService service =
+                new ContractParagraphPredictionService(disjointTypeIndex, client, properties);
+
+        PredictionResponse response = service.predict("新的待识别段落");
+
+        assertEquals("NO_RELIABLE_MATCH", response.getMatchType());
+        assertTrue(response.getChangeTypes().isEmpty());
+        assertEquals(2, response.getReferences().size());
+        assertEquals(firstSimilarity, response.getMaxSimilarity(), 0.000001D);
+    }
+
+    /** 构造与查询向量 {@code [1, 0, 0]} 具有指定余弦相似度的单位向量。 */
+    private float[] vectorWithSimilarity(double similarity) {
+        return new float[]{(float) similarity, (float) Math.sqrt(1D - similarity * similarity), 0F};
+    }
+
     private ContractParagraphDO paragraph(long id, String text, String codes, float[] vector) {
         ContractParagraphDO row = new ContractParagraphDO();
         row.setId(id);

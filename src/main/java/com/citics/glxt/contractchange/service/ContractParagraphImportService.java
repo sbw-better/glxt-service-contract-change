@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.service;
 
-import com.citics.glxt.contractchange.common.BusinessException;
+import com.citics.glxt.contractchange.common.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.config.ContractChangeProperties;
 import com.citics.glxt.contractchange.domain.ContractParagraphDO;
 import com.citics.glxt.contractchange.embedding.EmbeddingClient;
@@ -131,7 +131,9 @@ public class ContractParagraphImportService {
         ParsedExcel result = new ParsedExcel();
         DataFormatter formatter = new DataFormatter();
         try (InputStream input = file.getInputStream(); XSSFWorkbook workbook = new XSSFWorkbook(input)) {
-            if (workbook.getNumberOfSheets() == 0) throw new BusinessException("Excel中没有工作表");
+            if (workbook.getNumberOfSheets() == 0) {
+                throw new ContractChangeBusinessException("Excel中没有工作表");
+            }
             Sheet sheet = workbook.getSheetAt(0);
             Row header = sheet.getRow(0);
             if (header == null || !HEADER_PARAGRAPH.equals(value(header.getCell(0), formatter))
@@ -168,14 +170,14 @@ public class ContractParagraphImportService {
                         result.errors.add(new ImportErrorItem(excelRow,
                                 "Excel中存在相同段落但变更类型编码不同，首次出现在第" + previous.rowNumber + "行"));
                     }
-                } catch (BusinessException ex) {
+                } catch (ContractChangeBusinessException ex) {
                     result.errors.add(new ImportErrorItem(excelRow, ex.getMessage()));
                 }
             }
         } catch (IOException | POIXMLException ex) {
             log.warn("Excel读取失败, fileSizeBytes={}, exception={}",
                     file.getSize(), ex.getClass().getSimpleName());
-            throw new BusinessException("Excel读取失败，请确认文件未损坏且格式为xlsx");
+            throw new ContractChangeBusinessException("Excel读取失败，请确认文件未损坏且格式为xlsx");
         }
         return result;
     }
@@ -191,7 +193,7 @@ public class ContractParagraphImportService {
             EmbeddingBatchResult result = embeddingClient.embed(texts);
             if (result.getDimension() != properties.getEmbedding().getDimension()
                     || result.getVectors().size() != texts.size()) {
-                throw new BusinessException("Embedding批量结果不完整");
+                throw new ContractChangeBusinessException("Embedding批量结果不完整");
             }
             for (int i = start; i < end; i++) rows.get(i).vector = result.getVectors().get(i - start);
         }
@@ -215,18 +217,19 @@ public class ContractParagraphImportService {
 
     /** 校验上传文件存在且扩展名为 xlsx；文件大小由 Spring Multipart 配置统一限制。 */
     private void validateFile(MultipartFile file) {
-        if (file == null || file.isEmpty()) throw new BusinessException("Excel文件不能为空");
+        if (file == null || file.isEmpty()) throw new ContractChangeBusinessException("Excel文件不能为空");
         String name = file.getOriginalFilename();
         if (name == null || !name.toLowerCase().endsWith(".xlsx")) {
-            throw new BusinessException("只支持xlsx格式文件");
+            throw new ContractChangeBusinessException("只支持xlsx格式文件");
         }
     }
 
     /** 校验规范化后的段落长度，确保导入与预测使用同一业务上限。 */
     private void validateParagraph(String paragraph) {
-        if (paragraph.isEmpty()) throw new BusinessException("合同段落不能为空");
+        if (paragraph.isEmpty()) throw new ContractChangeBusinessException("合同段落不能为空");
         if (paragraph.length() > properties.getSearch().getMaxParagraphLength()) {
-            throw new BusinessException("合同段落不能超过" + properties.getSearch().getMaxParagraphLength() + "字符");
+            throw new ContractChangeBusinessException(
+                    "合同段落不能超过" + properties.getSearch().getMaxParagraphLength() + "字符");
         }
     }
 

@@ -1,6 +1,5 @@
 package com.citics.glxt.contractchange.embedding;
 
-import com.citics.glxt.contractchange.common.BusinessException;
 import com.citics.glxt.contractchange.common.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.common.CommonConstants;
 import com.citics.glxt.contractchange.config.ContractChangeProperties;
@@ -47,7 +46,7 @@ public class HttpEmbeddingClient implements EmbeddingClient {
     @Override
     @SuppressWarnings("unchecked")
     public EmbeddingBatchResult embed(List<String> texts) {
-        if (texts == null || texts.isEmpty()) throw new BusinessException("向量化文本不能为空");
+        if (texts == null || texts.isEmpty()) throw new ContractChangeBusinessException("向量化文本不能为空");
         long started = System.currentTimeMillis();
         RuntimeException last = null;
         for (int attempt = 0; attempt <= properties.getMaxRetries(); attempt++) {
@@ -76,7 +75,7 @@ public class HttpEmbeddingClient implements EmbeddingClient {
                 log.warn("Embedding连接或读取失败, exception={}, count={}, attempt={}/{}",
                         ex.getClass().getSimpleName(), texts.size(), attempt + 1,
                         properties.getMaxRetries() + 1);
-            } catch (BusinessException ex) {
+            } catch (ContractChangeBusinessException ex) {
                 log.warn("Embedding响应校验失败, count={}, reason={}", texts.size(), ex.getMessage());
                 throw unavailable(ex.getMessage(), ex);
             } catch (RuntimeException ex) {
@@ -107,19 +106,21 @@ public class HttpEmbeddingClient implements EmbeddingClient {
     /** 校验响应数量、向量维度和元素类型，并对每条向量执行 L2 归一化。 */
     private List<float[]> parse(List<?> rows, int expectedCount) {
         if (rows == null || rows.size() != expectedCount) {
-            throw new BusinessException("Embedding返回数量与输入数量不一致");
+            throw new ContractChangeBusinessException("Embedding返回数量与输入数量不一致");
         }
         List<float[]> vectors = new ArrayList<float[]>(rows.size());
         for (Object row : rows) {
-            if (!(row instanceof List)) throw new BusinessException("Embedding返回格式错误");
+            if (!(row instanceof List)) throw new ContractChangeBusinessException("Embedding返回格式错误");
             List<?> values = (List<?>) row;
             if (values.size() != properties.getDimension()) {
-                throw new BusinessException("Embedding向量维度不是" + properties.getDimension());
+                throw new ContractChangeBusinessException("Embedding向量维度不是" + properties.getDimension());
             }
             float[] vector = new float[values.size()];
             for (int i = 0; i < values.size(); i++) {
                 Object value = values.get(i);
-                if (!(value instanceof Number)) throw new BusinessException("Embedding向量包含非数字值");
+                if (!(value instanceof Number)) {
+                    throw new ContractChangeBusinessException("Embedding向量包含非数字值");
+                }
                 vector[i] = ((Number) value).floatValue();
             }
             VectorUtils.normalize(vector);

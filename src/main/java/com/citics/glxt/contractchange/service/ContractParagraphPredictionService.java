@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.service;
 
-import com.citics.glxt.contractchange.common.BusinessException;
+import com.citics.glxt.contractchange.common.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.config.ContractChangeProperties;
 import com.citics.glxt.contractchange.embedding.EmbeddingClient;
 import com.citics.glxt.contractchange.model.ChangeTypePrediction;
@@ -51,9 +51,10 @@ public class ContractParagraphPredictionService {
     public PredictionResponse predict(String paragraph) {
         long started = System.currentTimeMillis();
         String normalized = ContractTextNormalizer.normalize(paragraph);
-        if (normalized.isEmpty()) throw new BusinessException("合同段落不能为空");
+        if (normalized.isEmpty()) throw new ContractChangeBusinessException("合同段落不能为空");
         if (normalized.length() > properties.getSearch().getMaxParagraphLength()) {
-            throw new BusinessException("合同段落不能超过" + properties.getSearch().getMaxParagraphLength() + "字符");
+            throw new ContractChangeBusinessException(
+                    "合同段落不能超过" + properties.getSearch().getMaxParagraphLength() + "字符");
         }
         String textHash = HashUtils.sha256(normalized);
         log.info("合同段落预测开始, textHash={}, normalizedLength={}", textHash, normalized.length());
@@ -75,9 +76,17 @@ public class ContractParagraphPredictionService {
             return empty("NO_RELIABLE_MATCH", 0D);
         }
         PredictionResponse response = semantic(matches);
-        log.info("合同段落预测语义匹配完成, textHash={}, maxSimilarity={}, typeCount={}, referenceCount={}, elapsedMs={}",
-                textHash, response.getMaxSimilarity(), response.getChangeTypes().size(),
-                response.getReferences().size(), System.currentTimeMillis() - started);
+        if (response.getChangeTypes().isEmpty()) {
+            log.info("合同段落召回参考样本但无类型达到候选阈值, textHash={}, maxSimilarity={}, "
+                            + "candidateThreshold={}, referenceCount={}, matchType={}, elapsedMs={}",
+                    textHash, response.getMaxSimilarity(), properties.getSearch().getCandidateThreshold(),
+                    response.getReferences().size(), response.getMatchType(), System.currentTimeMillis() - started);
+        } else {
+            log.info("合同段落预测语义匹配完成, textHash={}, maxSimilarity={}, typeCount={}, "
+                            + "referenceCount={}, matchType={}, elapsedMs={}",
+                    textHash, response.getMaxSimilarity(), response.getChangeTypes().size(),
+                    response.getReferences().size(), response.getMatchType(), System.currentTimeMillis() - started);
+        }
         return response;
     }
 
@@ -93,7 +102,13 @@ public class ContractParagraphPredictionService {
                 types, Collections.singletonList(reference));
     }
 
-    /** 对相似度候选执行平方加权的多标签投票，并构造证据段落。 */
+    /**
+     * 对相似度候选执行平方加权的多标签投票，并构造证据段落。
+     *
+     * <p>召回到相似段落只代表存在可供参考的历史证据，不代表已经得到可靠的类型结果。
+     * 只有至少一个类型达到候选阈值时才返回 {@code SEMANTIC}；如果所有类型都被阈值过滤，
+     * 则返回 {@code NO_RELIABLE_MATCH}，同时保留最高相似度和参考段落，方便调用方展示和人工判断。</p>
+     */
     private PredictionResponse semantic(List<ParagraphSearchResult> matches) {
         int voteCount = Math.min(properties.getSearch().getVoteTopK(), matches.size());
         Map<String, Vote> votes = new HashMap<String, Vote>();
@@ -136,7 +151,8 @@ public class ContractParagraphPredictionService {
                     match.getSample().getOriginalText(), match.getSimilarity(),
                     match.getSample().getChangeTypeCodes()));
         }
-        return new PredictionResponse("SEMANTIC", properties.getEmbedding().getModelVersion(),
+        String matchType = types.isEmpty() ? "NO_RELIABLE_MATCH" : "SEMANTIC";
+        return new PredictionResponse(matchType, properties.getEmbedding().getModelVersion(),
                 matches.get(0).getSimilarity(), types, references);
     }
 

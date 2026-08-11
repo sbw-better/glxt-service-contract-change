@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.util;
 
-import com.citics.glxt.contractchange.common.BusinessException;
+import com.citics.glxt.contractchange.common.ContractChangeBusinessException;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -23,19 +23,27 @@ public final class ChangeTypeCodes {
      * @return 可直接持久化的规范编码串
      */
     public static String canonicalize(String raw) {
-        if (raw == null || raw.trim().isEmpty()) throw new BusinessException("变更类型编码不能为空");
+        if (raw == null || raw.trim().isEmpty()) {
+            throw new ContractChangeBusinessException("变更类型编码不能为空");
+        }
         String[] values = raw.split("[;；,，]");
         TreeSet<String> codes = new TreeSet<String>();
         for (String value : values) {
             String code = value.trim();
             if (code.isEmpty()) continue;
-            if (code.length() > MAX_CODE_LENGTH) throw new BusinessException("单个变更类型编码不能超过64字符");
-            if (code.matches(".*\\s+.*")) throw new BusinessException("变更类型编码不能包含空白字符: " + code);
+            if (code.length() > MAX_CODE_LENGTH) {
+                throw new ContractChangeBusinessException("单个变更类型编码不能超过64字符");
+            }
+            if (code.matches(".*\\s+.*")) {
+                throw new ContractChangeBusinessException("变更类型编码不能包含空白字符: " + code);
+            }
             codes.add(code);
         }
-        if (codes.isEmpty()) throw new BusinessException("变更类型编码不能为空");
+        if (codes.isEmpty()) throw new ContractChangeBusinessException("变更类型编码不能为空");
         String joined = join(codes);
-        if (joined.length() > MAX_TOTAL_LENGTH) throw new BusinessException("变更类型编码总长度不能超过4000字符");
+        if (joined.length() > MAX_TOTAL_LENGTH) {
+            throw new ContractChangeBusinessException("变更类型编码总长度不能超过4000字符");
+        }
         return joined;
     }
 
