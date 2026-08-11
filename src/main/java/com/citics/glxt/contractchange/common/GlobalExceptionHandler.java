@@ -10,8 +10,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     /** 处理可预期业务异常，不输出堆栈。 */
-    @ExceptionHandler(BusinessException.class)
-    public ResultModel<Void> handleBusiness(BusinessException ex) {
+    @ExceptionHandler(ContractChangeBusinessException.class)
+    public ResultModel<Void> handleBusiness(ContractChangeBusinessException ex) {
         log.warn("业务处理失败, code={}, message={}", ex.getCode(), ex.getMessage());
         return ResultModel.of(ex.getCode(), ex.getMessage(), null);
     }

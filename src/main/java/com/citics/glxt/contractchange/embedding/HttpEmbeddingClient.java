@@ -1,6 +1,7 @@
 package com.citics.glxt.contractchange.embedding;
 
 import com.citics.glxt.contractchange.common.BusinessException;
+import com.citics.glxt.contractchange.common.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.common.CommonConstants;
 import com.citics.glxt.contractchange.config.ContractChangeProperties;
 import com.citics.glxt.contractchange.model.EmbeddingBatchResult;
@@ -128,8 +129,8 @@ public class HttpEmbeddingClient implements EmbeddingClient {
     }
 
     /** 将模型侧异常统一转换为不暴露响应体的 503 业务异常。 */
-    private BusinessException unavailable(String message, Throwable cause) {
+    private ContractChangeBusinessException unavailable(String message, Throwable cause) {
         String detail = cause == null ? message : message + ": " + cause.getClass().getSimpleName();
-        return new BusinessException(CommonConstants.SERVICE_UNAVAILABLE, detail);
+        return new ContractChangeBusinessException(CommonConstants.SERVICE_UNAVAILABLE, detail);
     }
 }
