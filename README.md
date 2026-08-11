@@ -66,6 +66,8 @@ Content-Type: application/json
 | `SEARCH_MIN_SIMILARITY` | `0.60` | 最低召回相似度 |
 | `SEARCH_HIGH_THRESHOLD` | `0.80` | 高置信度标签阈值 |
 | `SEARCH_CANDIDATE_THRESHOLD` | `0.55` | 候选标签阈值 |
+| `SEARCH_STRONG_MATCH_THRESHOLD` | `0.80` | 投票无结果时第一名启用兜底的最低相似度 |
+| `SEARCH_STRONG_MATCH_MIN_MARGIN` | `0.05` | 强匹配第一名至少领先第二名的相似度差值 |
 
 ## Excel格式
 
@@ -102,6 +104,10 @@ GET  /service/contract-change/index/status
 - `EXACT`、`SEMANTIC`或`NO_RELIABLE_MATCH`；
 - 变更类型编码、得分、支持样本数和置信等级；
 - 最多5条相似历史段落和相似度。
+
+语义预测优先使用Top-K多标签加权投票。投票没有产出任何类型时，如果第一名相似度不低于
+`SEARCH_STRONG_MATCH_THRESHOLD`，且领先第二名不少于`SEARCH_STRONG_MATCH_MIN_MARGIN`，则将
+第一名历史段落的类型作为`CANDIDATE`返回；单条证据兜底不会产生`HIGH`等级。
 
 Swagger UI：
 

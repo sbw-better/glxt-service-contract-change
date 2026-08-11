@@ -54,6 +54,9 @@ contract-change:
     high-threshold: ${SEARCH_HIGH_THRESHOLD:0.80}
     candidate-threshold: ${SEARCH_CANDIDATE_THRESHOLD:0.55}
     min-support-count: ${SEARCH_MIN_SUPPORT_COUNT:2}
+    # 投票无结果时，第一名达到该相似度且明显领先第二名，返回第一名标签作为候选。
+    strong-match-threshold: ${SEARCH_STRONG_MATCH_THRESHOLD:0.80}
+    strong-match-min-margin: ${SEARCH_STRONG_MATCH_MIN_MARGIN:0.05}
 
 # 日志只记录 Hash、数量、耗时和状态，不记录合同正文或向量。
 logging:

@@ -106,8 +106,9 @@ public class ContractParagraphPredictionService {
      * 对相似度候选执行平方加权的多标签投票，并构造证据段落。
      *
      * <p>召回到相似段落只代表存在可供参考的历史证据，不代表已经得到可靠的类型结果。
-     * 只有至少一个类型达到候选阈值时才返回 {@code SEMANTIC}；如果所有类型都被阈值过滤，
-     * 则返回 {@code NO_RELIABLE_MATCH}，同时保留最高相似度和参考段落，方便调用方展示和人工判断。</p>
+     * 投票未产出类型时，会继续判断第一名是否达到强匹配阈值并且明显领先第二名；满足时将
+     * 第一名历史段落的类型作为 {@code CANDIDATE} 返回。两种规则均无法产出类型时才返回
+     * {@code NO_RELIABLE_MATCH}，同时保留最高相似度和参考段落。</p>
      */
     private PredictionResponse semantic(List<ParagraphSearchResult> matches) {
         int voteCount = Math.min(properties.getSearch().getVoteTopK(), matches.size());
@@ -140,6 +141,8 @@ public class ContractParagraphPredictionService {
                         high ? "HIGH" : "CANDIDATE"));
             }
         }
+        // 多样本投票优先；只有投票完全无结果时才允许强单条匹配兜底，避免覆盖已有共识。
+        applyStrongMatchFallback(matches, votes, types);
         types.sort(Comparator.comparingDouble(ChangeTypePrediction::getScore).reversed()
                 .thenComparing(ChangeTypePrediction::getCode));
 
@@ -154,6 +157,39 @@ public class ContractParagraphPredictionService {
         String matchType = types.isEmpty() ? "NO_RELIABLE_MATCH" : "SEMANTIC";
         return new PredictionResponse(matchType, properties.getEmbedding().getModelVersion(),
                 matches.get(0).getSimilarity(), types, references);
+    }
+
+    /**
+     * 当多样本投票没有类型达到候选阈值时，判断第一名是否足够强且明显领先第二名。
+     *
+     * <p>兜底返回的类型一律为 {@code CANDIDATE}，即使第一名相似度超过高可信阈值也不标记
+     * 为 {@code HIGH}，因为它仍然只依赖一条主要历史证据。此时类型得分使用第一名相似度，
+     * {@code supportCount} 仍反映投票候选中实际包含该类型的样本数量。</p>
+     */
+    private void applyStrongMatchFallback(List<ParagraphSearchResult> matches,
+                                          Map<String, Vote> votes,
+                                          List<ChangeTypePrediction> types) {
+        if (!types.isEmpty() || matches.isEmpty()) return;
+
+        ParagraphSearchResult first = matches.get(0);
+        double firstSimilarity = first.getSimilarity();
+        double secondSimilarity = matches.size() > 1 ? matches.get(1).getSimilarity() : 0D;
+        double margin = firstSimilarity - secondSimilarity;
+        if (firstSimilarity < properties.getSearch().getStrongMatchThreshold()
+                || margin < properties.getSearch().getStrongMatchMinMargin()) {
+            return;
+        }
+
+        for (String code : first.getSample().getChangeTypeCodes()) {
+            Vote vote = votes.get(code);
+            int supportCount = vote == null ? 1 : vote.support;
+            types.add(new ChangeTypePrediction(code, firstSimilarity, supportCount, "CANDIDATE"));
+        }
+        log.info("类型投票无结果，启用强单条匹配兜底, sampleId={}, firstSimilarity={}, "
+                        + "secondSimilarity={}, margin={}, threshold={}, minMargin={}, typeCount={}",
+                first.getSample().getSampleId(), firstSimilarity, secondSimilarity, margin,
+                properties.getSearch().getStrongMatchThreshold(),
+                properties.getSearch().getStrongMatchMinMargin(), types.size());
     }
 
     /** 构造没有达到最低相似度阈值的空预测响应。 */

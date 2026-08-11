@@ -66,5 +66,9 @@ public class ContractChangeProperties {
         private double candidateThreshold = 0.55D;
         /** 类型被判定为高可信所需的最少支持样本数。 */
         private int minSupportCount = 2;
+        /** 投票无结果时，启用强单条匹配兜底所需的第一名最低相似度。 */
+        private double strongMatchThreshold = 0.80D;
+        /** 强单条匹配兜底要求第一名至少领先第二名的相似度差值。 */
+        private double strongMatchMinMargin = 0.05D;
     }
 }

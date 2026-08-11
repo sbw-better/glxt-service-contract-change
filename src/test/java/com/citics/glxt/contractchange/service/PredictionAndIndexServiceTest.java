@@ -103,6 +103,68 @@ public class PredictionAndIndexServiceTest {
         assertEquals(firstSimilarity, response.getMaxSimilarity(), 0.000001D);
     }
 
+    /**
+     * 复现真实接口中第一名相似度约0.84、但多组互斥标签导致投票得分被稀释的场景。
+     * 第一名达到强匹配阈值且明显领先第二名时，应返回第一名标签作为候选结果。
+     */
+    @Test
+    public void shouldReturnFirstSampleTypesWhenStrongTopMatchClearlyLeads() {
+        double firstSimilarity = 0.8396705156167351D;
+        double secondSimilarity = 0.7439026569371111D;
+        double thirdSimilarity = 0.7000000000000000D;
+        ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
+        when(mapper.selectActiveParagraphs("test-v1", 3)).thenReturn(Arrays.asList(
+                paragraph(6L, "管理人义务段落", "35;40;45;69", vectorWithSimilarity(firstSimilarity)),
+                paragraph(9L, "信息披露段落", "26;54;76", vectorWithSimilarity(secondSimilarity)),
+                paragraph(10L, "风险揭示段落", "20;25;28", vectorWithSimilarity(thirdSimilarity))
+        ));
+        ParagraphVectorIndexService strongMatchIndex = new ParagraphVectorIndexService(mapper, properties);
+        strongMatchIndex.reload();
+
+        EmbeddingClient client = mock(EmbeddingClient.class);
+        when(client.embed(anyList())).thenReturn(new EmbeddingBatchResult(3,
+                Collections.singletonList(new float[]{1F, 0F, 0F})));
+        ContractParagraphPredictionService service =
+                new ContractParagraphPredictionService(strongMatchIndex, client, properties);
+
+        PredictionResponse response = service.predict("强相似但标签分散的新段落");
+
+        assertEquals("SEMANTIC", response.getMatchType());
+        assertEquals(4, response.getChangeTypes().size());
+        assertTrue(response.getChangeTypes().stream().allMatch(value -> "CANDIDATE".equals(value.getLevel())));
+        assertTrue(response.getChangeTypes().stream().allMatch(value -> value.getSupportCount() == 1));
+        assertTrue(response.getChangeTypes().stream()
+                .anyMatch(value -> "35".equals(value.getCode())
+                        && Math.abs(value.getScore() - firstSimilarity) < 0.000001D));
+    }
+
+    /** 第一名虽然达到0.80，但与第二名过于接近时，不应依赖单条证据强行返回类型。 */
+    @Test
+    public void shouldNotUseStrongMatchFallbackWhenTopTwoAreTooClose() {
+        double firstSimilarity = 0.84D;
+        double secondSimilarity = 0.81D;
+        ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
+        when(mapper.selectActiveParagraphs("test-v1", 3)).thenReturn(Arrays.asList(
+                paragraph(11L, "相近段落一", "TYPE_X", vectorWithSimilarity(firstSimilarity)),
+                paragraph(12L, "相近段落二", "TYPE_Y", vectorWithSimilarity(secondSimilarity)),
+                paragraph(13L, "相近段落三", "TYPE_Z", vectorWithSimilarity(0.79D))
+        ));
+        ParagraphVectorIndexService closeMatchIndex = new ParagraphVectorIndexService(mapper, properties);
+        closeMatchIndex.reload();
+
+        EmbeddingClient client = mock(EmbeddingClient.class);
+        when(client.embed(anyList())).thenReturn(new EmbeddingBatchResult(3,
+                Collections.singletonList(new float[]{1F, 0F, 0F})));
+        ContractParagraphPredictionService service =
+                new ContractParagraphPredictionService(closeMatchIndex, client, properties);
+
+        PredictionResponse response = service.predict("两个结果非常接近的新段落");
+
+        assertEquals("NO_RELIABLE_MATCH", response.getMatchType());
+        assertTrue(response.getChangeTypes().isEmpty());
+        assertEquals(3, response.getReferences().size());
+    }
+
     /** 构造与查询向量 {@code [1, 0, 0]} 具有指定余弦相似度的单位向量。 */
     private float[] vectorWithSimilarity(double similarity) {
         return new float[]{(float) similarity, (float) Math.sqrt(1D - similarity * similarity), 0F};

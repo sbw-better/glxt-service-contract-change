@@ -9,7 +9,10 @@ import lombok.Data;
 public class ChangeTypePrediction {
     /** 稳定的变更类型编码。 */
     private String code;
-    /** 支持权重占全部投票样本权重的比例，范围为 0~1。 */
+    /**
+     * 类型决策得分，范围为 0~1。正常投票时表示支持权重占比；
+     * 强单条匹配兜底时表示第一名历史段落与新段落的相似度。
+     */
     private double score;
     /** Top-K 投票样本中包含该类型的样本数量。 */
     private int supportCount;
