@@ -109,6 +109,9 @@ GET  /service/contract-change/index/status
 `SEARCH_STRONG_MATCH_THRESHOLD`，且领先第二名不少于`SEARCH_STRONG_MATCH_MIN_MARGIN`，则将
 第一名历史段落的类型作为`CANDIDATE`返回；单条证据兜底不会产生`HIGH`等级。
 
+响应中的`maxSimilarity`、`changeTypes[].score`和`references[].similarity`以JSON数字返回，
+最多保留四位小数；内部相似度计算、排序和阈值判断仍使用完整精度。
+
 Swagger UI：
 
 ```text

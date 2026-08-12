@@ -1,5 +1,7 @@
 package com.citics.glxt.contractchange.model;
 
+import com.citics.glxt.contractchange.common.FourDecimalDoubleSerializer;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -14,6 +16,7 @@ public class PredictionReference {
     /** 历史样本原始段落，仅在预测响应中按业务需要返回。 */
     private String paragraph;
     /** 与新段落的余弦相似度。 */
+    @JsonSerialize(using = FourDecimalDoubleSerializer.class)
     private double similarity;
     /** 该历史样本关联的变更类型编码。 */
     private List<String> changeTypeCodes;

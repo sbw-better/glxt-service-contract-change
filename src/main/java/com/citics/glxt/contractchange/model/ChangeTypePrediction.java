@@ -1,5 +1,7 @@
 package com.citics.glxt.contractchange.model;
 
+import com.citics.glxt.contractchange.common.FourDecimalDoubleSerializer;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -13,6 +15,7 @@ public class ChangeTypePrediction {
      * 类型决策得分，范围为 0~1。正常投票时表示支持权重占比；
      * 强单条匹配兜底时表示第一名历史段落与新段落的相似度。
      */
+    @JsonSerialize(using = FourDecimalDoubleSerializer.class)
     private double score;
     /** Top-K 投票样本中包含该类型的样本数量。 */
     private int supportCount;
