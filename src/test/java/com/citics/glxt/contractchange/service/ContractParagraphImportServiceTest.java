@@ -15,6 +15,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Collections;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -49,7 +50,8 @@ public class ContractParagraphImportServiceTest {
 
     @Test
     public void shouldImportValidExcelAndCanonicalizeCodes() throws Exception {
-        when(mapper.selectByTextHash(org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
+        when(mapper.selectByTextHashes(anyList())).thenReturn(Collections.emptyList());
+        when(mapper.countAllParagraphs()).thenReturn(0);
         when(embeddingClient.embed(anyList())).thenAnswer(invocation -> {
             List<String> texts = invocation.getArgument(0);
             List<float[]> vectors = new ArrayList<float[]>();
@@ -65,10 +67,38 @@ public class ContractParagraphImportServiceTest {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<ContractParagraphDO>> captor =
                 (ArgumentCaptor<List<ContractParagraphDO>>) (ArgumentCaptor<?>) ArgumentCaptor.forClass(List.class);
-        verify(persistenceService).insertAll(captor.capture());
+        verify(persistenceService).saveAll(captor.capture());
         ContractParagraphDO saved = captor.getValue().get(0);
         assertEquals("TYPE01;TYPE02", saved.getChangeTypeCodes());
         assertEquals(12, saved.getVectorData().length);
+    }
+
+    /** 停用记录使用Excel重新导入时更新原行并重新启用，不触发唯一Hash冲突。 */
+    @Test
+    public void shouldUpdateAndEnableDisabledParagraph() throws Exception {
+        ContractParagraphDO existing = new ContractParagraphDO();
+        existing.setId(99L);
+        existing.setTextHash(com.citics.glxt.contractchange.util.HashUtils.sha256("历史段落A"));
+        existing.setChangeTypeCodes("TYPE01");
+        existing.setEnabled(0);
+        existing.setModelVersion("old-v1");
+        existing.setVectorDim(3);
+        when(mapper.selectByTextHashes(anyList())).thenReturn(Collections.singletonList(existing));
+        when(embeddingClient.embed(anyList())).thenReturn(new EmbeddingBatchResult(3,
+                Collections.singletonList(new float[]{1F, 0F, 0F})));
+
+        ImportResponse response = service.importExcel(excel(new String[][]{{"历史段落A", "TYPE02;TYPE01"}}));
+
+        assertTrue(response.isSuccess());
+        assertEquals(0, response.getInserted());
+        assertEquals(1, response.getUpdated());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ContractParagraphDO>> captor =
+                (ArgumentCaptor<List<ContractParagraphDO>>) (ArgumentCaptor<?>) ArgumentCaptor.forClass(List.class);
+        verify(persistenceService).saveAll(captor.capture());
+        assertEquals(Long.valueOf(99L), captor.getValue().get(0).getId());
+        assertEquals(Integer.valueOf(1), captor.getValue().get(0).getEnabled());
+        assertEquals("TYPE01;TYPE02", captor.getValue().get(0).getChangeTypeCodes());
     }
 
     @Test

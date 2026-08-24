@@ -24,27 +24,34 @@ public class ContractParagraphPersistenceService {
     }
 
     /**
-     * 在同一个事务中插入全部历史样本。
+     * 在同一个事务中新增或更新全部历史样本。
      *
-     * @param paragraphs 已完成向量化且通过校验的样本
+     * @param paragraphs 已完成向量化且通过校验的新增/更新样本
      */
     @Transactional(rollbackFor = Exception.class)
-    public void insertAll(List<ContractParagraphDO> paragraphs) {
+    public void saveAll(List<ContractParagraphDO> paragraphs) {
         long started = System.currentTimeMillis();
-        log.info("历史样本批量入库开始, count={}", paragraphs.size());
-        int inserted = 0;
+        log.info("历史样本批量保存开始, count={}", paragraphs.size());
+        int executed = 0;
         try {
             for (ContractParagraphDO paragraph : paragraphs) {
-                mapper.insertParagraph(paragraph);
-                inserted++;
+                if (paragraph.getId() == null) {
+                    mapper.insertParagraph(paragraph);
+                } else {
+                    int affected = mapper.updateParagraph(paragraph);
+                    if (affected != 1) {
+                        throw new IllegalStateException("历史样本更新记录数不正确, sampleId=" + paragraph.getId());
+                    }
+                }
+                executed++;
             }
         } catch (RuntimeException ex) {
             // 必须继续抛出异常，确保 Spring 事务代理回滚本批次已经执行的全部 INSERT。
             log.error("历史样本批量入库失败并将回滚, expectedCount={}, executedCount={}, elapsedMs={}",
-                    paragraphs.size(), inserted, System.currentTimeMillis() - started, ex);
+                    paragraphs.size(), executed, System.currentTimeMillis() - started, ex);
             throw ex;
         }
-        log.info("历史样本批量入库完成, count={}, elapsedMs={}",
+        log.info("历史样本批量保存完成, count={}, elapsedMs={}",
                 paragraphs.size(), System.currentTimeMillis() - started);
     }
 }

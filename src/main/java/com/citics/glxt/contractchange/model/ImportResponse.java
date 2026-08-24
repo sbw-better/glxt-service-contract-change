@@ -15,6 +15,8 @@ public class ImportResponse {
     private int totalRows;
     /** 本批次新增数据库记录数。 */
     private int inserted;
+    /** 本批次重新启用或按当前模型重新生成向量的记录数。 */
+    private int updated;
     /** Excel 内或数据库中标签一致的重复记录数。 */
     private int skipped;
     /** 入库后是否成功切换到新内存索引。 */

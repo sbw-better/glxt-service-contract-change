@@ -41,12 +41,34 @@
         )
     </insert>
 
-    <!-- 规范化文本 Hash 精确查重，仅有效记录参与业务。 -->
-    <select id="selectByTextHash" resultMap="ContractParagraphResultMap">
-        SELECT <include refid="AllColumns"/>
+    <!-- 导入查重只读取决策所需字段，同时包含停用记录和旧模型记录。 -->
+    <select id="selectByTextHashes" resultMap="ContractParagraphResultMap">
+        SELECT ID, TEXT_HASH, BGLX_CODES, VECTOR_DIM, MODEL_VERSION, SFSX
         FROM TPIF_HTDLYB
-        WHERE TEXT_HASH = #{textHash}
-          AND SFSX = 1
+        WHERE TEXT_HASH IN
+        <foreach collection="textHashes" item="textHash" open="(" separator="," close=")">
+            #{textHash}
+        </foreach>
+    </select>
+
+    <!-- 全局唯一Hash对应一行；停用重启、标签修正和模型升级均更新该行。 -->
+    <update id="updateParagraph"
+            parameterType="com.citics.glxt.contractchange.domain.ContractParagraphDO">
+        UPDATE TPIF_HTDLYB
+        SET YWBW = #{originalText,jdbcType=CLOB},
+            GFBW = #{normalizedText,jdbcType=CLOB},
+            BGLX_CODES = #{changeTypeCodes},
+            VECTOR_DATA = #{vectorData,jdbcType=BLOB},
+            VECTOR_DIM = #{vectorDim},
+            MODEL_VERSION = #{modelVersion},
+            SOURCE_FILE = #{sourceFile},
+            SFSX = 1
+        WHERE ID = #{id}
+    </update>
+
+    <!-- 第一版将物理记录总数限制在配置范围内，停用记录也占用唯一Hash。 -->
+    <select id="countAllParagraphs" resultType="int">
+        SELECT COUNT(1) FROM TPIF_HTDLYB
     </select>
 
     <!-- 应用启动/手工重载时，只加载当前模型版本和向量维度的数据。 -->

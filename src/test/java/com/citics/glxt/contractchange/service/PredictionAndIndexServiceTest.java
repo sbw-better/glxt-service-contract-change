@@ -18,6 +18,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class PredictionAndIndexServiceTest {
@@ -135,12 +137,12 @@ public class PredictionAndIndexServiceTest {
         assertTrue(response.getChangeTypes().stream().allMatch(value -> value.getSupportCount() == 1));
         assertTrue(response.getChangeTypes().stream()
                 .anyMatch(value -> "35".equals(value.getCode())
-                        && Math.abs(value.getScore() - firstSimilarity) < 0.000001D));
+                        && value.getScore() < properties.getSearch().getCandidateThreshold()));
     }
 
-    /** 第一名虽然达到0.80，但与第二名过于接近时，不应依赖单条证据强行返回类型。 */
+    /** 简化规则：投票无结果但第一名达到0.80时返回候选，不再增加前两名差值条件。 */
     @Test
-    public void shouldNotUseStrongMatchFallbackWhenTopTwoAreTooClose() {
+    public void shouldReturnCandidateWhenFirstSimilarityReachesStrongThreshold() {
         double firstSimilarity = 0.84D;
         double secondSimilarity = 0.81D;
         ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
@@ -160,9 +162,63 @@ public class PredictionAndIndexServiceTest {
 
         PredictionResponse response = service.predict("两个结果非常接近的新段落");
 
-        assertEquals("NO_RELIABLE_MATCH", response.getMatchType());
-        assertTrue(response.getChangeTypes().isEmpty());
+        assertEquals("SEMANTIC", response.getMatchType());
+        assertTrue(response.getChangeTypes().stream()
+                .anyMatch(value -> "TYPE_X".equals(value.getCode())
+                        && "CANDIDATE".equals(value.getLevel())));
         assertEquals(3, response.getReferences().size());
+    }
+
+    /** 正常空库应直接返回明确原因，不浪费CPU模型调用。 */
+    @Test
+    public void shouldReturnEmptyIndexWithoutCallingEmbedding() {
+        ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
+        when(mapper.selectActiveParagraphs("test-v1", 3)).thenReturn(Collections.emptyList());
+        ParagraphVectorIndexService emptyIndex = new ParagraphVectorIndexService(mapper, properties);
+        emptyIndex.reload();
+        EmbeddingClient client = mock(EmbeddingClient.class);
+        ContractParagraphPredictionService service =
+                new ContractParagraphPredictionService(emptyIndex, client, properties);
+
+        PredictionResponse response = service.predict("新段落");
+
+        assertEquals("NO_RELIABLE_MATCH", response.getMatchType());
+        verify(client, never()).embed(anyList());
+    }
+
+    /** 低于业务阈值时仍返回真实最高相似度和参考段落，而不是误报为0。 */
+    @Test
+    public void shouldKeepActualBestSimilarityBelowThreshold() {
+        properties.getSearch().setMinSimilarity(0.6D);
+        ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
+        when(mapper.selectActiveParagraphs("test-v1", 3)).thenReturn(Collections.singletonList(
+                paragraph(20L, "弱相似段落", "TYPE_W", vectorWithSimilarity(0.59D))));
+        ParagraphVectorIndexService weakIndex = new ParagraphVectorIndexService(mapper, properties);
+        weakIndex.reload();
+        EmbeddingClient client = mock(EmbeddingClient.class);
+        when(client.embed(anyList())).thenReturn(new EmbeddingBatchResult(3,
+                Collections.singletonList(new float[]{1F, 0F, 0F})));
+        ContractParagraphPredictionService service =
+                new ContractParagraphPredictionService(weakIndex, client, properties);
+
+        PredictionResponse response = service.predict("低于阈值的新段落");
+
+        assertEquals(0.59D, response.getMaxSimilarity(), 0.000001D);
+        assertEquals(1, response.getReferences().size());
+    }
+
+    /** 数据库有记录但全部向量损坏时必须标记为DEGRADED，而不是正常EMPTY。 */
+    @Test
+    public void shouldMarkIndexDegradedWhenAllDatabaseVectorsAreInvalid() {
+        ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
+        ContractParagraphDO broken = paragraph(30L, "损坏段落", "TYPE_BROKEN", new float[]{1F, 0F, 0F});
+        broken.setVectorData(new byte[]{1, 2, 3});
+        when(mapper.selectActiveParagraphs("test-v1", 3)).thenReturn(Collections.singletonList(broken));
+        ParagraphVectorIndexService brokenIndex = new ParagraphVectorIndexService(mapper, properties);
+
+        assertEquals("DEGRADED", brokenIndex.reload().getStatus());
+        assertEquals(0, brokenIndex.status().getSampleCount());
+        assertEquals(1, brokenIndex.status().getErrorCount());
     }
 
     /** 构造与查询向量 {@code [1, 0, 0]} 具有指定余弦相似度的单位向量。 */

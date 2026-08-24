@@ -1,10 +1,12 @@
 package com.citics.glxt.contractchange.service;
 
 import com.citics.glxt.contractchange.common.ContractChangeBusinessException;
+import com.citics.glxt.contractchange.common.CommonConstants;
 import com.citics.glxt.contractchange.config.ContractChangeProperties;
 import com.citics.glxt.contractchange.embedding.EmbeddingClient;
 import com.citics.glxt.contractchange.model.ChangeTypePrediction;
 import com.citics.glxt.contractchange.model.EmbeddingBatchResult;
+import com.citics.glxt.contractchange.model.IndexStatusResponse;
 import com.citics.glxt.contractchange.model.PredictionReference;
 import com.citics.glxt.contractchange.model.PredictionResponse;
 import com.citics.glxt.contractchange.util.ContractTextNormalizer;
@@ -67,13 +69,34 @@ public class ContractParagraphPredictionService {
             return response;
         }
 
+        // 空库无需调用CPU模型；加载失败与正常空库必须向调用方表达为不同结果。
+        IndexStatusResponse indexStatus = indexService.status();
+        if ("EMPTY".equals(indexStatus.getStatus())) {
+            log.info("合同段落预测结束：历史样本库为空, textHash={}, elapsedMs={}",
+                    textHash, System.currentTimeMillis() - started);
+            return empty(0D, Collections.<PredictionReference>emptyList());
+        }
+        if ("NOT_READY".equals(indexStatus.getStatus()) || "LOAD_FAILED".equals(indexStatus.getStatus())
+                || indexStatus.getSampleCount() == 0) {
+            throw new ContractChangeBusinessException(CommonConstants.SERVICE_UNAVAILABLE,
+                    "历史段落向量索引不可用，当前状态=" + indexStatus.getStatus());
+        }
+
         EmbeddingBatchResult embedded = embeddingClient.embed(Collections.singletonList(normalized));
-        List<ParagraphSearchResult> matches = indexService.search(embedded.getVectors().get(0),
-                properties.getSearch().getRetrieveTopK(), properties.getSearch().getMinSimilarity());
+        List<ParagraphSearchResult> allMatches = indexService.search(embedded.getVectors().get(0),
+                properties.getSearch().getRetrieveTopK());
+        if (allMatches.isEmpty()) {
+            throw new ContractChangeBusinessException(CommonConstants.SERVICE_UNAVAILABLE,
+                    "历史段落向量索引没有可用样本");
+        }
+        double maxSimilarity = allMatches.get(0).getSimilarity();
+        List<ParagraphSearchResult> matches = reliableMatches(allMatches,
+                properties.getSearch().getMinSimilarity());
         if (matches.isEmpty()) {
             log.info("合同段落预测无可靠匹配, textHash={}, minSimilarity={}, elapsedMs={}",
                     textHash, properties.getSearch().getMinSimilarity(), System.currentTimeMillis() - started);
-            return empty("NO_RELIABLE_MATCH", 0D);
+            return empty(maxSimilarity,
+                    references(allMatches, properties.getSearch().getEvidenceTopK()));
         }
         PredictionResponse response = semantic(matches);
         if (response.getChangeTypes().isEmpty()) {
@@ -142,11 +165,67 @@ public class ContractParagraphPredictionService {
             }
         }
         // 多样本投票优先；只有投票完全无结果时才允许强单条匹配兜底，避免覆盖已有共识。
-        applyStrongMatchFallback(matches, votes, types);
+        applyStrongMatchFallback(matches, votes, totalWeight, types);
         types.sort(Comparator.comparingDouble(ChangeTypePrediction::getScore).reversed()
                 .thenComparing(ChangeTypePrediction::getCode));
 
-        int evidenceCount = Math.min(properties.getSearch().getEvidenceTopK(), matches.size());
+        List<PredictionReference> references = references(matches, properties.getSearch().getEvidenceTopK());
+        String matchType = types.isEmpty() ? "NO_RELIABLE_MATCH" : "SEMANTIC";
+        return new PredictionResponse(matchType, properties.getEmbedding().getModelVersion(),
+                matches.get(0).getSimilarity(), types, references);
+    }
+
+    /**
+     * 当多样本投票没有类型达到候选阈值时，判断第一名是否达到强相似候选阈值。
+     *
+     * <p>兜底返回的类型一律为 {@code CANDIDATE}，即使第一名相似度超过高可信阈值也不标记
+     * 为 {@code HIGH}，因为它仍然只依赖一条主要历史证据。类型得分仍使用统一的投票得分，
+     * 第一名段落相似度通过响应中的 {@code maxSimilarity} 表达。</p>
+     */
+    private boolean applyStrongMatchFallback(List<ParagraphSearchResult> matches,
+                                             Map<String, Vote> votes,
+                                             double totalWeight,
+                                             List<ChangeTypePrediction> types) {
+        if (!types.isEmpty() || matches.isEmpty()) return false;
+
+        ParagraphSearchResult first = matches.get(0);
+        double firstSimilarity = first.getSimilarity();
+        if (firstSimilarity < properties.getSearch().getStrongMatchThreshold()) {
+            return false;
+        }
+
+        for (String code : first.getSample().getChangeTypeCodes()) {
+            Vote vote = votes.get(code);
+            int supportCount = vote == null ? 1 : vote.support;
+            double voteScore = vote == null || totalWeight <= 0D ? 0D : vote.weight / totalWeight;
+            types.add(new ChangeTypePrediction(code, voteScore, supportCount, "CANDIDATE"));
+        }
+        log.info("类型投票无结果，启用强相似候选兜底, sampleId={}, firstSimilarity={}, threshold={}, typeCount={}",
+                first.getSample().getSampleId(), firstSimilarity,
+                properties.getSearch().getStrongMatchThreshold(), types.size());
+        return true;
+    }
+
+    /** 构造没有可靠类型结果的预测响应。 */
+    private PredictionResponse empty(double similarity, List<PredictionReference> references) {
+        return new PredictionResponse("NO_RELIABLE_MATCH",
+                properties.getEmbedding().getModelVersion(), similarity,
+                Collections.<ChangeTypePrediction>emptyList(), references);
+    }
+
+    /** 截取达到最低相似度的连续候选；输入列表已经按相似度倒序排列。 */
+    private List<ParagraphSearchResult> reliableMatches(List<ParagraphSearchResult> matches, double threshold) {
+        List<ParagraphSearchResult> result = new ArrayList<ParagraphSearchResult>();
+        for (ParagraphSearchResult match : matches) {
+            if (match.getSimilarity() < threshold) break;
+            result.add(match);
+        }
+        return result;
+    }
+
+    /** 将内部检索结果转换成最多指定数量的历史证据段落。 */
+    private List<PredictionReference> references(List<ParagraphSearchResult> matches, int limit) {
+        int evidenceCount = Math.min(limit, matches.size());
         List<PredictionReference> references = new ArrayList<PredictionReference>(evidenceCount);
         for (int i = 0; i < evidenceCount; i++) {
             ParagraphSearchResult match = matches.get(i);
@@ -154,48 +233,7 @@ public class ContractParagraphPredictionService {
                     match.getSample().getOriginalText(), match.getSimilarity(),
                     match.getSample().getChangeTypeCodes()));
         }
-        String matchType = types.isEmpty() ? "NO_RELIABLE_MATCH" : "SEMANTIC";
-        return new PredictionResponse(matchType, properties.getEmbedding().getModelVersion(),
-                matches.get(0).getSimilarity(), types, references);
-    }
-
-    /**
-     * 当多样本投票没有类型达到候选阈值时，判断第一名是否足够强且明显领先第二名。
-     *
-     * <p>兜底返回的类型一律为 {@code CANDIDATE}，即使第一名相似度超过高可信阈值也不标记
-     * 为 {@code HIGH}，因为它仍然只依赖一条主要历史证据。此时类型得分使用第一名相似度，
-     * {@code supportCount} 仍反映投票候选中实际包含该类型的样本数量。</p>
-     */
-    private void applyStrongMatchFallback(List<ParagraphSearchResult> matches,
-                                          Map<String, Vote> votes,
-                                          List<ChangeTypePrediction> types) {
-        if (!types.isEmpty() || matches.isEmpty()) return;
-
-        ParagraphSearchResult first = matches.get(0);
-        double firstSimilarity = first.getSimilarity();
-        double secondSimilarity = matches.size() > 1 ? matches.get(1).getSimilarity() : 0D;
-        double margin = firstSimilarity - secondSimilarity;
-        if (firstSimilarity < properties.getSearch().getStrongMatchThreshold()
-                || margin < properties.getSearch().getStrongMatchMinMargin()) {
-            return;
-        }
-
-        for (String code : first.getSample().getChangeTypeCodes()) {
-            Vote vote = votes.get(code);
-            int supportCount = vote == null ? 1 : vote.support;
-            types.add(new ChangeTypePrediction(code, firstSimilarity, supportCount, "CANDIDATE"));
-        }
-        log.info("类型投票无结果，启用强单条匹配兜底, sampleId={}, firstSimilarity={}, "
-                        + "secondSimilarity={}, margin={}, threshold={}, minMargin={}, typeCount={}",
-                first.getSample().getSampleId(), firstSimilarity, secondSimilarity, margin,
-                properties.getSearch().getStrongMatchThreshold(),
-                properties.getSearch().getStrongMatchMinMargin(), types.size());
-    }
-
-    /** 构造没有达到最低相似度阈值的空预测响应。 */
-    private PredictionResponse empty(String matchType, double similarity) {
-        return new PredictionResponse(matchType, properties.getEmbedding().getModelVersion(), similarity,
-                Collections.<ChangeTypePrediction>emptyList(), Collections.<PredictionReference>emptyList());
+        return references;
     }
 
     private static class Vote {

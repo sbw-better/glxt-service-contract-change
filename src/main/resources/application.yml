@@ -37,26 +37,28 @@ contract-change:
     health-url: ${EMBEDDING_HEALTH_URL:http://127.0.0.1:8081/health}
     model-version: ${EMBEDDING_MODEL_VERSION:bge-base-zh-768-v1}
     dimension: ${EMBEDDING_DIMENSION:768}
-    batch-size: ${EMBEDDING_BATCH_SIZE:8}
+    # 当前CPU模型容器最大客户端批量为4；生产扩容后可通过环境变量覆盖。
+    batch-size: ${EMBEDDING_BATCH_SIZE:4}
     connect-timeout-ms: ${EMBEDDING_CONNECT_TIMEOUT_MS:3000}
     read-timeout-ms: ${EMBEDDING_READ_TIMEOUT_MS:30000}
     max-retries: ${EMBEDDING_MAX_RETRIES:1}
   # 单份 Excel 最大非空数据行数。
   import-config:
     max-rows: ${IMPORT_MAX_ROWS:1000}
+    max-total-samples: ${IMPORT_MAX_TOTAL_SAMPLES:10000}
   # 内存精确检索、多标签投票和证据返回参数。
   search:
-    retrieve-top-k: ${SEARCH_RETRIEVE_TOP_K:20}
+    retrieve-top-k: ${SEARCH_RETRIEVE_TOP_K:10}
     vote-top-k: ${SEARCH_VOTE_TOP_K:10}
     evidence-top-k: ${SEARCH_EVIDENCE_TOP_K:5}
-    max-paragraph-length: ${SEARCH_MAX_PARAGRAPH_LENGTH:4000}
+    # BGE Base最多512 Token，第一版限制480字符并要求容器AUTO_TRUNCATE=false。
+    max-paragraph-length: ${SEARCH_MAX_PARAGRAPH_LENGTH:480}
     min-similarity: ${SEARCH_MIN_SIMILARITY:0.60}
     high-threshold: ${SEARCH_HIGH_THRESHOLD:0.80}
     candidate-threshold: ${SEARCH_CANDIDATE_THRESHOLD:0.55}
     min-support-count: ${SEARCH_MIN_SUPPORT_COUNT:2}
-    # 投票无结果时，第一名达到该相似度且明显领先第二名，返回第一名标签作为候选。
+    # 投票无结果时，第一名达到该相似度则返回第一名标签作为候选，不标记为高可信。
     strong-match-threshold: ${SEARCH_STRONG_MATCH_THRESHOLD:0.80}
-    strong-match-min-margin: ${SEARCH_STRONG_MATCH_MIN_MARGIN:0.05}
 
 # 日志只记录 Hash、数量、耗时和状态，不记录合同正文或向量。
 logging:

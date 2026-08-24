@@ -11,10 +11,7 @@ import lombok.Data;
 public class ChangeTypePrediction {
     /** 稳定的变更类型编码。 */
     private String code;
-    /**
-     * 类型决策得分，范围为 0~1。正常投票时表示支持权重占比；
-     * 强单条匹配兜底时表示第一名历史段落与新段落的相似度。
-     */
+    /** 类型支持得分：精确命中时为1，语义匹配时为该类型权重占全部投票权重的比例。 */
     @JsonSerialize(using = FourDecimalDoubleSerializer.class)
     private double score;
     /** Top-K 投票样本中包含该类型的样本数量。 */

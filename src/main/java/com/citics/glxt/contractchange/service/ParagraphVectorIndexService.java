@@ -37,7 +37,7 @@ public class ParagraphVectorIndexService {
     private final ContractParagraphMapper mapper;
     private final ContractChangeProperties properties;
     private final AtomicReference<VectorIndexSnapshot> current =
-            new AtomicReference<VectorIndexSnapshot>(VectorIndexSnapshot.empty());
+            new AtomicReference<VectorIndexSnapshot>(VectorIndexSnapshot.notReady());
 
     /** 注入历史样本 Mapper 和当前模型配置。 */
     public ParagraphVectorIndexService(ContractParagraphMapper mapper, ContractChangeProperties properties) {
@@ -51,7 +51,7 @@ public class ParagraphVectorIndexService {
         try {
             reload();
         } catch (RuntimeException ex) {
-            log.error("应用启动时加载历史段落向量失败，暂时保留空索引", ex);
+            log.error("应用启动时加载历史段落向量失败，索引状态已标记为LOAD_FAILED", ex);
         }
     }
 
@@ -69,6 +69,10 @@ public class ParagraphVectorIndexService {
         try {
             rows = mapper.selectActiveParagraphs(modelVersion, dimension);
         } catch (RuntimeException ex) {
+            // 首次加载失败不能伪装成正常空库；已有可用快照时仍继续保留旧快照。
+            if (current.get().getSamples().isEmpty()) {
+                current.set(VectorIndexSnapshot.loadFailed());
+            }
             log.error("历史段落向量索引查询失败, modelVersion={}, dimension={}, elapsedMs={}",
                     modelVersion, dimension, System.currentTimeMillis() - started, ex);
             throw ex;
@@ -90,7 +94,15 @@ public class ParagraphVectorIndexService {
                 log.error("历史段落向量加载失败, sampleId={}", row.getId(), ex);
             }
         }
-        String status = samples.isEmpty() ? "EMPTY" : (errors == 0 ? "READY" : "DEGRADED");
+        String status;
+        if (rows.isEmpty()) {
+            status = "EMPTY";
+        } else if (errors > 0) {
+            // 包括“数据库有记录但全部损坏”的情况，不能误报为正常空库。
+            status = "DEGRADED";
+        } else {
+            status = "READY";
+        }
         VectorIndexSnapshot replacement = new VectorIndexSnapshot(
                 Collections.unmodifiableList(samples),
                 Collections.unmodifiableMap(hashIndex), status, errors, new Date());
@@ -112,7 +124,7 @@ public class ParagraphVectorIndexService {
      * <p>样本向量和查询向量均已 L2 归一化，因此点积就是余弦相似度。使用固定大小最小堆，
      * 将排序开销从全量排序降为 O(n log k)。</p>
      */
-    public List<ParagraphSearchResult> search(float[] query, int topK, double minSimilarity) {
+    public List<ParagraphSearchResult> search(float[] query, int topK) {
         long started = System.currentTimeMillis();
         if (query == null || query.length != properties.getEmbedding().getDimension()) {
             throw new ContractChangeBusinessException("查询向量维度不正确");
@@ -122,7 +134,6 @@ public class ParagraphVectorIndexService {
                 Comparator.comparingDouble(ParagraphSearchResult::getSimilarity));
         for (ParagraphVectorSample sample : current.get().getSamples()) {
             double similarity = VectorUtils.dot(query, sample.getVector());
-            if (similarity < minSimilarity) continue;
             ParagraphSearchResult result = new ParagraphSearchResult(sample, similarity);
             if (heap.size() < topK) heap.offer(result);
             else if (similarity > heap.peek().getSimilarity()) {
@@ -132,8 +143,8 @@ public class ParagraphVectorIndexService {
         }
         List<ParagraphSearchResult> results = new ArrayList<ParagraphSearchResult>(heap);
         results.sort(Comparator.comparingDouble(ParagraphSearchResult::getSimilarity).reversed());
-        log.debug("内存向量检索完成, sampleCount={}, topK={}, resultCount={}, minSimilarity={}, elapsedMs={}",
-                current.get().getSamples().size(), topK, results.size(), minSimilarity,
+        log.debug("内存向量检索完成, sampleCount={}, topK={}, resultCount={}, elapsedMs={}",
+                current.get().getSamples().size(), topK, results.size(),
                 System.currentTimeMillis() - started);
         return results;
     }

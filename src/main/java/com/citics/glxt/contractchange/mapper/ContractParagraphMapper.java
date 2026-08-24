@@ -14,8 +14,14 @@ public interface ContractParagraphMapper {
     /** 插入一条历史样本，主键在 XML 中通过 Sequence 回填。 */
     int insertParagraph(ContractParagraphDO paragraph);
 
-    /** 查询启用状态下指定文本 Hash 的历史样本。 */
-    ContractParagraphDO selectByTextHash(@Param("textHash") String textHash);
+    /** 分批查询指定文本Hash的现有记录，包含停用记录和旧模型记录。 */
+    List<ContractParagraphDO> selectByTextHashes(@Param("textHashes") List<String> textHashes);
+
+    /** 更新现有Hash记录的正文、标签、向量、模型版本并重新启用。 */
+    int updateParagraph(ContractParagraphDO paragraph);
+
+    /** 统计表内记录总数，用于约束第一版内存检索的数据规模。 */
+    int countAllParagraphs();
 
     /** 加载指定模型版本和维度下的全部有效样本。 */
     List<ContractParagraphDO> selectActiveParagraphs(@Param("modelVersion") String modelVersion,

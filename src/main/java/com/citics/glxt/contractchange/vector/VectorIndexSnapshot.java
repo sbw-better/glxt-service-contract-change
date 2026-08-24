@@ -20,16 +20,22 @@ public class VectorIndexSnapshot {
     private final List<ParagraphVectorSample> samples;
     /** 文本 Hash 到样本的精确匹配索引。 */
     private final Map<String, ParagraphVectorSample> hashIndex;
-    /** READY、EMPTY 或 DEGRADED。 */
+    /** NOT_READY、READY、EMPTY、DEGRADED 或 LOAD_FAILED。 */
     private final String status;
     /** 构建时跳过的损坏记录数。 */
     private final int errorCount;
     /** 快照构建完成时间。 */
     private final Date loadedAt;
 
-    /** 创建一个可安全提供空查询结果的初始快照。 */
-    public static VectorIndexSnapshot empty() {
+    /** 创建应用尚未完成首次Oracle加载时的初始快照。 */
+    public static VectorIndexSnapshot notReady() {
         return new VectorIndexSnapshot(Collections.<ParagraphVectorSample>emptyList(),
-                Collections.<String, ParagraphVectorSample>emptyMap(), "EMPTY", 0, new Date());
+                Collections.<String, ParagraphVectorSample>emptyMap(), "NOT_READY", 0, null);
+    }
+
+    /** 创建首次Oracle加载失败后的不可用快照。 */
+    public static VectorIndexSnapshot loadFailed() {
+        return new VectorIndexSnapshot(Collections.<ParagraphVectorSample>emptyList(),
+                Collections.<String, ParagraphVectorSample>emptyMap(), "LOAD_FAILED", 0, new Date());
     }
 }

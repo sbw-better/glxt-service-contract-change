@@ -34,3 +34,6 @@ Desktop.ini
 *~
 *.orig
 *.rej
+
+# 本地文档渲染与校验临时产物
+/.doc_build/

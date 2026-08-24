@@ -9,7 +9,7 @@ import java.util.Date;
 @Data
 @AllArgsConstructor
 public class IndexStatusResponse {
-    /** READY、EMPTY 或 DEGRADED。 */
+    /** NOT_READY、READY、EMPTY、DEGRADED 或 LOAD_FAILED。 */
     private String status;
     /** 成功加载且实际参与检索的样本数。 */
     private int sampleCount;
