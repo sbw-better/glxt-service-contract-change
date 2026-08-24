@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -52,7 +53,7 @@ public class ContractParagraphImportServiceTest {
     public void shouldImportValidExcelAndCanonicalizeCodes() throws Exception {
         when(mapper.selectByTextHashes(anyList())).thenReturn(Collections.emptyList());
         when(mapper.countAllParagraphs()).thenReturn(0);
-        when(embeddingClient.embed(anyList())).thenAnswer(invocation -> {
+        when(embeddingClient.embed(anyList(), anyString())).thenAnswer(invocation -> {
             List<String> texts = invocation.getArgument(0);
             List<float[]> vectors = new ArrayList<float[]>();
             for (int i = 0; i < texts.size(); i++) vectors.add(new float[]{1F, 0F, 0F});
@@ -60,7 +61,7 @@ public class ContractParagraphImportServiceTest {
         });
         MockMultipartFile file = excel(new String[][]{{"历史段落A", "TYPE02;TYPE01"}});
 
-        ImportResponse response = service.importExcel(file);
+        ImportResponse response = service.importExcel(file, "test-user");
 
         assertTrue(response.isSuccess());
         assertEquals(1, response.getInserted());
@@ -84,10 +85,11 @@ public class ContractParagraphImportServiceTest {
         existing.setModelVersion("old-v1");
         existing.setVectorDim(3);
         when(mapper.selectByTextHashes(anyList())).thenReturn(Collections.singletonList(existing));
-        when(embeddingClient.embed(anyList())).thenReturn(new EmbeddingBatchResult(3,
+        when(embeddingClient.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(3,
                 Collections.singletonList(new float[]{1F, 0F, 0F})));
 
-        ImportResponse response = service.importExcel(excel(new String[][]{{"历史段落A", "TYPE02;TYPE01"}}));
+        ImportResponse response = service.importExcel(
+                excel(new String[][]{{"历史段落A", "TYPE02;TYPE01"}}), "test-user");
 
         assertTrue(response.isSuccess());
         assertEquals(0, response.getInserted());
@@ -107,11 +109,11 @@ public class ContractParagraphImportServiceTest {
                 {"同一段落", "TYPE01"}, {"同一段落", "TYPE02"}
         });
 
-        ImportResponse response = service.importExcel(file);
+        ImportResponse response = service.importExcel(file, "test-user");
 
         assertFalse(response.isSuccess());
         assertEquals(1, response.getErrors().size());
-        verify(embeddingClient, never()).embed(anyList());
+        verify(embeddingClient, never()).embed(anyList(), anyString());
     }
 
     private MockMultipartFile excel(String[][] rows) throws Exception {

@@ -17,6 +17,7 @@ import java.util.Collections;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -50,7 +51,7 @@ public class PredictionAndIndexServiceTest {
         EmbeddingClient client = mock(EmbeddingClient.class);
         ContractParagraphPredictionService service =
                 new ContractParagraphPredictionService(indexService, client, properties);
-        PredictionResponse response = service.predict("历史段落一");
+        PredictionResponse response = service.predict("历史段落一", "test-user");
         assertEquals("EXACT", response.getMatchType());
         assertEquals(2, response.getChangeTypes().size());
         assertEquals(2, indexService.status().getSampleCount());
@@ -59,12 +60,12 @@ public class PredictionAndIndexServiceTest {
     @Test
     public void shouldVoteAcrossSemanticMatches() {
         EmbeddingClient client = mock(EmbeddingClient.class);
-        when(client.embed(anyList())).thenReturn(new EmbeddingBatchResult(3,
+        when(client.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(3,
                 Collections.singletonList(new float[]{1F, 0F, 0F})));
         ContractParagraphPredictionService service =
                 new ContractParagraphPredictionService(indexService, client, properties);
 
-        PredictionResponse response = service.predict("新的相似段落");
+        PredictionResponse response = service.predict("新的相似段落", "test-user");
 
         assertEquals("SEMANTIC", response.getMatchType());
         assertEquals("TYPE_A", response.getChangeTypes().get(0).getCode());
@@ -92,12 +93,12 @@ public class PredictionAndIndexServiceTest {
         disjointTypeIndex.reload();
 
         EmbeddingClient client = mock(EmbeddingClient.class);
-        when(client.embed(anyList())).thenReturn(new EmbeddingBatchResult(3,
+        when(client.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(3,
                 Collections.singletonList(new float[]{1F, 0F, 0F})));
         ContractParagraphPredictionService service =
                 new ContractParagraphPredictionService(disjointTypeIndex, client, properties);
 
-        PredictionResponse response = service.predict("新的待识别段落");
+        PredictionResponse response = service.predict("新的待识别段落", "test-user");
 
         assertEquals("NO_RELIABLE_MATCH", response.getMatchType());
         assertTrue(response.getChangeTypes().isEmpty());
@@ -124,12 +125,12 @@ public class PredictionAndIndexServiceTest {
         strongMatchIndex.reload();
 
         EmbeddingClient client = mock(EmbeddingClient.class);
-        when(client.embed(anyList())).thenReturn(new EmbeddingBatchResult(3,
+        when(client.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(3,
                 Collections.singletonList(new float[]{1F, 0F, 0F})));
         ContractParagraphPredictionService service =
                 new ContractParagraphPredictionService(strongMatchIndex, client, properties);
 
-        PredictionResponse response = service.predict("强相似但标签分散的新段落");
+        PredictionResponse response = service.predict("强相似但标签分散的新段落", "test-user");
 
         assertEquals("SEMANTIC", response.getMatchType());
         assertEquals(4, response.getChangeTypes().size());
@@ -155,12 +156,12 @@ public class PredictionAndIndexServiceTest {
         closeMatchIndex.reload();
 
         EmbeddingClient client = mock(EmbeddingClient.class);
-        when(client.embed(anyList())).thenReturn(new EmbeddingBatchResult(3,
+        when(client.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(3,
                 Collections.singletonList(new float[]{1F, 0F, 0F})));
         ContractParagraphPredictionService service =
                 new ContractParagraphPredictionService(closeMatchIndex, client, properties);
 
-        PredictionResponse response = service.predict("两个结果非常接近的新段落");
+        PredictionResponse response = service.predict("两个结果非常接近的新段落", "test-user");
 
         assertEquals("SEMANTIC", response.getMatchType());
         assertTrue(response.getChangeTypes().stream()
@@ -180,10 +181,10 @@ public class PredictionAndIndexServiceTest {
         ContractParagraphPredictionService service =
                 new ContractParagraphPredictionService(emptyIndex, client, properties);
 
-        PredictionResponse response = service.predict("新段落");
+        PredictionResponse response = service.predict("新段落", "test-user");
 
         assertEquals("NO_RELIABLE_MATCH", response.getMatchType());
-        verify(client, never()).embed(anyList());
+        verify(client, never()).embed(anyList(), anyString());
     }
 
     /** 低于业务阈值时仍返回真实最高相似度和参考段落，而不是误报为0。 */
@@ -196,12 +197,12 @@ public class PredictionAndIndexServiceTest {
         ParagraphVectorIndexService weakIndex = new ParagraphVectorIndexService(mapper, properties);
         weakIndex.reload();
         EmbeddingClient client = mock(EmbeddingClient.class);
-        when(client.embed(anyList())).thenReturn(new EmbeddingBatchResult(3,
+        when(client.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(3,
                 Collections.singletonList(new float[]{1F, 0F, 0F})));
         ContractParagraphPredictionService service =
                 new ContractParagraphPredictionService(weakIndex, client, properties);
 
-        PredictionResponse response = service.predict("低于阈值的新段落");
+        PredictionResponse response = service.predict("低于阈值的新段落", "test-user");
 
         assertEquals(0.59D, response.getMaxSimilarity(), 0.000001D);
         assertEquals(1, response.getReferences().size());

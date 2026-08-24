@@ -48,9 +48,10 @@ public class ContractParagraphPredictionService {
      * 预测一个已切分合同段落对应的多个变更类型编码。
      *
      * @param paragraph 新合同段落原文
+     * @param userId 当前实际操作人的用户标识，只在需要语义向量时透传给模型网关
      * @return 匹配方式、类型得分以及参考历史段落
      */
-    public PredictionResponse predict(String paragraph) {
+    public PredictionResponse predict(String paragraph, String userId) {
         long started = System.currentTimeMillis();
         String normalized = ContractTextNormalizer.normalize(paragraph);
         if (normalized.isEmpty()) throw new ContractChangeBusinessException("合同段落不能为空");
@@ -82,7 +83,7 @@ public class ContractParagraphPredictionService {
                     "历史段落向量索引不可用，当前状态=" + indexStatus.getStatus());
         }
 
-        EmbeddingBatchResult embedded = embeddingClient.embed(Collections.singletonList(normalized));
+        EmbeddingBatchResult embedded = embeddingClient.embed(Collections.singletonList(normalized), userId);
         List<ParagraphSearchResult> allMatches = indexService.search(embedded.getVectors().get(0),
                 properties.getSearch().getRetrieveTopK());
         if (allMatches.isEmpty()) {

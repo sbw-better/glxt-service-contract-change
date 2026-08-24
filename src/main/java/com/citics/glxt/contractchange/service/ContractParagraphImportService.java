@@ -69,9 +69,10 @@ public class ContractParagraphImportService {
      * <p>模型调用全部成功后才开启数据库事务，避免模型中途失败造成部分数据落库。</p>
      *
      * @param file 固定两列表头的 xlsx 文件
+     * @param userId 当前实际操作人的用户标识，只透传给模型网关
      * @return 导入统计和逐行校验错误
      */
-    public synchronized ImportResponse importExcel(MultipartFile file) {
+    public synchronized ImportResponse importExcel(MultipartFile file, String userId) {
         long started = System.currentTimeMillis();
         log.info("历史样本导入开始, fileSizeBytes={}", file == null ? 0L : file.getSize());
         validateFile(file);
@@ -117,7 +118,7 @@ public class ContractParagraphImportService {
         changedRows.addAll(updateRows);
         log.info("历史样本导入准备向量化, newCount={}, updateCount={}, skipped={}",
                 newRows.size(), updateRows.size(), skipped);
-        embed(changedRows);
+        embed(changedRows, userId);
         List<ContractParagraphDO> paragraphs = new ArrayList<ContractParagraphDO>(changedRows.size());
         for (PreparedRow row : changedRows) paragraphs.add(toDO(row, file.getOriginalFilename()));
         if (!paragraphs.isEmpty()) persistenceService.saveAll(paragraphs);
@@ -196,14 +197,14 @@ public class ContractParagraphImportService {
     }
 
     /** 按配置的批量大小生成全部待新增样本向量，任一批次失败即终止导入。 */
-    private void embed(List<PreparedRow> rows) {
+    private void embed(List<PreparedRow> rows, String userId) {
         int batchSize = Math.max(1, properties.getEmbedding().getBatchSize());
         for (int start = 0; start < rows.size(); start += batchSize) {
             int end = Math.min(start + batchSize, rows.size());
             log.debug("历史样本分批向量化, batchStart={}, batchEnd={}, total={}", start, end, rows.size());
             List<String> texts = new ArrayList<String>(end - start);
             for (int i = start; i < end; i++) texts.add(rows.get(i).normalizedText);
-            EmbeddingBatchResult result = embeddingClient.embed(texts);
+            EmbeddingBatchResult result = embeddingClient.embed(texts, userId);
             if (result.getDimension() != properties.getEmbedding().getDimension()
                     || result.getVectors().size() != texts.size()) {
                 throw new ContractChangeBusinessException("Embedding批量结果不完整");

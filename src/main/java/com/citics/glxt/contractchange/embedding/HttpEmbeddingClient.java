@@ -1,8 +1,11 @@
 package com.citics.glxt.contractchange.embedding;
 
-import com.citics.glxt.contractchange.common.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.common.CommonConstants;
+import com.citics.glxt.contractchange.common.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.config.ContractChangeProperties;
+import com.citics.glxt.contractchange.embedding.dto.EmbeddingGatewayData;
+import com.citics.glxt.contractchange.embedding.dto.EmbeddingGatewayRequest;
+import com.citics.glxt.contractchange.embedding.dto.EmbeddingGatewayResponse;
 import com.citics.glxt.contractchange.model.EmbeddingBatchResult;
 import com.citics.glxt.contractchange.util.VectorUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -18,19 +21,20 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
- * Hugging Face Embedding 容器的 HTTP 客户端。
+ * 公司内网统一 Embedding 网关客户端。
  *
- * <p>客户端只发送批量文本并接收二维浮点数组，负责数量、维度和数值合法性校验，随后在
- * Java 侧进行 L2 归一化。日志严禁输出请求正文和向量。</p>
+ * <p>网关采用 OpenAI 兼容协议：请求体包含 {@code model} 和 {@code input}，响应向量位于
+ * {@code data[].embedding}。本客户端负责鉴权请求头、返回数量和维度校验以及 L2 归一化。
+ * 日志严禁输出 API Key、user_id、合同正文、请求体和向量。</p>
  */
 @Slf4j
 @Component
 public class HttpEmbeddingClient implements EmbeddingClient {
+    private static final String USER_ID_HEADER = "user_id";
+
     private final ContractChangeProperties.Embedding properties;
     private final RestTemplate restTemplate;
 
@@ -43,93 +47,122 @@ public class HttpEmbeddingClient implements EmbeddingClient {
         this.restTemplate = new RestTemplate(factory);
     }
 
+    /** 只有连接异常和服务端 5xx 会按配置重试，所有 4xx 均直接失败。 */
     @Override
-    @SuppressWarnings("unchecked")
-    public EmbeddingBatchResult embed(List<String> texts) {
-        if (texts == null || texts.isEmpty()) throw new ContractChangeBusinessException("向量化文本不能为空");
+    public EmbeddingBatchResult embed(List<String> texts, String userId) {
+        validateRequest(texts, userId);
         long started = System.currentTimeMillis();
         RuntimeException last = null;
         for (int attempt = 0; attempt <= properties.getMaxRetries(); attempt++) {
             try {
-                Map<String, Object> body = new HashMap<String, Object>();
-                body.put("inputs", texts);
-                HttpHeaders headers = new HttpHeaders();
-                headers.setContentType(MediaType.APPLICATION_JSON);
-                ResponseEntity<List> response = restTemplate.postForEntity(
-                        properties.getUrl(), new HttpEntity<Map<String, Object>>(body, headers), List.class);
-                List<?> rows = response.getBody();
-                List<float[]> vectors = parse(rows, texts.size());
-                log.info("Embedding调用成功, count={}, elapsedMs={}", texts.size(),
+                EmbeddingGatewayRequest body = new EmbeddingGatewayRequest(
+                        properties.getModelName(), texts.size() == 1 ? texts.get(0) : texts);
+                ResponseEntity<EmbeddingGatewayResponse> response = restTemplate.postForEntity(
+                        properties.getUrl(), new HttpEntity<EmbeddingGatewayRequest>(body, gatewayHeaders(userId)),
+                        EmbeddingGatewayResponse.class);
+                List<float[]> vectors = parse(response.getBody(), texts.size());
+                log.info("Embedding网关调用成功, count={}, elapsedMs={}", texts.size(),
                         System.currentTimeMillis() - started);
                 return new EmbeddingBatchResult(properties.getDimension(), vectors);
             } catch (HttpClientErrorException ex) {
-                log.warn("Embedding请求被拒绝, status={}, count={}, attempt={}",
-                        ex.getStatusCode().value(), texts.size(), attempt + 1);
-                throw unavailable("Embedding请求被拒绝, status=" + ex.getStatusCode().value(), ex);
+                int status = ex.getStatusCode().value();
+                log.warn("Embedding网关请求被拒绝, status={}, count={}, attempt={}",
+                        status, texts.size(), attempt + 1);
+                throw unavailable(clientErrorMessage(status), ex);
             } catch (HttpServerErrorException ex) {
                 last = ex;
-                log.warn("Embedding服务端异常, status={}, count={}, attempt={}/{}",
-                        ex.getStatusCode().value(), texts.size(), attempt + 1, properties.getMaxRetries() + 1);
+                log.warn("Embedding网关服务端异常, status={}, count={}, attempt={}/{}",
+                        ex.getStatusCode().value(), texts.size(), attempt + 1,
+                        properties.getMaxRetries() + 1);
             } catch (ResourceAccessException ex) {
                 last = ex;
-                log.warn("Embedding连接或读取失败, exception={}, count={}, attempt={}/{}",
+                log.warn("Embedding网关连接或读取失败, exception={}, count={}, attempt={}/{}",
                         ex.getClass().getSimpleName(), texts.size(), attempt + 1,
                         properties.getMaxRetries() + 1);
             } catch (ContractChangeBusinessException ex) {
-                log.warn("Embedding响应校验失败, count={}, reason={}", texts.size(), ex.getMessage());
+                log.warn("Embedding网关响应校验失败, count={}, reason={}", texts.size(), ex.getMessage());
                 throw unavailable(ex.getMessage(), ex);
             } catch (RuntimeException ex) {
-                log.error("Embedding响应处理异常, count={}, exception={}",
+                log.error("Embedding网关响应处理异常, count={}, exception={}",
                         texts.size(), ex.getClass().getSimpleName(), ex);
-                throw unavailable("Embedding响应处理失败", ex);
+                throw unavailable("Embedding网关响应处理失败", ex);
             }
         }
-        log.error("Embedding服务调用最终失败, count={}, attempts={}, exception={}, elapsedMs={}",
+        log.error("Embedding网关调用最终失败, count={}, attempts={}, exception={}, elapsedMs={}",
                 texts.size(), properties.getMaxRetries() + 1,
                 last == null ? "unknown" : last.getClass().getSimpleName(),
                 System.currentTimeMillis() - started);
-        throw unavailable("Embedding服务调用失败", last);
+        throw unavailable("Embedding网关暂时不可用", last);
     }
 
-    @Override
-    public boolean isHealthy() {
-        try {
-            restTemplate.getForEntity(properties.getHealthUrl(), String.class);
-            return true;
-        } catch (RuntimeException ex) {
-            // Actuator 可能高频探测，失败仅记 DEBUG，避免模型故障时刷屏。
-            log.debug("Embedding健康检查失败, exception={}", ex.getClass().getSimpleName());
-            return false;
+    /** 构造模型平台要求的鉴权、操作人和 JSON 请求头。 */
+    private HttpHeaders gatewayHeaders(String userId) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set(HttpHeaders.AUTHORIZATION, "Bearer " + properties.getApiKey());
+        headers.set(USER_ID_HEADER, userId.trim());
+        return headers;
+    }
+
+    /** 在发送请求前拒绝空文本或空操作人，避免产生无意义的网关调用。 */
+    private void validateRequest(List<String> texts, String userId) {
+        if (texts == null || texts.isEmpty()) {
+            throw new ContractChangeBusinessException("向量化文本不能为空");
+        }
+        for (String text : texts) {
+            if (text == null || text.trim().isEmpty()) {
+                throw new ContractChangeBusinessException("向量化文本不能为空");
+            }
+        }
+        if (userId == null || userId.trim().isEmpty()) {
+            throw new ContractChangeBusinessException("user_id不能为空");
         }
     }
 
-    /** 校验响应数量、向量维度和元素类型，并对每条向量执行 L2 归一化。 */
-    private List<float[]> parse(List<?> rows, int expectedCount) {
+    /** 校验响应数量、向量维度和数值，并对每条向量执行 L2 归一化。 */
+    private List<float[]> parse(EmbeddingGatewayResponse response, int expectedCount) {
+        List<EmbeddingGatewayData> rows = response == null ? null : response.getData();
         if (rows == null || rows.size() != expectedCount) {
             throw new ContractChangeBusinessException("Embedding返回数量与输入数量不一致");
         }
         List<float[]> vectors = new ArrayList<float[]>(rows.size());
-        for (Object row : rows) {
-            if (!(row instanceof List)) throw new ContractChangeBusinessException("Embedding返回格式错误");
-            List<?> values = (List<?>) row;
-            if (values.size() != properties.getDimension()) {
-                throw new ContractChangeBusinessException("Embedding向量维度不是" + properties.getDimension());
+        for (EmbeddingGatewayData row : rows) {
+            List<Double> values = row == null ? null : row.getEmbedding();
+            if (values == null || values.size() != properties.getDimension()) {
+                throw new ContractChangeBusinessException(
+                        "Embedding向量维度不是" + properties.getDimension());
             }
             float[] vector = new float[values.size()];
             for (int i = 0; i < values.size(); i++) {
-                Object value = values.get(i);
-                if (!(value instanceof Number)) {
-                    throw new ContractChangeBusinessException("Embedding向量包含非数字值");
+                Double value = values.get(i);
+                if (value == null || value.isNaN() || value.isInfinite()) {
+                    throw new ContractChangeBusinessException("Embedding向量包含非法数值");
                 }
-                vector[i] = ((Number) value).floatValue();
+                vector[i] = value.floatValue();
+                if (Float.isNaN(vector[i]) || Float.isInfinite(vector[i])) {
+                    throw new ContractChangeBusinessException("Embedding向量包含非法数值");
+                }
             }
-            VectorUtils.normalize(vector);
+            try {
+                VectorUtils.normalize(vector);
+            } catch (IllegalArgumentException ex) {
+                throw new ContractChangeBusinessException("Embedding向量无法归一化");
+            }
             vectors.add(vector);
         }
         return vectors;
     }
 
-    /** 将模型侧异常统一转换为不暴露响应体的 503 业务异常。 */
+    /** 将常见 4xx 转换为不泄露平台响应体的明确诊断信息。 */
+    private String clientErrorMessage(int status) {
+        if (status == 401 || status == 403) return "Embedding网关认证或权限失败";
+        if (status == 404) return "Embedding接口地址或模型部署名称错误";
+        if (status == 400 || status == 422) return "Embedding请求格式、输入长度或批量参数被拒绝";
+        if (status == 429) return "Embedding网关请求过于频繁，请稍后重试";
+        return "Embedding网关请求被拒绝, status=" + status;
+    }
+
+    /** 将模型侧异常统一转换为服务不可用错误，同时避免透出响应体和敏感请求信息。 */
     private ContractChangeBusinessException unavailable(String message, Throwable cause) {
         String detail = cause == null ? message : message + ": " + cause.getClass().getSimpleName();
         return new ContractChangeBusinessException(CommonConstants.SERVICE_UNAVAILABLE, detail);

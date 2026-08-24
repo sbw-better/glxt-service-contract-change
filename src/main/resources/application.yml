@@ -31,14 +31,15 @@ mybatis-plus:
 
 # 本次合同段落识别需求的全部可调业务参数。
 contract-change:
-  # 内网 Hugging Face Embedding 容器配置。
+  # 公司内网统一 Embedding 网关配置。地址、密钥、模型名、版本和维度必须由部署环境明确提供。
   embedding:
-    url: ${EMBEDDING_URL:http://127.0.0.1:8081/embed}
-    health-url: ${EMBEDDING_HEALTH_URL:http://127.0.0.1:8081/health}
-    model-version: ${EMBEDDING_MODEL_VERSION:bge-base-zh-768-v1}
-    dimension: ${EMBEDDING_DIMENSION:768}
-    # 当前CPU模型容器最大客户端批量为4；生产扩容后可通过环境变量覆盖。
-    batch-size: ${EMBEDDING_BATCH_SIZE:4}
+    url: ${EMBEDDING_URL:http://aihub-test.citicsinfo.com/embedding/api/qwen3-embedding-local/v1/embeddings}
+    api-key: ${EMBEDDING_API_KEY}
+    model-name: ${EMBEDDING_MODEL_NAME:qwen3-embedding-local}
+    model-version: ${EMBEDDING_MODEL_VERSION:gen-studio-Qwen3-Embedding-8B-1024-v1}
+    dimension: ${EMBEDDING_DIMENSION:1024}
+    # 模型平台批量能力未确认前保持为1；确认数组上限后可直接通过环境变量调大。
+    batch-size: ${EMBEDDING_BATCH_SIZE:1}
     connect-timeout-ms: ${EMBEDDING_CONNECT_TIMEOUT_MS:3000}
     read-timeout-ms: ${EMBEDDING_READ_TIMEOUT_MS:30000}
     max-retries: ${EMBEDDING_MAX_RETRIES:1}
@@ -51,7 +52,7 @@ contract-change:
     retrieve-top-k: ${SEARCH_RETRIEVE_TOP_K:10}
     vote-top-k: ${SEARCH_VOTE_TOP_K:10}
     evidence-top-k: ${SEARCH_EVIDENCE_TOP_K:5}
-    # BGE Base最多512 Token，第一版限制480字符并要求容器AUTO_TRUNCATE=false。
+    # 当前仅作为业务字符上限，不等同于新模型Token上限；服务拒绝超长文本且不自动截断。
     max-paragraph-length: ${SEARCH_MAX_PARAGRAPH_LENGTH:480}
     min-similarity: ${SEARCH_MIN_SIMILARITY:0.60}
     high-threshold: ${SEARCH_HIGH_THRESHOLD:0.80}
@@ -67,5 +68,5 @@ logging:
     com.citics.glxt.contractchange: info
     # 禁止生产环境开启 Mapper DEBUG，避免 SQL 参数打印合同正文和向量内容。
     com.citics.glxt.contractchange.mapper: info
-    # RestTemplate 的 DEBUG 日志会打印 Embedding 请求体，因此显式锁定为 INFO。
+    # RestTemplate 的 DEBUG 日志可能打印网关请求信息，因此显式锁定为 INFO。
     org.springframework.web.client.RestTemplate: info

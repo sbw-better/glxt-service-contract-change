@@ -1,6 +1,7 @@
 package com.citics.glxt.contractchange.config;
 
 import lombok.Data;
+import lombok.ToString;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -31,24 +32,28 @@ public class ContractChangeProperties {
     @Valid
     private Search search = new Search();
 
-    /** Hugging Face Embedding 容器调用参数。 */
+    /** 公司内网统一 Embedding 网关调用参数。 */
     @Data
     public static class Embedding {
-        /** 批量向量接口地址。 */
+        /** 完整的 Embedding 接口地址；路径由模型平台提供，Java 不自行拼接。 */
         @NotBlank
-        private String url = "http://127.0.0.1:8081/embed";
-        /** 容器健康检查地址。 */
+        private String url;
+        /** 模型网关 API Key，只允许通过外部安全配置注入。 */
         @NotBlank
-        private String healthUrl = "http://127.0.0.1:8081/health";
+        @ToString.Exclude
+        private String apiKey;
+        /** 网关请求体 model 字段使用的模型名称。 */
+        @NotBlank
+        private String modelName;
         /** 写入数据库并用于隔离检索的模型版本标识。 */
         @NotBlank
-        private String modelVersion = "bge-base-zh-768-v1";
-        /** 模型固定输出维度。 */
+        private String modelVersion;
+        /** 模型固定输出维度，必须使用模型平台确认的实际值。 */
         @Min(1)
-        private int dimension = 768;
-        /** 单次发送给模型容器的最大文本数量。 */
+        private int dimension;
+        /** 单次发送给模型网关的最大文本数量；批量能力未确认前保持为 1。 */
         @Min(1)
-        private int batchSize = 4;
+        private int batchSize = 1;
         /** HTTP 建连超时，单位毫秒。 */
         @Min(1)
         private int connectTimeoutMs = 3000;
@@ -86,8 +91,8 @@ public class ContractChangeProperties {
         /**
          * 规范化后合同段落最大字符数。
          *
-         * <p>BGE Base 最大输入为 512 Token。字符数不能完全等同于 Token 数，因此保留余量，
-         * 并要求模型容器关闭自动截断，避免只向量化段落前半部分。</p>
+         * <p>该值是业务字符上限，不等同于模型 Token 上限。模型平台确认上下文长度后可通过
+         * 外部配置调整；服务始终明确拒绝超长段落，不做静默截断。</p>
          */
         @Min(1)
         private int maxParagraphLength = 480;
