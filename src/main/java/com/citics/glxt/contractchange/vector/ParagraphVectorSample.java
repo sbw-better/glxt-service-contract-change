@@ -17,6 +17,6 @@ public class ParagraphVectorSample {
     private String textHash;
     /** 已拆分的多标签编码列表。 */
     private List<String> changeTypeCodes;
-    /** 已 L2 归一化的 768 维向量。 */
+    /** 已 L2 归一化且维度与当前索引配置一致的向量。 */
     private float[] vector;
 }

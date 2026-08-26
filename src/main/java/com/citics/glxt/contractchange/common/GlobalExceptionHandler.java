@@ -1,10 +1,15 @@
 package com.citics.glxt.contractchange.common;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import javax.validation.ConstraintViolationException;
 
@@ -28,7 +33,7 @@ public class GlobalExceptionHandler {
         return ContractChangeResult.of(CommonConstants.BAD_REQUEST, message, null);
     }
 
-    /** 处理缺少模型平台审计所需 user_id 请求头的情况。 */
+    /** 处理缺少模型平台审计所需 UserId 请求头的情况。 */
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ContractChangeResult<Void> handleMissingHeader(MissingRequestHeaderException ex) {
         String message = ex.getHeaderName() + "请求头不能为空";
@@ -43,6 +48,42 @@ public class GlobalExceptionHandler {
                 ? "请求参数错误" : ex.getConstraintViolations().iterator().next().getMessage();
         log.warn("请求参数约束校验失败, message={}", message);
         return ContractChangeResult.of(CommonConstants.BAD_REQUEST, message, null);
+    }
+
+    /** 处理缺少multipart文件字段的请求。 */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ContractChangeResult<Void> handleMissingPart(MissingServletRequestPartException ex) {
+        log.warn("上传请求缺少文件字段, part={}", ex.getRequestPartName());
+        return ContractChangeResult.of(CommonConstants.BAD_REQUEST,
+                ex.getRequestPartName() + "文件不能为空", null);
+    }
+
+    /** 处理超过Spring上传大小限制的Excel文件。 */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ContractChangeResult<Void> handleUploadTooLarge(MaxUploadSizeExceededException ex) {
+        log.warn("上传文件超过大小限制, maxUploadSize={}", ex.getMaxUploadSize());
+        return ContractChangeResult.of(CommonConstants.BAD_REQUEST, "Excel文件不能超过20MB", null);
+    }
+
+    /** 处理无法解析的JSON请求体，不记录可能包含合同正文的异常内容。 */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ContractChangeResult<Void> handleUnreadableBody(HttpMessageNotReadableException ex) {
+        log.warn("请求JSON格式不正确, exception={}", ex.getClass().getSimpleName());
+        return ContractChangeResult.of(CommonConstants.BAD_REQUEST, "请求JSON格式不正确", null);
+    }
+
+    /** 处理错误的Content-Type。 */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ContractChangeResult<Void> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException ex) {
+        log.warn("请求Content-Type不支持, contentType={}", ex.getContentType());
+        return ContractChangeResult.of(CommonConstants.BAD_REQUEST, "请求Content-Type不支持", null);
+    }
+
+    /** 处理损坏或格式不完整的multipart请求。 */
+    @ExceptionHandler(MultipartException.class)
+    public ContractChangeResult<Void> handleMultipart(MultipartException ex) {
+        log.warn("multipart上传请求格式不正确, exception={}", ex.getClass().getSimpleName());
+        return ContractChangeResult.of(CommonConstants.BAD_REQUEST, "上传请求格式不正确", null);
     }
 
     /** 处理未预期异常：记录堆栈，但不向调用方泄露内部细节。 */

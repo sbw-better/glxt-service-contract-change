@@ -21,6 +21,7 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -28,12 +29,13 @@ import java.util.List;
  *
  * <p>网关采用 OpenAI 兼容协议：请求体包含 {@code model} 和 {@code input}，响应向量位于
  * {@code data[].embedding}。本客户端负责鉴权请求头、返回数量和维度校验以及 L2 归一化。
- * 日志严禁输出 API Key、user_id、合同正文、请求体和向量。</p>
+ * 日志严禁输出 API Key、UserId、合同正文、请求体和向量。</p>
  */
 @Slf4j
 @Component
 public class HttpEmbeddingClient implements EmbeddingClient {
-    private static final String USER_ID_HEADER = "user_id";
+    private static final String USER_ID_HEADER = "UserId";
+    private static final String FLOAT_ENCODING_FORMAT = "float";
 
     private final ContractChangeProperties.Embedding properties;
     private final RestTemplate restTemplate;
@@ -56,7 +58,10 @@ public class HttpEmbeddingClient implements EmbeddingClient {
         for (int attempt = 0; attempt <= properties.getMaxRetries(); attempt++) {
             try {
                 EmbeddingGatewayRequest body = new EmbeddingGatewayRequest(
-                        properties.getModelName(), texts.size() == 1 ? texts.get(0) : texts);
+                        properties.getModelName(),
+                        texts.size() == 1 ? texts.get(0) : texts,
+                        String.valueOf(properties.getDimension()),
+                        FLOAT_ENCODING_FORMAT);
                 ResponseEntity<EmbeddingGatewayResponse> response = restTemplate.postForEntity(
                         properties.getUrl(), new HttpEntity<EmbeddingGatewayRequest>(body, gatewayHeaders(userId)),
                         EmbeddingGatewayResponse.class);
@@ -115,7 +120,7 @@ public class HttpEmbeddingClient implements EmbeddingClient {
             }
         }
         if (userId == null || userId.trim().isEmpty()) {
-            throw new ContractChangeBusinessException("user_id不能为空");
+            throw new ContractChangeBusinessException("UserId不能为空");
         }
     }
 
@@ -125,8 +130,9 @@ public class HttpEmbeddingClient implements EmbeddingClient {
         if (rows == null || rows.size() != expectedCount) {
             throw new ContractChangeBusinessException("Embedding返回数量与输入数量不一致");
         }
-        List<float[]> vectors = new ArrayList<float[]>(rows.size());
-        for (EmbeddingGatewayData row : rows) {
+        List<EmbeddingGatewayData> orderedRows = orderByInputIndex(rows, expectedCount);
+        List<float[]> vectors = new ArrayList<float[]>(orderedRows.size());
+        for (EmbeddingGatewayData row : orderedRows) {
             List<Double> values = row == null ? null : row.getEmbedding();
             if (values == null || values.size() != properties.getDimension()) {
                 throw new ContractChangeBusinessException(
@@ -151,6 +157,31 @@ public class HttpEmbeddingClient implements EmbeddingClient {
             vectors.add(vector);
         }
         return vectors;
+    }
+
+    /**
+     * 根据OpenAI兼容响应中的index还原输入顺序，防止批量结果与合同段落错配。
+     * 单条调用兼容网关省略index；批量调用必须返回完整、唯一且连续的index。
+     */
+    private List<EmbeddingGatewayData> orderByInputIndex(List<EmbeddingGatewayData> rows,
+                                                          int expectedCount) {
+        if (expectedCount == 1) {
+            EmbeddingGatewayData row = rows.get(0);
+            if (row != null && row.getIndex() != null && row.getIndex() != 0) {
+                throw new ContractChangeBusinessException("Embedding返回index不正确");
+            }
+            return rows;
+        }
+        List<EmbeddingGatewayData> ordered = new ArrayList<EmbeddingGatewayData>(
+                Collections.nCopies(expectedCount, (EmbeddingGatewayData) null));
+        for (EmbeddingGatewayData row : rows) {
+            Integer index = row == null ? null : row.getIndex();
+            if (index == null || index < 0 || index >= expectedCount || ordered.get(index) != null) {
+                throw new ContractChangeBusinessException("Embedding批量结果index缺失、重复或越界");
+            }
+            ordered.set(index, row);
+        }
+        return ordered;
     }
 
     /** 将常见 4xx 转换为不泄露平台响应体的明确诊断信息。 */

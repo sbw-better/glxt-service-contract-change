@@ -38,8 +38,9 @@ public class HttpEmbeddingClientTest {
         server.expect(once(), requestTo("http://model/embedding/v1/embeddings"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer test-key"))
-                .andExpect(header("user_id", "employee-001"))
-                .andExpect(content().json("{\"model\":\"test-model\",\"input\":\"测试段落\"}"))
+                .andExpect(header("UserId", "employee-001"))
+                .andExpect(content().json("{\"model\":\"test-model\",\"input\":\"测试段落\","
+                        + "\"dimensions\":\"3\",\"encoding_format\":\"float\"}"))
                 .andRespond(withSuccess("{\"data\":[{\"embedding\":[3,4,0]}]}",
                         MediaType.APPLICATION_JSON));
 
@@ -58,13 +59,29 @@ public class HttpEmbeddingClientTest {
         MockRestServiceServer server = server(client);
         server.expect(once(), requestTo("http://model/embedding/v1/embeddings"))
                 .andExpect(content().json(
-                        "{\"model\":\"test-model\",\"input\":[\"段落一\",\"段落二\"]}"))
-                .andRespond(withSuccess("{\"data\":[{\"embedding\":[1,0]},"
-                        + "{\"embedding\":[0,1]}]}", MediaType.APPLICATION_JSON));
+                        "{\"model\":\"test-model\",\"input\":[\"段落一\",\"段落二\"],"
+                                + "\"dimensions\":\"2\",\"encoding_format\":\"float\"}"))
+                .andRespond(withSuccess("{\"data\":[{\"index\":1,\"embedding\":[0,1]},"
+                        + "{\"index\":0,\"embedding\":[1,0]}]}", MediaType.APPLICATION_JSON));
 
         EmbeddingBatchResult result = client.embed(Arrays.asList("段落一", "段落二"), "employee-001");
 
         assertEquals(2, result.getVectors().size());
+        assertEquals(1D, result.getVectors().get(0)[0], 0.000001D);
+        assertEquals(1D, result.getVectors().get(1)[1], 0.000001D);
+        server.verify();
+    }
+
+    @Test
+    public void shouldRejectBatchResponseWithoutIndexes() {
+        HttpEmbeddingClient client = client(2, 0);
+        MockRestServiceServer server = server(client);
+        server.expect(once(), requestTo("http://model/embedding/v1/embeddings"))
+                .andRespond(withSuccess("{\"data\":[{\"embedding\":[1,0]},"
+                                + "{\"embedding\":[0,1]}]}",
+                        MediaType.APPLICATION_JSON));
+
+        assertUnavailable(client, Arrays.asList("段落一", "段落二"), "批量结果index");
         server.verify();
     }
 
@@ -143,8 +160,13 @@ public class HttpEmbeddingClientTest {
     }
 
     private void assertUnavailable(HttpEmbeddingClient client, String messagePart) {
+        assertUnavailable(client, Collections.singletonList("测试段落"), messagePart);
+    }
+
+    private void assertUnavailable(HttpEmbeddingClient client, java.util.List<String> texts,
+                                   String messagePart) {
         try {
-            client.embed(Collections.singletonList("测试段落"), "employee-001");
+            client.embed(texts, "employee-001");
             fail("应抛出模型服务不可用异常");
         } catch (ContractChangeBusinessException ex) {
             assertEquals(503, ex.getCode());

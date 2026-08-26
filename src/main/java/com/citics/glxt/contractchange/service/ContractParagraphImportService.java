@@ -93,9 +93,8 @@ public class ContractParagraphImportService {
                 newRows.add(row);
             } else if (isCurrentActiveRecord(existing, row.changeTypeCodes)) {
                 skipped++;
-            } else if (Integer.valueOf(0).equals(existing.getEnabled())
-                    || existing.getChangeTypeCodes().equals(row.changeTypeCodes)) {
-                // 停用记录可以用Excel标签重新启用；相同标签的旧模型记录重新生成当前模型向量。
+            } else if (existing.getChangeTypeCodes().equals(row.changeTypeCodes)) {
+                // 类型必须保持一致：停用记录重新启用，旧模型记录重新生成当前模型向量。
                 row.existingId = existing.getId();
                 updateRows.add(row);
             } else {
@@ -192,6 +191,9 @@ public class ContractParagraphImportService {
             log.warn("Excel读取失败, fileSizeBytes={}, exception={}",
                     file.getSize(), ex.getClass().getSimpleName());
             throw new ContractChangeBusinessException("Excel读取失败，请确认文件未损坏且格式为xlsx");
+        }
+        if (result.totalRows == 0 && result.errors.isEmpty()) {
+            result.errors.add(new ImportErrorItem(2, "Excel中没有有效数据行"));
         }
         return result;
     }

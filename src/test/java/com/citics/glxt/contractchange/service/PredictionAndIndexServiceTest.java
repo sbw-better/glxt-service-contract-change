@@ -108,10 +108,10 @@ public class PredictionAndIndexServiceTest {
 
     /**
      * 复现真实接口中第一名相似度约0.84、但多组互斥标签导致投票得分被稀释的场景。
-     * 第一名达到强匹配阈值且明显领先第二名时，应返回第一名标签作为候选结果。
+     * 第一名达到强匹配阈值时，应返回第一名标签作为候选结果。
      */
     @Test
-    public void shouldReturnFirstSampleTypesWhenStrongTopMatchClearlyLeads() {
+    public void shouldReturnFirstSampleTypesWhenStrongTopMatchReachesThreshold() {
         double firstSimilarity = 0.8396705156167351D;
         double secondSimilarity = 0.7439026569371111D;
         double thirdSimilarity = 0.7000000000000000D;

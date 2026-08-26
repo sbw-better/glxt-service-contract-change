@@ -19,7 +19,7 @@ public class ContractParagraphDO {
     private String changeTypeCodes;
     /** Float32 小端序编码的归一化向量。 */
     private byte[] vectorData;
-    /** 向量维度，第一版固定为 768。 */
+    /** 向量维度，由当前模型版本和应用配置共同确定。 */
     private Integer vectorDim;
     /** 生成该向量的模型版本。 */
     private String modelVersion;

@@ -1,6 +1,7 @@
 package com.citics.glxt.contractchange.controller;
 
 import com.citics.glxt.contractchange.common.ContractChangeResult;
+import com.citics.glxt.contractchange.common.CommonConstants;
 import com.citics.glxt.contractchange.model.ImportResponse;
 import com.citics.glxt.contractchange.model.IndexStatusResponse;
 import com.citics.glxt.contractchange.model.PredictRequest;
@@ -50,21 +51,24 @@ public class ContractChangeController {
     /** 导入历史段落与变更类型编码对应关系。 */
     @PostMapping(value = "/samples/import", consumes = "multipart/form-data")
     @ApiOperation(value = "导入历史合同段落Excel",
-            notes = "必须携带user_id请求头；模型网关不可用时统一响应体code=503")
+            notes = "必须携带UserId请求头；模型网关不可用时统一响应体code=503")
     public ContractChangeResult<ImportResponse> importSamples(
             @ApiParam(value = "实际操作人工号，用于统一模型平台审计", required = true)
-            @RequestHeader("user_id") @NotBlank(message = "user_id不能为空") String userId,
+            @RequestHeader("UserId") @NotBlank(message = "UserId不能为空") String userId,
             @RequestPart("file") MultipartFile file) {
-        return ContractChangeResult.success(importService.importExcel(file, userId));
+        ImportResponse response = importService.importExcel(file, userId);
+        return response.isSuccess()
+                ? ContractChangeResult.success(response)
+                : ContractChangeResult.of(CommonConstants.BAD_REQUEST, "Excel导入校验失败", response);
     }
 
     /** 识别一个新合同段落可能对应的多个变更类型。 */
     @PostMapping("/predict")
     @ApiOperation(value = "预测新合同段落的变更类型",
-            notes = "必须携带user_id请求头；Hash未命中且模型网关不可用时统一响应体code=503")
+            notes = "必须携带UserId请求头；Hash未命中且模型网关不可用时统一响应体code=503")
     public ContractChangeResult<PredictionResponse> predict(
             @ApiParam(value = "实际操作人工号，用于统一模型平台审计", required = true)
-            @RequestHeader("user_id") @NotBlank(message = "user_id不能为空") String userId,
+            @RequestHeader("UserId") @NotBlank(message = "UserId不能为空") String userId,
             @Valid @RequestBody PredictRequest request) {
         return ContractChangeResult.success(predictionService.predict(request.getParagraph(), userId));
     }

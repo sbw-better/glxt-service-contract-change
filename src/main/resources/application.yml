@@ -35,8 +35,9 @@ contract-change:
   embedding:
     url: ${EMBEDDING_URL:http://aihub-test.citicsinfo.com/embedding/api/qwen3-embedding-local/v1/embeddings}
     api-key: ${EMBEDDING_API_KEY}
-    model-name: ${EMBEDDING_MODEL_NAME:qwen3-embedding-local}
+    model-name: ${EMBEDDING_MODEL_NAME:gen-studio-Qwen3-Embedding-8B}
     model-version: ${EMBEDDING_MODEL_VERSION:gen-studio-Qwen3-Embedding-8B-1024-v1}
+    # 每次请求都显式发送该维度，并用于响应校验、Oracle存储和内存检索。
     dimension: ${EMBEDDING_DIMENSION:1024}
     # 模型平台批量能力未确认前保持为1；确认数组上限后可直接通过环境变量调大。
     batch-size: ${EMBEDDING_BATCH_SIZE:1}
@@ -53,7 +54,7 @@ contract-change:
     vote-top-k: ${SEARCH_VOTE_TOP_K:10}
     evidence-top-k: ${SEARCH_EVIDENCE_TOP_K:5}
     # 当前仅作为业务字符上限，不等同于新模型Token上限；服务拒绝超长文本且不自动截断。
-    max-paragraph-length: ${SEARCH_MAX_PARAGRAPH_LENGTH:480}
+    max-paragraph-length: ${SEARCH_MAX_PARAGRAPH_LENGTH:2000}
     min-similarity: ${SEARCH_MIN_SIMILARITY:0.60}
     high-threshold: ${SEARCH_HIGH_THRESHOLD:0.80}
     candidate-threshold: ${SEARCH_CANDIDATE_THRESHOLD:0.55}

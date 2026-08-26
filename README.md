@@ -10,7 +10,8 @@ Embedding 网关，实现“历史段落导入—语义检索—多标签变更�
 - Oracle负责持久化，JVM内存负责1万条以内向量的精确检索。
 - 单次Excel最多1000条；导入同步执行，默认逐条调用模型网关。
 - 预测结果不入库，接口输入必须是已经切分好的单个合同段落。
-- 段落默认最多480字符，超过上限明确拒绝，不做自动截断。
+- 段落默认最多2000字符，超过上限明确拒绝，不做自动截断。
+- 第一版Java服务按单实例部署，保证导入后JVM内存索引立即一致。
 - 变更类型只作为历史段落标签参与投票，不与新段落进行向量比较。
 - 所有业务SQL位于MyBatis XML中，Mapper接口不使用SQL注解。
 - 不使用向量数据库、Rerank、异步任务表或模型自部署服务。
@@ -36,12 +37,14 @@ Java服务直接调用公司内网统一模型平台，不再部署 Hugging Face
 ```http
 POST <EMBEDDING_URL>
 Authorization: Bearer <EMBEDDING_API_KEY>
-user_id: <实际操作人工号>
+UserId: <实际操作人工号>
 Content-Type: application/json
 
 {
-  "model": "<EMBEDDING_MODEL_NAME>",
-  "input": "待向量化合同段落"
+  "model": "gen-studio-Qwen3-Embedding-8B",
+  "input": "待向量化合同段落",
+  "dimensions": "1024",
+  "encoding_format": "float"
 }
 ```
 
@@ -50,40 +53,41 @@ Content-Type: application/json
 ```json
 {
   "data": [
-    {"embedding": [0.012, -0.038, 0.071]}
+    {"index": 0, "embedding": [0.012, -0.038, 0.071]}
   ]
 }
 ```
 
-Java会校验返回数量、实际维度、非法浮点数和零向量，并执行L2归一化。模型网关手册中的
-路径示例存在差异，因此 `EMBEDDING_URL` 必须配置平台确认后的完整地址，Java不会自行拼接。
+Java会校验返回数量、批量响应`index`、实际维度、非法浮点数和零向量，并执行L2归一化。
+网关虽然允许省略`dimensions`，本项目仍每次显式发送，避免依赖平台默认值。
 
-建议地址形式：
+已确认的地址形式：
 
 ```text
-测试：http://aihub-test.citicsinfo.com/embedding/api/<部署名称>/v1/embeddings
-生产：http://aihub.citicsinfo.com/embedding/api/<部署名称>/v1/embeddings
+测试：http://aihub-test.citicsinfo.com/embedding/api/qwen3-embedding-local/v1/embeddings
+生产：http://aihub.citicsinfo.com/embedding/api/qwen3-embedding-local/v1/embeddings
 ```
 
 测试环境需确认能够访问 `10.63.36.231:80`，生产环境需确认能够访问 `10.121.148.231:80`。
 
 ## 配置
 
-模型关键参数没有代码默认值，缺少时应用启动失败：
+测试环境使用已确认的模型参数作为开发默认值；API Key没有默认值，缺少时应用启动失败。
+生产部署必须通过环境变量显式覆盖模型地址、名称、版本和维度：
 
 | 变量 | 默认值 | 说明 |
 |---|---:|---|
 | `ORACLE_URL` | 本机开发占位地址 | Oracle连接地址 |
 | `ORACLE_USERNAME` / `ORACLE_PASSWORD` | 开发占位值 | 数据库凭据 |
-| `EMBEDDING_URL` | 无 | 模型平台确认的完整Embedding地址 |
+| `EMBEDDING_URL` | 测试网关完整地址 | 生产环境必须覆盖为生产网关地址 |
 | `EMBEDDING_API_KEY` | 无 | 模型平台密钥，严禁提交到Git或输出到日志 |
-| `EMBEDDING_MODEL_NAME` | 无 | 请求体`model`字段使用的模型名称 |
-| `EMBEDDING_MODEL_VERSION` | 无 | 数据库存储和索引隔离使用的模型版本 |
-| `EMBEDDING_DIMENSION` | 无 | 平台确认的实际向量维度 |
+| `EMBEDDING_MODEL_NAME` | `gen-studio-Qwen3-Embedding-8B` | 请求体`model`字段使用的模型名称 |
+| `EMBEDDING_MODEL_VERSION` | `gen-studio-Qwen3-Embedding-8B-1024-v1` | 数据库存储和索引隔离使用的模型版本 |
+| `EMBEDDING_DIMENSION` | `1024` | 网关实际返回且项目用于校验、存储和检索的向量维度 |
 | `EMBEDDING_BATCH_SIZE` | `1` | 单次网关请求文本数量，确认平台上限后再调大 |
 | `IMPORT_MAX_ROWS` | `1000` | 单次Excel最大数据行数 |
 | `IMPORT_MAX_TOTAL_SAMPLES` | `10000` | 第一版历史样本总数上限 |
-| `SEARCH_MAX_PARAGRAPH_LENGTH` | `480` | 规范化段落最大字符数，不等同于Token数 |
+| `SEARCH_MAX_PARAGRAPH_LENGTH` | `2000` | 规范化段落最大字符数，不等同于Token数 |
 | `SEARCH_MIN_SIMILARITY` | `0.60` | 最低召回相似度 |
 | `SEARCH_HIGH_THRESHOLD` | `0.80` | 高可信类型得分阈值 |
 | `SEARCH_CANDIDATE_THRESHOLD` | `0.55` | 候选类型得分阈值 |
@@ -91,6 +95,10 @@ Java会校验返回数量、实际维度、非法浮点数和零向量，并执�
 
 `EMBEDDING_MODEL_NAME`用于实际网关请求；`EMBEDDING_MODEL_VERSION`用于向量兼容性隔离。
 即使平台模型别名不变，只要底层模型发生变化，也必须使用新的版本标识并重新生成历史向量。
+
+Qwen3-Embedding-8B不传`dimensions`时默认返回4096维，但本项目固定显式请求1024维。对第一版最多
+1万条CPU精确检索而言，1024维可将网络响应、Oracle BLOB、JVM向量内存和点积计算量降为
+4096维的四分之一。切换维度时必须同步更改`EMBEDDING_MODEL_VERSION`并重新生成全部历史向量。
 
 ## Excel格式与导入流程
 
@@ -104,8 +112,11 @@ Java会校验返回数量、实际维度、非法浮点数和零向量，并执�
 导入接口为同步接口。处理顺序为：文件校验、文本规范化、Hash去重、冲突判断、网关向量化、
 单事务入库、索引重载。任一模型调用失败时，本批数据不会入库。
 
+第一版只部署一个Java实例。若以后部署多个实例，导入后的索引重载必须通知每个实例，不能只
+依赖处理导入请求的当前实例。
+
 相同Hash、相同类型、当前模型版本及维度一致时幂等跳过；相同类型但模型版本或维度变化时
-更新原记录；生效记录的类型编码不同时整批拒绝。
+更新原记录；无论记录是否生效，类型编码不同时都整批拒绝，避免静默覆盖历史标签。
 
 ## 接口
 
@@ -121,20 +132,17 @@ GET  /service/contract-change/index/status
 导入和预测接口必须携带：
 
 ```http
-user_id: 实际操作人工号
+UserId: 实际操作人工号
 ```
 
 该值只透传给模型平台用于审计，不写数据库、不输出到日志。索引重载和状态查询不调用模型，
 因此不要求该请求头。
 
-如果接口经过Nginx等反向代理，必须确认代理允许并原样转发带下划线的`user_id`请求头；
-Nginx默认配置可能忽略此类请求头，可由运维按内网规范开启`underscores_in_headers`。
-
 预测请求示例：
 
 ```http
 POST /glxt-service-contract-change/service/contract-change/predict
-user_id: employee-001
+UserId: employee-001
 Content-Type: application/json
 
 {"paragraph":"新的合同段落"}
@@ -171,12 +179,11 @@ $env:JAVA_HOME='D:\tools\Java\jdk1.8.0_481'
 $env:ORACLE_URL='jdbc:oracle:thin:@10.0.0.10:1521:ORCL'
 $env:ORACLE_USERNAME='glxt'
 $env:ORACLE_PASSWORD='***'
-$env:EMBEDDING_URL='http://aihub-test.citicsinfo.com/embedding/api/<部署名称>/v1/embeddings'
+$env:EMBEDDING_URL='http://aihub-test.citicsinfo.com/embedding/api/qwen3-embedding-local/v1/embeddings'
 $env:EMBEDDING_API_KEY='***'
-$env:EMBEDDING_MODEL_NAME='<平台分配模型名称>'
-$env:EMBEDDING_MODEL_VERSION='<本次向量兼容版本>'
-$env:EMBEDDING_DIMENSION='<平台确认维度>'
-
+$env:EMBEDDING_MODEL_NAME='gen-studio-Qwen3-Embedding-8B'
+$env:EMBEDDING_MODEL_VERSION='gen-studio-Qwen3-Embedding-8B-1024-v1'
+$env:EMBEDDING_DIMENSION='1024'
 mvn test
 mvn -DskipTests package
 java -jar target/glxt-service-contract-change-1.0.0.jar
@@ -197,11 +204,11 @@ java -jar target/glxt-service-contract-change-1.0.0.jar
 - `5xx`、连接或读取异常：模型平台暂时不可用。
 
 只有连接异常和`5xx`最多重试一次；其他错误不重试。对外错误不会包含平台响应体、API Key、
-`user_id`、合同正文或向量。
+`UserId`、合同正文或向量。
 
 ## 日志与敏感信息
 
 - 记录导入、事务、索引、模型调用和预测的数量、状态及耗时。
 - 合同段落只记录规范化文本SHA-256，不记录完整正文。
-- 不记录API Key、`user_id`、请求体、模型响应体或向量。
+- 不记录API Key、`UserId`、请求体、模型响应体或向量。
 - 不建议开启Mapper或RestTemplate DEBUG，避免输出CLOB、BLOB或模型请求信息。

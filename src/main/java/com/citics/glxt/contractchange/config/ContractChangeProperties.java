@@ -48,7 +48,7 @@ public class ContractChangeProperties {
         /** 写入数据库并用于隔离检索的模型版本标识。 */
         @NotBlank
         private String modelVersion;
-        /** 模型固定输出维度，必须使用模型平台确认的实际值。 */
+        /** 请求网关返回并由本项目校验、持久化和检索的向量维度。 */
         @Min(1)
         private int dimension;
         /** 单次发送给模型网关的最大文本数量；批量能力未确认前保持为 1。 */
@@ -95,7 +95,7 @@ public class ContractChangeProperties {
          * 外部配置调整；服务始终明确拒绝超长段落，不做静默截断。</p>
          */
         @Min(1)
-        private int maxParagraphLength = 480;
+        private int maxParagraphLength = 2000;
         /** 历史样本进入召回结果的最低余弦相似度。 */
         @DecimalMin("-1.0")
         @DecimalMax("1.0")

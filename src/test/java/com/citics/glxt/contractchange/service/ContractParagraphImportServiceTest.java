@@ -80,7 +80,7 @@ public class ContractParagraphImportServiceTest {
         ContractParagraphDO existing = new ContractParagraphDO();
         existing.setId(99L);
         existing.setTextHash(com.citics.glxt.contractchange.util.HashUtils.sha256("历史段落A"));
-        existing.setChangeTypeCodes("TYPE01");
+        existing.setChangeTypeCodes("TYPE01;TYPE02");
         existing.setEnabled(0);
         existing.setModelVersion("old-v1");
         existing.setVectorDim(3);
@@ -114,6 +114,37 @@ public class ContractParagraphImportServiceTest {
         assertFalse(response.isSuccess());
         assertEquals(1, response.getErrors().size());
         verify(embeddingClient, never()).embed(anyList(), anyString());
+    }
+
+    @Test
+    public void shouldRejectDisabledParagraphWithDifferentDatabaseCodes() throws Exception {
+        ContractParagraphDO existing = new ContractParagraphDO();
+        existing.setId(100L);
+        existing.setTextHash(com.citics.glxt.contractchange.util.HashUtils.sha256("历史段落A"));
+        existing.setChangeTypeCodes("TYPE01");
+        existing.setEnabled(0);
+        existing.setModelVersion("old-v1");
+        existing.setVectorDim(3);
+        when(mapper.selectByTextHashes(anyList())).thenReturn(Collections.singletonList(existing));
+
+        ImportResponse response = service.importExcel(
+                excel(new String[][]{{"历史段落A", "TYPE02"}}), "test-user");
+
+        assertFalse(response.isSuccess());
+        assertEquals(1, response.getErrors().size());
+        verify(embeddingClient, never()).embed(anyList(), anyString());
+        verify(persistenceService, never()).saveAll(anyList());
+    }
+
+    @Test
+    public void shouldRejectExcelWithoutDataRows() throws Exception {
+        ImportResponse response = service.importExcel(excel(new String[][]{}), "test-user");
+
+        assertFalse(response.isSuccess());
+        assertEquals(1, response.getErrors().size());
+        assertTrue(response.getErrors().get(0).getMessage().contains("没有有效数据行"));
+        verify(embeddingClient, never()).embed(anyList(), anyString());
+        verify(persistenceService, never()).saveAll(anyList());
     }
 
     private MockMultipartFile excel(String[][] rows) throws Exception {
