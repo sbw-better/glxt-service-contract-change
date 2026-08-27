@@ -26,7 +26,8 @@ import java.util.Map;
 /**
  * 新合同段落变更类型预测服务。
  *
- * <p>优先按规范化文本 Hash 精确命中；未命中时才调用向量模型并进行 Top-K 多标签加权投票。</p>
+ * <p>先查找是否存在内容完全相同的历史段落；只有没有完全命中时，才调用模型生成向量，
+ * 再从最相似的历史段落已有类型中综合判断新段落可能对应的类型。</p>
  */
 @Slf4j
 @Service
@@ -54,13 +55,16 @@ public class ContractParagraphPredictionService {
     public PredictionResponse predict(String paragraph, String userId) {
         long started = System.currentTimeMillis();
         String normalized = ContractTextNormalizer.normalize(paragraph);
-        if (normalized.isEmpty()) throw new ContractChangeBusinessException("合同段落不能为空");
+        if (normalized.isEmpty()) {
+            throw new ContractChangeBusinessException("合同段落不能为空");
+        }
         if (normalized.length() > properties.getSearch().getMaxParagraphLength()) {
             throw new ContractChangeBusinessException(
                     "合同段落不能超过" + properties.getSearch().getMaxParagraphLength() + "字符");
         }
         String textHash = HashUtils.sha256(normalized);
         log.info("合同段落预测开始, textHash={}, normalizedLength={}", textHash, normalized.length());
+        // 完全相同的规范化文本会得到相同Hash，可以直接复用历史类型，不需要调用模型。
         ParagraphVectorSample exact = indexService.exact(textHash);
         if (exact != null) {
             PredictionResponse response = exact(exact);
@@ -70,7 +74,8 @@ public class ContractParagraphPredictionService {
             return response;
         }
 
-        // 空库无需调用CPU模型；加载失败与正常空库必须向调用方表达为不同结果。
+        // 没有历史样本时，即使生成新段落向量也没有比较对象，所以不调用模型。
+        // “历史库确实为空”和“索引加载失败”含义不同，必须返回不同结果。
         IndexStatusResponse indexStatus = indexService.status();
         if ("EMPTY".equals(indexStatus.getStatus())) {
             log.info("合同段落预测结束：历史样本库为空, textHash={}, elapsedMs={}",
@@ -83,6 +88,7 @@ public class ContractParagraphPredictionService {
                     "历史段落向量索引不可用，当前状态=" + indexStatus.getStatus());
         }
 
+        // 到这里说明没有完全相同段落且内存索引可用，开始生成新段落向量并查找相似历史段落。
         EmbeddingBatchResult embedded = embeddingClient.embed(Collections.singletonList(normalized), userId);
         List<ParagraphSearchResult> allMatches = indexService.search(embedded.getVectors().get(0),
                 properties.getSearch().getRetrieveTopK());
@@ -127,7 +133,7 @@ public class ContractParagraphPredictionService {
     }
 
     /**
-     * 对相似度候选执行平方加权的多标签投票，并构造证据段落。
+     * 根据相似历史段落已有的类型编码进行综合判断，并整理返回给调用方的参考段落。
      *
      * <p>召回到相似段落只代表存在可供参考的历史证据，不代表已经得到可靠的类型结果。
      * 投票未产出类型时，会继续判断第一名是否达到强匹配阈值；满足时将
@@ -140,7 +146,7 @@ public class ContractParagraphPredictionService {
         double totalWeight = 0D;
         for (int i = 0; i < voteCount; i++) {
             ParagraphSearchResult match = matches.get(i);
-            // 平方权重放大高相似样本的影响，同时不会引入额外可调参数。
+            // 相似度越高，历史样本的影响越大。使用平方后，高相似记录会比普通相似记录更有影响力。
             double weight = match.getSimilarity() * match.getSimilarity();
             totalWeight += weight;
             for (String code : match.getSample().getChangeTypeCodes()) {
@@ -156,16 +162,18 @@ public class ContractParagraphPredictionService {
         List<ChangeTypePrediction> types = new ArrayList<ChangeTypePrediction>();
         if (totalWeight > 0D) {
             for (Map.Entry<String, Vote> entry : votes.entrySet()) {
-                // 多标签样本的每个标签都获得该样本完整权重；分母为全部投票样本权重。
+                // 类型得分表示：支持这个类型的历史样本权重，占全部参与判断样本权重的比例。
                 double score = entry.getValue().weight / totalWeight;
-                if (score < properties.getSearch().getCandidateThreshold()) continue;
+                if (score < properties.getSearch().getCandidateThreshold()) {
+                    continue;
+                }
                 boolean high = score >= properties.getSearch().getHighThreshold()
                         && entry.getValue().support >= properties.getSearch().getMinSupportCount();
                 types.add(new ChangeTypePrediction(entry.getKey(), score, entry.getValue().support,
                         high ? "HIGH" : "CANDIDATE"));
             }
         }
-        // 多样本投票优先；只有投票完全无结果时才允许强单条匹配兜底，避免覆盖已有共识。
+        // 优先相信多条历史记录形成的共同结果；只有没有类型达标时，才考虑最相似的第一条记录。
         applyStrongMatchFallback(matches, votes, totalWeight, types);
         types.sort(Comparator.comparingDouble(ChangeTypePrediction::getScore).reversed()
                 .thenComparing(ChangeTypePrediction::getCode));
@@ -187,7 +195,9 @@ public class ContractParagraphPredictionService {
                                              Map<String, Vote> votes,
                                              double totalWeight,
                                              List<ChangeTypePrediction> types) {
-        if (!types.isEmpty() || matches.isEmpty()) return false;
+        if (!types.isEmpty() || matches.isEmpty()) {
+            return false;
+        }
 
         ParagraphSearchResult first = matches.get(0);
         double firstSimilarity = first.getSimilarity();
@@ -218,7 +228,9 @@ public class ContractParagraphPredictionService {
     private List<ParagraphSearchResult> reliableMatches(List<ParagraphSearchResult> matches, double threshold) {
         List<ParagraphSearchResult> result = new ArrayList<ParagraphSearchResult>();
         for (ParagraphSearchResult match : matches) {
-            if (match.getSimilarity() < threshold) break;
+            if (match.getSimilarity() < threshold) {
+                break;
+            }
             result.add(match);
         }
         return result;
@@ -237,8 +249,9 @@ public class ContractParagraphPredictionService {
         return references;
     }
 
+    /** 一个类型在本次判断中的临时统计，只在当前服务内部使用。 */
     private static class Vote {
-        /** 支持该类型的样本平方权重之和。 */
+        /** 支持该类型的所有历史样本权重之和。 */
         private double weight;
         /** 支持该类型的历史样本数量。 */
         private int support;

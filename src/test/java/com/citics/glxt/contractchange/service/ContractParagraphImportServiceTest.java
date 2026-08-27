@@ -56,7 +56,9 @@ public class ContractParagraphImportServiceTest {
         when(embeddingClient.embed(anyList(), anyString())).thenAnswer(invocation -> {
             List<String> texts = invocation.getArgument(0);
             List<float[]> vectors = new ArrayList<float[]>();
-            for (int i = 0; i < texts.size(); i++) vectors.add(new float[]{1F, 0F, 0F});
+            for (int i = 0; i < texts.size(); i++) {
+                vectors.add(new float[]{1F, 0F, 0F});
+            }
             return new EmbeddingBatchResult(3, vectors);
         });
         MockMultipartFile file = excel(new String[][]{{"历史段落A", "TYPE02;TYPE01"}});

@@ -14,7 +14,8 @@ public final class ChangeTypeCodes {
     private static final int MAX_CODE_LENGTH = 64;
     private static final int MAX_TOTAL_LENGTH = 4000;
 
-    private ChangeTypeCodes() { }
+    private ChangeTypeCodes() {
+    }
 
     /**
      * 将用户输入的中英文分隔符统一为英文分号，并进行去空、去重和字典序排序。
@@ -30,7 +31,9 @@ public final class ChangeTypeCodes {
         TreeSet<String> codes = new TreeSet<String>();
         for (String value : values) {
             String code = value.trim();
-            if (code.isEmpty()) continue;
+            if (code.isEmpty()) {
+                continue;
+            }
             if (code.length() > MAX_CODE_LENGTH) {
                 throw new ContractChangeBusinessException("单个变更类型编码不能超过64字符");
             }
@@ -39,7 +42,9 @@ public final class ChangeTypeCodes {
             }
             codes.add(code);
         }
-        if (codes.isEmpty()) throw new ContractChangeBusinessException("变更类型编码不能为空");
+        if (codes.isEmpty()) {
+            throw new ContractChangeBusinessException("变更类型编码不能为空");
+        }
         String joined = join(codes);
         if (joined.length() > MAX_TOTAL_LENGTH) {
             throw new ContractChangeBusinessException("变更类型编码总长度不能超过4000字符");
@@ -49,14 +54,18 @@ public final class ChangeTypeCodes {
 
     /** 将数据库中的规范编码串解析为只读列表。 */
     public static List<String> parse(String canonical) {
-        if (canonical == null || canonical.trim().isEmpty()) return Collections.emptyList();
+        if (canonical == null || canonical.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
         return Collections.unmodifiableList(new ArrayList<String>(Arrays.asList(canonical.split(";"))));
     }
 
     private static String join(Collection<String> values) {
         StringBuilder result = new StringBuilder();
         for (String value : values) {
-            if (result.length() > 0) result.append(';');
+            if (result.length() > 0) {
+                result.append(';');
+            }
             result.append(value);
         }
         return result.toString();

@@ -28,8 +28,10 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * JVM 内存向量索引服务。
  *
- * <p>索引以不可变快照保存。重载期间查询继续使用旧快照，只有新快照完整构建后才通过
- * {@link AtomicReference} 一次性替换，因此预测线程不会观察到半成品索引。</p>
+ * <p>它把Oracle中的历史段落和向量加载到Java内存，预测时直接在内存中比较，不需要每次查询数据库。</p>
+ *
+ * <p>重新加载时先在临时变量中把新索引完整建好，加载期间预测仍使用旧索引；全部完成后再一次性
+ * 切换到新索引，因此预测请求不会读到只加载了一部分的数据。</p>
  */
 @Slf4j
 @Service
@@ -45,7 +47,7 @@ public class ParagraphVectorIndexService {
         this.properties = properties;
     }
 
-    /** 应用启动时尝试从 Oracle 恢复索引；失败不阻止应用启动。 */
+    /** 应用启动后自动从Oracle恢复索引；失败时保留明确状态，方便通过状态接口排查。 */
     @PostConstruct
     public void initialize() {
         try {
@@ -56,7 +58,10 @@ public class ParagraphVectorIndexService {
     }
 
     /**
-     * 从 Oracle 重新构建当前模型版本的内存索引。
+     * 从Oracle重新构建当前模型版本的内存索引。
+     *
+     * <p>只读取“当前模型版本、当前维度并且已经生效”的记录。每条数据库BLOB先还原成float数组，
+     * 然后分别放入“语义比较列表”和“文本Hash快速查找表”。</p>
      *
      * @return 新索引状态
      */
@@ -77,6 +82,7 @@ public class ParagraphVectorIndexService {
                     modelVersion, dimension, System.currentTimeMillis() - started, ex);
             throw ex;
         }
+        // samples供语义相似度遍历；hashIndex供完全相同段落快速命中。
         List<ParagraphVectorSample> samples = new ArrayList<ParagraphVectorSample>(rows.size());
         Map<String, ParagraphVectorSample> hashIndex = new HashMap<String, ParagraphVectorSample>();
         int errors = 0;
@@ -106,37 +112,40 @@ public class ParagraphVectorIndexService {
         VectorIndexSnapshot replacement = new VectorIndexSnapshot(
                 Collections.unmodifiableList(samples),
                 Collections.unmodifiableMap(hashIndex), status, errors, new Date());
-        // 所有记录处理完毕后原子切换；构建阶段发生未捕获异常时旧快照保持不变。
+        // 新索引完整建好后再整体替换，切换动作很短，不会影响正在执行的预测。
         current.set(replacement);
         log.info("历史段落向量索引加载完成, status={}, dbRowCount={}, sampleCount={}, errorCount={}, elapsedMs={}",
                 status, rows.size(), samples.size(), errors, System.currentTimeMillis() - started);
         return status(replacement);
     }
 
-    /** 按规范化文本 Hash 进行 O(1) 精确匹配。 */
+    /** 根据整理后段落的Hash直接查找；相同段落不需要再调用模型。 */
     public ParagraphVectorSample exact(String textHash) {
         return current.get().getHashIndex().get(textHash);
     }
 
     /**
-     * 对当前快照执行精确余弦相似度检索。
+     * 将新段落向量与当前内存中的历史向量逐条比较，保留最相似的前几条。
      *
-     * <p>样本向量和查询向量均已 L2 归一化，因此点积就是余弦相似度。使用固定大小最小堆，
-     * 将排序开销从全量排序降为 O(n log k)。</p>
+     * <p>历史向量和新向量都已经归一化，所以两个向量逐项相乘后相加，得到的就是余弦相似度。
+     * 这里只保留需要的前K条，不对全部历史记录做完整排序，样本较多时会更省时间。</p>
      */
     public List<ParagraphSearchResult> search(float[] query, int topK) {
         long started = System.currentTimeMillis();
         if (query == null || query.length != properties.getEmbedding().getDimension()) {
             throw new ContractChangeBusinessException("查询向量维度不正确");
         }
-        if (topK <= 0) return Collections.emptyList();
+        if (topK <= 0) {
+            return Collections.emptyList();
+        }
         PriorityQueue<ParagraphSearchResult> heap = new PriorityQueue<ParagraphSearchResult>(topK,
                 Comparator.comparingDouble(ParagraphSearchResult::getSimilarity));
         for (ParagraphVectorSample sample : current.get().getSamples()) {
             double similarity = VectorUtils.dot(query, sample.getVector());
             ParagraphSearchResult result = new ParagraphSearchResult(sample, similarity);
-            if (heap.size() < topK) heap.offer(result);
-            else if (similarity > heap.peek().getSimilarity()) {
+            if (heap.size() < topK) {
+                heap.offer(result);
+            } else if (similarity > heap.peek().getSimilarity()) {
                 heap.poll();
                 heap.offer(result);
             }

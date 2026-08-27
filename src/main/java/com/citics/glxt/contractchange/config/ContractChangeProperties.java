@@ -15,8 +15,8 @@ import javax.validation.constraints.NotBlank;
 /**
  * 合同段落识别业务配置。
  *
- * <p>所有参数均以 {@code contract-change} 为前缀，可在不同环境通过外部配置覆盖，
- * 从而保证开发和生产使用同一份 Java 制品。</p>
+ * <p>配置按照“模型调用、Excel导入、段落检索”分成三组，名称和 application.yml 中的层级
+ * 一一对应。把这些小配置类放在这里，是为了让所有合同识别参数集中在一个入口查看。</p>
  */
 @Data
 @Validated
@@ -32,7 +32,11 @@ public class ContractChangeProperties {
     @Valid
     private Search search = new Search();
 
-    /** 公司内网统一 Embedding 网关调用参数。 */
+    /**
+     * 调用向量模型需要的参数。
+     *
+     * <p>模型会把合同段落转换成一组数字，后续通过比较这些数字判断段落含义是否接近。</p>
+     */
     @Data
     public static class Embedding {
         /** 完整的 Embedding 接口地址；路径由模型平台提供，Java 不自行拼接。 */
@@ -45,10 +49,14 @@ public class ContractChangeProperties {
         /** 网关请求体 model 字段使用的模型名称。 */
         @NotBlank
         private String modelName;
-        /** 写入数据库并用于隔离检索的模型版本标识。 */
+        /**
+         * 本项目使用的模型版本标记。数据库只加载相同版本的历史向量，避免新旧模型的结果混在一起。
+         */
         @NotBlank
         private String modelVersion;
-        /** 请求网关返回并由本项目校验、持久化和检索的向量维度。 */
+        /**
+         * 每条向量包含多少个数字。请求模型、保存数据库和加载内存时必须使用同一个值。
+         */
         @Min(1)
         private int dimension;
         /** 单次发送给模型网关的最大文本数量；批量能力未确认前保持为 1。 */
@@ -65,7 +73,7 @@ public class ContractChangeProperties {
         private int maxRetries = 1;
     }
 
-    /** 单次历史样本导入参数。 */
+    /** Excel导入数量限制，防止一次上传过多数据导致请求等待过久或占用过多内存。 */
     @Data
     public static class ImportConfig {
         /** 单份 Excel 允许的最大非空数据行数。 */
@@ -76,16 +84,20 @@ public class ContractChangeProperties {
         private int maxTotalSamples = 10000;
     }
 
-    /** 精确检索、证据返回和多标签投票参数。 */
+    /**
+     * 新段落与历史段落比较时使用的规则。
+     *
+     * <p>这些参数只决定取多少条历史记录、什么分数可以返回，不会改变数据库里的历史样本。</p>
+     */
     @Data
     public static class Search {
-        /** 余弦相似度检索保留的最大候选数。 */
+        /** 与新段落最接近的历史记录最多保留多少条。 */
         @Min(1)
         private int retrieveTopK = 10;
-        /** 候选结果中参与标签加权投票的最大样本数。 */
+        /** 从相似记录中最多取多少条，用它们已有的类型编码进行综合判断。 */
         @Min(1)
         private int voteTopK = 10;
-        /** 返回给调用方的最大参考段落数。 */
+        /** 接口最多向调用方展示多少条历史参考段落。 */
         @Min(1)
         private int evidenceTopK = 5;
         /**
@@ -96,19 +108,19 @@ public class ContractChangeProperties {
          */
         @Min(1)
         private int maxParagraphLength = 2000;
-        /** 历史样本进入召回结果的最低余弦相似度。 */
+        /** 历史段落至少达到这个相似度，才参与类型判断。 */
         @DecimalMin("-1.0")
         @DecimalMax("1.0")
         private double minSimilarity = 0.60D;
-        /** 类型被判定为高可信的最低得分。 */
+        /** 一个类型的综合支持得分达到这个值，才可能标记为高可信。 */
         @DecimalMin("0.0")
         @DecimalMax("1.0")
         private double highThreshold = 0.80D;
-        /** 类型可以作为候选返回的最低得分。 */
+        /** 一个类型至少达到这个得分，才会作为候选返回。 */
         @DecimalMin("0.0")
         @DecimalMax("1.0")
         private double candidateThreshold = 0.55D;
-        /** 类型被判定为高可信所需的最少支持样本数。 */
+        /** 除了分数足够高，还需要至少这么多条历史段落共同支持，才能标记为高可信。 */
         @Min(1)
         private int minSupportCount = 2;
         /** 投票无结果时，启用强单条匹配兜底所需的第一名最低相似度。 */

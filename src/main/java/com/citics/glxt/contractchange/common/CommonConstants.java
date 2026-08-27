@@ -10,5 +10,6 @@ public final class CommonConstants {
     public static final int BAD_REQUEST = 400;
     /** 外部 Embedding 模型暂时不可用。 */
     public static final int SERVICE_UNAVAILABLE = 503;
-    private CommonConstants() { }
+    private CommonConstants() {
+    }
 }

@@ -27,9 +27,10 @@ import java.util.List;
 /**
  * 公司内网统一 Embedding 网关客户端。
  *
- * <p>网关采用 OpenAI 兼容协议：请求体包含 {@code model} 和 {@code input}，响应向量位于
- * {@code data[].embedding}。本客户端负责鉴权请求头、返回数量和维度校验以及 L2 归一化。
- * 日志严禁输出 API Key、UserId、合同正文、请求体和向量。</p>
+ * <p>它只做一件事：把一批合同段落发给模型，并取回同样数量的数字向量。拿到结果后还会检查
+ * 数量、维度和数值是否正常，再统一做归一化，保证历史段落和新段落使用相同的比较标准。</p>
+ *
+ * <p>日志严禁输出 API Key、UserId、合同正文、完整请求体和向量内容。</p>
  */
 @Slf4j
 @Component
@@ -40,7 +41,7 @@ public class HttpEmbeddingClient implements EmbeddingClient {
     private final ContractChangeProperties.Embedding properties;
     private final RestTemplate restTemplate;
 
-    /** 根据配置创建带连接和读取超时的轻量 HTTP 客户端。 */
+    /** 创建模型专用的HTTP客户端，并设置连接超时和等待响应的最长时间。 */
     public HttpEmbeddingClient(ContractChangeProperties contractProperties) {
         this.properties = contractProperties.getEmbedding();
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
@@ -49,7 +50,10 @@ public class HttpEmbeddingClient implements EmbeddingClient {
         this.restTemplate = new RestTemplate(factory);
     }
 
-    /** 只有连接异常和服务端 5xx 会按配置重试，所有 4xx 均直接失败。 */
+    /**
+     * 批量生成向量。网络暂时中断或模型服务内部报错时可以重试；请求参数或权限错误重试也不会成功，
+     * 因此遇到4xx直接返回明确错误。
+     */
     @Override
     public EmbeddingBatchResult embed(List<String> texts, String userId) {
         validateRequest(texts, userId);
@@ -100,7 +104,7 @@ public class HttpEmbeddingClient implements EmbeddingClient {
         throw unavailable("Embedding网关暂时不可用", last);
     }
 
-    /** 构造模型平台要求的鉴权、操作人和 JSON 请求头。 */
+    /** 组装模型平台要求的请求头；API Key只来自服务端配置，不能由前端传入。 */
     private HttpHeaders gatewayHeaders(String userId) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -124,7 +128,10 @@ public class HttpEmbeddingClient implements EmbeddingClient {
         }
     }
 
-    /** 校验响应数量、向量维度和数值，并对每条向量执行 L2 归一化。 */
+    /**
+     * 检查模型返回结果，并把每条向量调整到统一长度标准。
+     * 这样后续直接计算两个向量的点积，就能得到段落之间的余弦相似度。
+     */
     private List<float[]> parse(EmbeddingGatewayResponse response, int expectedCount) {
         List<EmbeddingGatewayData> rows = response == null ? null : response.getData();
         if (rows == null || rows.size() != expectedCount) {
@@ -160,8 +167,8 @@ public class HttpEmbeddingClient implements EmbeddingClient {
     }
 
     /**
-     * 根据OpenAI兼容响应中的index还原输入顺序，防止批量结果与合同段落错配。
-     * 单条调用兼容网关省略index；批量调用必须返回完整、唯一且连续的index。
+     * 批量调用时，模型返回顺序不一定与输入顺序一致，所以根据index把结果放回原来的位置，
+     * 防止某个段落误用了另一个段落的向量。单条调用允许模型不返回index。
      */
     private List<EmbeddingGatewayData> orderByInputIndex(List<EmbeddingGatewayData> rows,
                                                           int expectedCount) {
@@ -186,10 +193,18 @@ public class HttpEmbeddingClient implements EmbeddingClient {
 
     /** 将常见 4xx 转换为不泄露平台响应体的明确诊断信息。 */
     private String clientErrorMessage(int status) {
-        if (status == 401 || status == 403) return "Embedding网关认证或权限失败";
-        if (status == 404) return "Embedding接口地址或模型部署名称错误";
-        if (status == 400 || status == 422) return "Embedding请求格式、输入长度或批量参数被拒绝";
-        if (status == 429) return "Embedding网关请求过于频繁，请稍后重试";
+        if (status == 401 || status == 403) {
+            return "Embedding网关认证或权限失败";
+        }
+        if (status == 404) {
+            return "Embedding接口地址或模型部署名称错误";
+        }
+        if (status == 400 || status == 422) {
+            return "Embedding请求格式、输入长度或批量参数被拒绝";
+        }
+        if (status == 429) {
+            return "Embedding网关请求过于频繁，请稍后重试";
+        }
         return "Embedding网关请求被拒绝, status=" + status;
     }
 
