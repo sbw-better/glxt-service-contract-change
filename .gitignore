@@ -32,8 +32,17 @@ Desktop.ini
 *.swp
 *.swo
 *~
+~$*
 *.orig
 *.rej
 
+# Node.js依赖（文档、PPT、Excel生成工具会临时使用）
+**/node_modules/
+
 # 本地文档渲染与校验临时产物
 /.doc_build/
+/.render_tmp/
+/docs/demo-materials/**/*_render*/
+/docs/demo-materials/contract-sample-tests/build/contract_test_dataset.json
+*.preview.png
+*.inspect.ndjson

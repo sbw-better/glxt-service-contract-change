@@ -1,0 +1,277 @@
+{
+  "info": {
+    "name": "合同段落变更类型识别服务",
+    "description": "用于线上汇报演示的 Postman Collection。导入和预测请求必须携带 UserId；请勿在 Collection 中保存真实 API Key 或真实合同正文。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/glxt-service-contract-change"
+    },
+    {
+      "key": "userId",
+      "value": "demo-user"
+    },
+    {
+      "key": "predictExactParagraph",
+      "value": "因设计优化需要，承包人应在收到发包人书面指令后十日内提交调整后的施工组织方案。"
+    },
+    {
+      "key": "predictHighParagraph",
+      "value": "因设计调整，承包人收到发包人书面通知后，应在十日内提交新的施工组织方案。"
+    },
+    {
+      "key": "predictCandidateParagraph",
+      "value": "发包人要求增加现场临时安全防护措施，相关费用经双方确认后计入合同价款调整。"
+    },
+    {
+      "key": "predictNoReliableParagraph",
+      "value": "本段文字讨论办公室咖啡机维护计划，与工程合同变更事项无关。"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. 查询索引状态",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/service/contract-change/index/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["service", "contract-change", "index", "status"]
+        },
+        "description": "演示第一步：确认 status、sampleCount、modelVersion、vectorDimension、loadedAt 和 errorCount。"
+      }
+    },
+    {
+      "name": "2. 导入正常匿名样本",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "UserId",
+            "value": "{{userId}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "docs/demo-materials/演示导入样本-正常.xlsx"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/service/contract-change/samples/import",
+          "host": ["{{baseUrl}}"],
+          "path": ["service", "contract-change", "samples", "import"]
+        },
+        "description": "预期：success=true，totalRows>0，inserted/updated/skipped 根据库内已有数据变化，indexReloaded=true。"
+      }
+    },
+    {
+      "name": "3. EXACT 精确命中预测",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "UserId",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"paragraph\": \"{{predictExactParagraph}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/service/contract-change/predict",
+          "host": ["{{baseUrl}}"],
+          "path": ["service", "contract-change", "predict"]
+        },
+        "description": "预期：matchType=EXACT，maxSimilarity=1，changeTypes[].score=1，不调用模型。"
+      }
+    },
+    {
+      "name": "4. HIGH 语义预测",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "UserId",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"paragraph\": \"{{predictHighParagraph}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/service/contract-change/predict",
+          "host": ["{{baseUrl}}"],
+          "path": ["service", "contract-change", "predict"]
+        },
+        "description": "预期：matchType=SEMANTIC，若历史样本足够一致，level 可能为 HIGH；以实际模型响应为准。"
+      }
+    },
+    {
+      "name": "5. CANDIDATE 或强相似兜底预测",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "UserId",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"paragraph\": \"{{predictCandidateParagraph}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/service/contract-change/predict",
+          "host": ["{{baseUrl}}"],
+          "path": ["service", "contract-change", "predict"]
+        },
+        "description": "用于解释：score 是历史证据支持度，不是概率；强相似兜底仍只返回 CANDIDATE。"
+      }
+    },
+    {
+      "name": "6. NO_RELIABLE_MATCH 边界预测",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "UserId",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"paragraph\": \"{{predictNoReliableParagraph}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/service/contract-change/predict",
+          "host": ["{{baseUrl}}"],
+          "path": ["service", "contract-change", "predict"]
+        },
+        "description": "预期：没有足够可靠历史证据时返回 NO_RELIABLE_MATCH，不强行给结论。"
+      }
+    },
+    {
+      "name": "7. 手工重载索引",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/service/contract-change/index/reload",
+          "host": ["{{baseUrl}}"],
+          "path": ["service", "contract-change", "index", "reload"]
+        },
+        "description": "用于演示运维动作：从 Oracle 重新加载当前模型版本、当前维度、SFSX=1 的记录。"
+      }
+    },
+    {
+      "name": "8. 导入重复样本",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "UserId",
+            "value": "{{userId}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "docs/demo-materials/演示导入样本-重复.xlsx"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/service/contract-change/samples/import",
+          "host": ["{{baseUrl}}"],
+          "path": ["service", "contract-change", "samples", "import"]
+        },
+        "description": "时间允许时演示：相同段落、相同类型应幂等跳过。"
+      }
+    },
+    {
+      "name": "9. 导入冲突样本",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "UserId",
+            "value": "{{userId}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "docs/demo-materials/演示导入样本-冲突.xlsx"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/service/contract-change/samples/import",
+          "host": ["{{baseUrl}}"],
+          "path": ["service", "contract-change", "samples", "import"]
+        },
+        "description": "时间允许时演示：相同段落但类型不同应拒绝静默覆盖。"
+      }
+    },
+    {
+      "name": "10. 导入错误表头样本",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "UserId",
+            "value": "{{userId}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "docs/demo-materials/演示导入样本-错误表头.xlsx"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/service/contract-change/samples/import",
+          "host": ["{{baseUrl}}"],
+          "path": ["service", "contract-change", "samples", "import"]
+        },
+        "description": "时间允许时演示：第一张 Sheet 前两列表头必须为合同段落、变更类型编码。"
+      }
+    }
+  ]
+}

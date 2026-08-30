@@ -1,0 +1,691 @@
+{
+  "info": {
+    "name": "合同段落变更类型识别服务-合同样例多场景测试",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "基于合同样例生成的导入与预测测试集合。导入和预测必须携带UserId；baseUrl建议设置为http://localhost:8080/glxt-service-contract-change。"
+  },
+  "item": [
+    {
+      "name": "00 索引状态",
+      "item": [
+        {
+          "name": "查询索引状态",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/index/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "index",
+                "status"
+              ]
+            },
+            "description": "演示前先确认JVM内存索引状态、样本数、模型版本和维度。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 Excel导入",
+      "item": [
+        {
+          "name": "正常导入-990行",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-正常-990行.xlsx"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/samples/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "samples",
+                "import"
+              ]
+            },
+            "description": "正常导入演示，覆盖大批量、单标签、多标签和轻微改写样本。"
+          }
+        },
+        {
+          "name": "重复导入-同段落同编码",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-重复.xlsx"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/samples/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "samples",
+                "import"
+              ]
+            },
+            "description": "验证相同Hash和相同编码的幂等跳过。"
+          }
+        },
+        {
+          "name": "冲突导入-同段落不同编码",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-冲突.xlsx"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/samples/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "samples",
+                "import"
+              ]
+            },
+            "description": "验证标签冲突时整批拒绝，避免覆盖历史知识。"
+          }
+        },
+        {
+          "name": "分隔符与去重导入",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-分隔符与去重.xlsx"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/samples/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "samples",
+                "import"
+              ]
+            },
+            "description": "验证中文分号、中文逗号和重复编码会被规范化。"
+          }
+        },
+        {
+          "name": "错误表头导入",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-错误表头.xlsx"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/samples/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "samples",
+                "import"
+              ]
+            },
+            "description": "验证第一张Sheet前两列表头必须完全匹配。"
+          }
+        },
+        {
+          "name": "空值与非法编码导入",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-空值与非法编码.xlsx"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/samples/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "samples",
+                "import"
+              ]
+            },
+            "description": "验证逐行校验错误返回。"
+          }
+        },
+        {
+          "name": "超长段落导入",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-超长段落.xlsx"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/samples/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "samples",
+                "import"
+              ]
+            },
+            "description": "验证超过2000字符明确拒绝。"
+          }
+        },
+        {
+          "name": "超过1000行导入",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-超过1000行.xlsx"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/samples/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "samples",
+                "import"
+              ]
+            },
+            "description": "验证单Excel最多1000行；现场调用前注意这会走校验失败路径。"
+          }
+        },
+        {
+          "name": "缺少UserId导入",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-重复.xlsx"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/samples/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "samples",
+                "import"
+              ]
+            },
+            "description": "验证UserId请求头不能为空。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 预测识别",
+      "item": [
+        {
+          "name": "EXACT_完全相同段落",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paragraph\": \"基金管理人：上海丹羿投资管理合伙企业（普通合伙）\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/predict",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "predict"
+              ]
+            },
+            "description": "命中Hash，matchType=EXACT，不调用模型，score=1。"
+          }
+        },
+        {
+          "name": "SEMANTIC_HIGH_轻微改写",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paragraph\": \"经本次合同比对确认，（一）私募管理人保证在募集资金前已在中国证券投资基金业协会（以下简称中国基金业协会）登记为私募基金管理人，并取得管理人登记编码。上述内容用于本次变更识别测试。\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/predict",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "predict"
+              ]
+            },
+            "description": "文本不完全相同，适合观察语义召回和HIGH/CANDIDATE。"
+          }
+        },
+        {
+          "name": "SEMANTIC_CANDIDATE_同主题不同表述",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paragraph\": \"与原合同相比，（五）私募基金管理人承诺遵循专业化运营的原则，在未经监管部门同意的情况下，不会从事私募投资基金以外的业务。\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/predict",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "predict"
+              ]
+            },
+            "description": "适合观察score与similarity的区别。"
+          }
+        },
+        {
+          "name": "STRONG_SINGLE_MATCH_FALLBACK_强相似单条兜底",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paragraph\": \"（七）私募管理人承诺已和相关当事人在基金合同中约定私募基金管理人客观上丧失继续管理私募基金能力的情形下的基金财产安全保障、维持基金运营或清算的应急处置预案和纠纷解决机制，保证即使因违反法律法规或自律规则而被执行注销程序的私募基金管理人和相关当事人，能够根据《基金法》、协会相关自律规则和基金合同的约定，妥善处置基金财产，依法保障投资者的合法权益。上述内容用于本次变更识别测试。\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/predict",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "predict"
+              ]
+            },
+            "description": "如果多标签投票没有达标，但第一名相似度较高，可观察CANDIDATE兜底。"
+          }
+        },
+        {
+          "name": "NO_RELIABLE_MATCH_无关文本",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paragraph\": \"本段文字描述办公楼停车位、会议室茶歇安排以及设备巡检计划，与基金合同核心条款没有直接关系。\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/predict",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "predict"
+              ]
+            },
+            "description": "预期无可靠历史证据，返回NO_RELIABLE_MATCH或空候选。"
+          }
+        },
+        {
+          "name": "ERROR_EMPTY_PARAGRAPH_空段落",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paragraph\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/predict",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "predict"
+              ]
+            },
+            "description": "请求体校验失败，提示合同段落不能为空。"
+          }
+        },
+        {
+          "name": "ERROR_TOO_LONG_超长段落",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paragraph\": \"基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人：上海丹羿投资管理合伙企业（普通合伙） 基金管理人\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/predict",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "predict"
+              ]
+            },
+            "description": "超过2000字符，预期被业务校验拒绝。"
+          }
+        },
+        {
+          "name": "ERROR_MISSING_USERID_缺少UserId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paragraph\": \"基金管理人：上海丹羿投资管理合伙企业（普通合伙）\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/predict",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "predict"
+              ]
+            },
+            "description": "验证预测接口必须携带UserId。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 索引维护",
+      "item": [
+        {
+          "name": "手工重载索引",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/index/reload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "index",
+                "reload"
+              ]
+            },
+            "description": "从Oracle重新加载当前模型版本、当前维度、SFSX=1的历史段落向量。"
+          }
+        },
+        {
+          "name": "重载后查询索引状态",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/index/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "index",
+                "status"
+              ]
+            },
+            "description": "确认重载后的状态和样本数。"
+          }
+        }
+      ]
+    }
+  ]
+}
