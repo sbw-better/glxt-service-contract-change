@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.model;
 
-import com.citics.glxt.contractchange.common.FourDecimalDoubleSerializer;
+import com.citics.glxt.common.serializer.FourDecimalDoubleSerializer;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import lombok.AllArgsConstructor;
 import lombok.Data;

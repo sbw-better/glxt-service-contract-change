@@ -1,4 +1,4 @@
-package com.citics.glxt.contractchange.common;
+package com.citics.glxt.common.serializer;
 
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonSerializer;

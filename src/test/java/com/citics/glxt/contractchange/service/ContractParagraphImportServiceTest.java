@@ -6,6 +6,7 @@ import com.citics.glxt.contractchange.embedding.EmbeddingClient;
 import com.citics.glxt.contractchange.mapper.ContractParagraphMapper;
 import com.citics.glxt.contractchange.model.EmbeddingBatchResult;
 import com.citics.glxt.contractchange.model.ImportResponse;
+import com.citics.glxt.contractchange.util.HashUtils;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.Before;
 import org.junit.Test;
@@ -81,7 +82,7 @@ public class ContractParagraphImportServiceTest {
     public void shouldUpdateAndEnableDisabledParagraph() throws Exception {
         ContractParagraphDO existing = new ContractParagraphDO();
         existing.setId(99L);
-        existing.setTextHash(com.citics.glxt.contractchange.util.HashUtils.sha256("历史段落A"));
+        existing.setTextHash(HashUtils.sha256("历史段落A"));
         existing.setChangeTypeCodes("TYPE01;TYPE02");
         existing.setEnabled(0);
         existing.setModelVersion("old-v1");
@@ -122,7 +123,7 @@ public class ContractParagraphImportServiceTest {
     public void shouldRejectDisabledParagraphWithDifferentDatabaseCodes() throws Exception {
         ContractParagraphDO existing = new ContractParagraphDO();
         existing.setId(100L);
-        existing.setTextHash(com.citics.glxt.contractchange.util.HashUtils.sha256("历史段落A"));
+        existing.setTextHash(HashUtils.sha256("历史段落A"));
         existing.setChangeTypeCodes("TYPE01");
         existing.setEnabled(0);
         existing.setModelVersion("old-v1");

@@ -20,7 +20,7 @@ public class MapperXmlContractTest {
             }
         }
         InputStream xml = getClass().getClassLoader()
-                .getResourceAsStream("mapper/contractchange/ContractParagraphMapper.xml");
+                .getResourceAsStream("mybatis/mapper/contractchange/ContractParagraphMapper.xml");
         assertNotNull(xml);
     }
 }

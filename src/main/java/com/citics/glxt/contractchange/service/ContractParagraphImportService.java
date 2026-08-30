@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.service;
 
-import com.citics.glxt.contractchange.common.ContractChangeBusinessException;
+import com.citics.glxt.common.exception.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.config.ContractChangeProperties;
 import com.citics.glxt.contractchange.domain.ContractParagraphDO;
 import com.citics.glxt.contractchange.embedding.EmbeddingClient;

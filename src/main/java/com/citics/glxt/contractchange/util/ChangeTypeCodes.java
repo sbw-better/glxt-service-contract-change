@@ -1,13 +1,8 @@
 package com.citics.glxt.contractchange.util;
 
-import com.citics.glxt.contractchange.common.ContractChangeBusinessException;
+import com.citics.glxt.common.exception.ContractChangeBusinessException;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.TreeSet;
+import java.util.*;
 
 /** 变更类型编码的校验、规范化和解析工具。 */
 public final class ChangeTypeCodes {

@@ -1,7 +1,7 @@
 package com.citics.glxt.contractchange.embedding;
 
-import com.citics.glxt.contractchange.common.CommonConstants;
-import com.citics.glxt.contractchange.common.ContractChangeBusinessException;
+import com.citics.glxt.common.constants.CommonConstants;
+import com.citics.glxt.common.exception.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.config.ContractChangeProperties;
 import com.citics.glxt.contractchange.embedding.dto.EmbeddingGatewayData;
 import com.citics.glxt.contractchange.embedding.dto.EmbeddingGatewayRequest;

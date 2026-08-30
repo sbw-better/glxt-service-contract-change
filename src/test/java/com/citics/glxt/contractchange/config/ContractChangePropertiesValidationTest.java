@@ -1,5 +1,7 @@
 package com.citics.glxt.contractchange.config;
 
+
+
 import org.junit.Test;
 
 import javax.validation.Validation;

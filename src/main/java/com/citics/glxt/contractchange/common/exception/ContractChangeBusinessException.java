@@ -1,4 +1,6 @@
-package com.citics.glxt.contractchange.common;
+package com.citics.glxt.common.exception;
+
+import com.citics.glxt.common.constants.CommonConstants;
 
 /** 合同段落变更类型识别服务中可安全返回给调用方的预期业务异常。 */
 public class ContractChangeBusinessException extends RuntimeException {

@@ -1,7 +1,7 @@
 package com.citics.glxt.contractchange.controller;
 
-import com.citics.glxt.contractchange.common.ContractChangeResult;
-import com.citics.glxt.contractchange.common.CommonConstants;
+import com.citics.glxt.common.result.ContractChangeResult;
+import com.citics.glxt.common.constants.CommonConstants;
 import com.citics.glxt.contractchange.model.ImportResponse;
 import com.citics.glxt.contractchange.model.IndexStatusResponse;
 import com.citics.glxt.contractchange.model.PredictRequest;

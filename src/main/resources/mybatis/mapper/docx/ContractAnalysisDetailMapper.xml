@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.citics.glxtServiceBasic.docx.mapper.ContractAnalysisDetailMapper">
+
+    <insert id="insert" parameterType="com.citics.glxtServiceBasic.docx.domain.ContractAnalysisDetail">
+        <selectKey resultType="Long" keyProperty="id" order="BEFORE">
+            select SEQ_TPIF_HTJXZB_HTJXMXJL.nextval id from dual
+        </selectKey>
+        insert into TPIF_HTJXZB_HTJXMXJL
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="id != null ">ID,</if>
+            <if test="masterId != null ">TPIF_HTJXZB_ID,</if>
+            <if test="module != null ">MK,</if>
+            <if test="chapterName != null ">ZJMC,</if>
+            <if test="isBelongTitle != null ">SFHBTQZ,</if>
+            <if test="titleLevel != null ">HQZSBTJB,</if>
+            <if test="titlePrefix != null ">HQZSBT,</if>
+            <if test="firstTitle != null ">YJBT,</if>
+            <if test="secondTitle != null ">EJBT,</if>
+            <if test="thirdTitle != null ">SANJBT,</if>
+            <if test="fourthTitle != null ">SIJBT,</if>
+            <if test="fifthTitle != null ">WJBT,</if>
+            <if test="contentNumber != null ">DLXH,</if>
+            <if test="paraLevelInfo != null ">DLCJXX,</if>
+            <if test="originalContent != null ">YDLNR,</if>
+            <if test="newContent != null ">XDLNR,</if>
+            <if test="haveModify != null ">SFXD,</if>
+            <if test="modifyType != null ">XDLX,</if>
+            <if test="annotationNumber != null ">PZBH,</if>
+            <if test="pageNumber != null ">YM,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="id != null ">#{id},</if>
+            <if test="masterId != null ">#{masterId},</if>
+            <if test="module != null ">#{module},</if>
+            <if test="chapterName != null ">#{chapterName},</if>
+            <if test="isBelongTitle != null ">#{isBelongTitle},</if>
+            <if test="titleLevel != null ">#{titleLevel},</if>
+            <if test="titlePrefix != null ">#{titlePrefix},</if>
+            <if test="firstTitle != null ">#{firstTitle},</if>
+            <if test="secondTitle != null ">#{secondTitle},</if>
+            <if test="thirdTitle != null ">#{thirdTitle},</if>
+            <if test="fourthTitle != null ">#{fourthTitle},</if>
+            <if test="fifthTitle != null ">#{fifthTitle},</if>
+            <if test="contentNumber != null ">#{contentNumber},</if>
+            <if test="paraLevelInfo != null ">#{paraLevelInfo},</if>
+            <if test="originalContent != null ">#{originalContent,jdbcType=CLOB},</if>
+            <if test="newContent != null ">#{newContent,jdbcType=CLOB},</if>
+            <if test="haveModify != null ">#{haveModify},</if>
+            <if test="modifyType != null ">#{modifyType},</if>
+            <if test="annotationNumber != null ">#{annotationNumber},</if>
+            <if test="pageNumber != null ">#{pageNumber},</if>
+        </trim>
+    </insert>
+
+    <!-- union all不适用于插入clob类型字段 -->
+    <insert id="insertBatch" parameterType="java.util.List" useGeneratedKeys="false">
+        insert into TPIF_HTJXZB_HTJXMXJL
+        (ID,TPIF_HTJXZB_ID,MK,ZJMC,SFHBTQZ,HQZSBTJB,HQZSBT,YJBT,EJBT,SANJBT,SIJBT,WJBT,DLXH,DLCJXX,YDLNR,XDLNR,SFXD,XDLX,PZBH,YM)
+        select
+        SEQ_TPIF_HTJXZB_HTJXMXJL.nextval ID,
+        t.TPIF_HTJXZB_ID,
+        t.MK,
+        t.ZJMC,
+        t.SFHBTQZ,
+        t.HQZSBTJB,
+        t.HQZSBT,
+        t.YJBT,
+        t.EJBT,
+        t.SANJBT,
+        t.SIJBT,
+        t.WJBT,
+        t.DLXH,
+        t.DLCJXX,
+        t.YDLNR,
+        t.XDLNR,
+        t.SFXD,
+        t.XDLX,
+        t.PZBH,
+        t.YM
+        from (
+        <foreach collection="list" item="item" separator="union all">
+            select
+            #{item.masterId,jdbcType=DECIMAL} TPIF_HTJXZB_ID,
+            #{item.module,jdbcType=DECIMAL} MK,
+            #{item.chapterName,jdbcType=VARCHAR} ZJMC,
+            #{item.isBelongTitle,jdbcType=DECIMAL} SFHBTQZ,
+            #{item.titleLevel,jdbcType=VARCHAR} HQZSBTJB,
+            #{item.titlePrefix,jdbcType=VARCHAR} HQZSBT,
+            #{item.firstTitle,jdbcType=VARCHAR} YJBT,
+            #{item.secondTitle,jdbcType=VARCHAR} EJBT,
+            #{item.thirdTitle,jdbcType=VARCHAR} SANJBT,
+            #{item.fourthTitle,jdbcType=VARCHAR} SIJBT,
+            #{item.fifthTitle,jdbcType=VARCHAR} WJBT,
+            #{item.contentNumber,jdbcType=VARCHAR} DLXH,
+            #{item.paraLevelInfo,jdbcType=VARCHAR} DLCJXX,
+            to_clob(#{item.originalContent,jdbcType=CLOB}) YDLNR,
+            to_clob(#{item.newContent,jdbcType=CLOB}) XDLNR,
+            #{item.haveModify,jdbcType=DECIMAL} SFXD,
+            #{item.modifyType,jdbcType=DECIMAL} XDLX,
+            #{item.annotationNumber,jdbcType=VARCHAR} PZBH,
+            #{item.pageNumber,jdbcType=VARCHAR} YM
+            from dual
+        </foreach>
+        ) t
+    </insert>
+
+</mapper>

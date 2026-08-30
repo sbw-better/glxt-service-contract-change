@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.embedding;
 
-import com.citics.glxt.contractchange.common.ContractChangeBusinessException;
+import com.citics.glxt.common.exception.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.config.ContractChangeProperties;
 import com.citics.glxt.contractchange.model.EmbeddingBatchResult;
 import org.junit.Test;

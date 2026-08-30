@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.citics.glxtServiceBasic.docx.mapper.ContractAnalysisMainMapper">
+
+    <insert id="insert" parameterType="com.citics.glxtServiceBasic.docx.domain.ContractAnalysisMain">
+        <selectKey resultType="Long" keyProperty="id" order="BEFORE">
+            select SEQ_TPIF_HTJXZB.nextval id from dual
+        </selectKey>
+        insert into TPIF_HTJXZB
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="id != null ">ID,</if>
+            <if test="type != null ">LX,</if>
+            <if test="fileGetPath != null ">WJLJ,</if>
+            <if test="analysisTime != null ">JXSJ,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="id != null ">#{id},</if>
+            <if test="type != null ">#{type},</if>
+            <if test="fileGetPath != null ">#{fileGetPath},</if>
+            <if test="analysisTime != null ">#{analysisTime},</if>
+        </trim>
+    </insert>
+
+</mapper>

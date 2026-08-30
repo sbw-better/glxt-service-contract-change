@@ -1,5 +1,8 @@
-package com.citics.glxt.contractchange.common;
+package com.citics.glxt.common.handler;
 
+import com.citics.glxt.common.result.ContractChangeResult;
+import com.citics.glxt.common.constants.CommonConstants;
+import com.citics.glxt.common.exception.ContractChangeBusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
