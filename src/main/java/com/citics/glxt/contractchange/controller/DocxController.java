@@ -1,8 +1,8 @@
-package com.citics.glxt.contractchange.docx.controller;
+package com.citics.glxt.contractchange.controller;
 
 import com.citics.glxt.common.result.ResultModel;
-import com.citics.glxt.contractchange.docx.model.dto.DocxAnalysisDTO;
-import com.citics.glxt.contractchange.docx.service.DocxModifyAndLandService;
+import com.citics.glxt.contractchange.model.dto.DocxAnalysisDTO;
+import com.citics.glxt.contractchange.service.DocxModifyAndLandService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import lombok.extern.slf4j.Slf4j;

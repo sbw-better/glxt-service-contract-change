@@ -2,7 +2,7 @@
   "info": {
     "name": "合同段落变更类型识别服务-合同样例多场景测试",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "基于合同样例生成的导入与预测测试集合。导入和预测必须携带UserId；baseUrl建议设置为http://localhost:8080/glxt-service-contract-change。"
+    "description": "基于合同样例生成的导入与预测测试集合。预测场景使用41条专用受控历史样本，并配置Postman自动断言。导入和预测必须携带UserId；baseUrl建议设置为http://localhost:8080/glxt-service-contract-change。"
   },
   "item": [
     {
@@ -26,13 +26,75 @@
               ]
             },
             "description": "演示前先确认JVM内存索引状态、样本数、模型版本和维度。"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('状态接口业务码为0', function () { pm.expect(json.code).to.eql(0); pm.expect(json.data).to.be.an('object'); });"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
       "name": "01 Excel导入",
       "item": [
+        {
+          "name": "正常导入-920行",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-正常-920行.xlsx"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/samples/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "samples",
+                "import"
+              ]
+            },
+            "description": "中等批量成功导入；用于验证同步Embedding、Oracle落库和索引刷新，不用于准确率判断。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('导入成功', function () { pm.expect(json.code).to.eql(0); pm.expect(json.data.success).to.eql(true); pm.expect(json.data.indexReloaded).to.eql(true); });",
+                  "pm.test('读取920条数据', function () { pm.expect(json.data.totalRows).to.eql(920); });"
+                ]
+              }
+            }
+          ]
+        },
         {
           "name": "正常导入-990行",
           "request": {
@@ -65,8 +127,22 @@
                 "import"
               ]
             },
-            "description": "正常导入演示，覆盖大批量、单标签、多标签和轻微改写样本。"
-          }
+            "description": "接近1000行上限的成功导入；990条段落已保证唯一，无文件内标签冲突。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('导入成功', function () { pm.expect(json.code).to.eql(0); pm.expect(json.data.success).to.eql(true); pm.expect(json.data.indexReloaded).to.eql(true); });",
+                  "pm.test('读取990条数据', function () { pm.expect(json.data.totalRows).to.eql(990); });"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "重复导入-同段落同编码",
@@ -101,7 +177,22 @@
               ]
             },
             "description": "验证相同Hash和相同编码的幂等跳过。"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('导入成功', function () { pm.expect(json.code).to.eql(0); pm.expect(json.data.success).to.eql(true); pm.expect(json.data.indexReloaded).to.eql(true); });",
+                  "pm.test('读取5条数据', function () { pm.expect(json.data.totalRows).to.eql(5); });",
+                  "pm.test('存在幂等跳过记录', function () { pm.expect(json.data.skipped).to.be.at.least(1); });"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "冲突导入-同段落不同编码",
@@ -136,7 +227,20 @@
               ]
             },
             "description": "验证标签冲突时整批拒绝，避免覆盖历史知识。"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('导入校验失败', function () { pm.expect(json.code).to.eql(400); pm.expect(json.data.success).to.eql(false); pm.expect(json.data.errors.length).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "分隔符与去重导入",
@@ -171,7 +275,21 @@
               ]
             },
             "description": "验证中文分号、中文逗号和重复编码会被规范化。"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('导入成功', function () { pm.expect(json.code).to.eql(0); pm.expect(json.data.success).to.eql(true); pm.expect(json.data.indexReloaded).to.eql(true); });",
+                  "pm.test('读取3条数据', function () { pm.expect(json.data.totalRows).to.eql(3); });"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "错误表头导入",
@@ -206,7 +324,20 @@
               ]
             },
             "description": "验证第一张Sheet前两列表头必须完全匹配。"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('导入校验失败', function () { pm.expect(json.code).to.eql(400); pm.expect(json.data.success).to.eql(false); pm.expect(json.data.errors.length).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "空值与非法编码导入",
@@ -241,7 +372,20 @@
               ]
             },
             "description": "验证逐行校验错误返回。"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('导入校验失败', function () { pm.expect(json.code).to.eql(400); pm.expect(json.data.success).to.eql(false); pm.expect(json.data.errors.length).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "超长段落导入",
@@ -276,7 +420,20 @@
               ]
             },
             "description": "验证超过2000字符明确拒绝。"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('导入校验失败', function () { pm.expect(json.code).to.eql(400); pm.expect(json.data.success).to.eql(false); pm.expect(json.data.errors.length).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "超过1000行导入",
@@ -310,8 +467,21 @@
                 "import"
               ]
             },
-            "description": "验证单Excel最多1000行；现场调用前注意这会走校验失败路径。"
-          }
+            "description": "验证单Excel最多1000行；第1001条触发最大行数限制。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('导入校验失败', function () { pm.expect(json.code).to.eql(400); pm.expect(json.data.success).to.eql(false); pm.expect(json.data.errors.length).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "缺少UserId导入",
@@ -341,12 +511,112 @@
               ]
             },
             "description": "验证UserId请求头不能为空。"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('缺少UserId返回业务码400', function () { pm.expect(json.code).to.eql(400); pm.expect(json.message).to.include('UserId'); });"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
-      "name": "02 预测识别",
+      "name": "02 预测前置数据",
+      "item": [
+        {
+          "name": "导入预测验证知识库-41行",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-预测验证知识库.xlsx"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/samples/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "samples",
+                "import"
+              ]
+            },
+            "description": "预测请求执行前先导入。包含4组受控语义簇，用于稳定触发HIGH、CANDIDATE和强相似兜底。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('导入成功', function () { pm.expect(json.code).to.eql(0); pm.expect(json.data.success).to.eql(true); pm.expect(json.data.indexReloaded).to.eql(true); });",
+                  "pm.test('读取41条数据', function () { pm.expect(json.data.totalRows).to.eql(41); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "确认预测索引已加载",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/index/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "index",
+                "status"
+              ]
+            },
+            "description": "确认状态为READY且样本数不为0；严格验收建议使用干净测试库。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('索引READY且有样本', function () { pm.expect(json.code).to.eql(0); pm.expect(json.data.status).to.eql('READY'); pm.expect(json.data.sampleCount).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 预测识别",
       "item": [
         {
           "name": "EXACT_完全相同段落",
@@ -364,7 +634,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"paragraph\": \"基金管理人：上海丹羿投资管理合伙企业（普通合伙）\"\n}",
+              "raw": "{\n  \"paragraph\": \"预测验证精确命中样本：基金托管人应依照合同约定保管基金财产，并对托管账户资金收付情况进行核对。\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -382,11 +652,28 @@
                 "predict"
               ]
             },
-            "description": "命中Hash，matchType=EXACT，不调用模型，score=1。"
-          }
+            "description": "Hash完全命中；不调用模型；类型20的score和similarity均为1。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('业务码为0', function () { pm.expect(json.code).to.eql(0); });",
+                  "const data = json.data;",
+                  "const findType = function (code) { return (data.changeTypes || []).find(function (item) { return item.code === code; }); };",
+                  "pm.test('精确命中', function () { pm.expect(data.matchType).to.eql('EXACT'); pm.expect(data.maxSimilarity).to.eql(1); });",
+                  "pm.test('类型20为HIGH且score=1', function () { const type = findType('20'); pm.expect(type).to.exist; pm.expect(type.level).to.eql('HIGH'); pm.expect(type.score).to.eql(1); });"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "SEMANTIC_HIGH_轻微改写",
+          "name": "SEMANTIC_HIGH_单标签一致投票",
           "request": {
             "method": "POST",
             "header": [
@@ -401,7 +688,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"paragraph\": \"经本次合同比对确认，（一）私募管理人保证在募集资金前已在中国证券投资基金业协会（以下简称中国基金业协会）登记为私募基金管理人，并取得管理人登记编码。上述内容用于本次变更识别测试。\"\n}",
+              "raw": "{\n  \"paragraph\": \"预测验证主题A：管理人登记合规要求。本基金开始募集资金前，私募基金管理人已经在中国证券投资基金业协会办理登记并取得有效的管理人登记编码。\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -419,11 +706,28 @@
                 "predict"
               ]
             },
-            "description": "文本不完全相同，适合观察语义召回和HIGH/CANDIDATE。"
-          }
+            "description": "Top近邻标签一致，类型43应达到HIGH；若失败先检查索引是否混入旧测试数据。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('业务码为0', function () { pm.expect(json.code).to.eql(0); });",
+                  "const data = json.data;",
+                  "const findType = function (code) { return (data.changeTypes || []).find(function (item) { return item.code === code; }); };",
+                  "pm.test('语义匹配', function () { pm.expect(data.matchType).to.eql('SEMANTIC'); });",
+                  "pm.test('类型43达到HIGH', function () { const type = findType('43'); pm.expect(type).to.exist; pm.expect(type.level).to.eql('HIGH'); pm.expect(type.score).to.be.at.least(0.80); pm.expect(type.supportCount).to.be.at.least(2); });"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "SEMANTIC_CANDIDATE_同主题不同表述",
+          "name": "SEMANTIC_HIGH_多标签一致投票",
           "request": {
             "method": "POST",
             "header": [
@@ -438,7 +742,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"paragraph\": \"与原合同相比，（五）私募基金管理人承诺遵循专业化运营的原则，在未经监管部门同意的情况下，不会从事私募投资基金以外的业务。\"\n}",
+              "raw": "{\n  \"paragraph\": \"预测验证主题B：投资范围与风险揭示。投资者认购基金之前，管理人应完整说明产品投资范围、主要风险特征以及可能发生的投资损失。\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -456,11 +760,28 @@
                 "predict"
               ]
             },
-            "description": "适合观察score与similarity的区别。"
-          }
+            "description": "同一批近邻共同包含20、25、28，验证多标签score之和可以大于1。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('业务码为0', function () { pm.expect(json.code).to.eql(0); });",
+                  "const data = json.data;",
+                  "const findType = function (code) { return (data.changeTypes || []).find(function (item) { return item.code === code; }); };",
+                  "pm.test('语义匹配', function () { pm.expect(data.matchType).to.eql('SEMANTIC'); });",
+                  "pm.test('20、25、28全部达到HIGH', function () { ['20','25','28'].forEach(function (code) { const type = findType(code); pm.expect(type, code).to.exist; pm.expect(type.level, code).to.eql('HIGH'); pm.expect(type.score, code).to.be.at.least(0.80); pm.expect(type.supportCount, code).to.be.at.least(2); }); });"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "STRONG_SINGLE_MATCH_FALLBACK_强相似单条兜底",
+          "name": "SEMANTIC_CANDIDATE_六四分票",
           "request": {
             "method": "POST",
             "header": [
@@ -475,7 +796,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"paragraph\": \"（七）私募管理人承诺已和相关当事人在基金合同中约定私募基金管理人客观上丧失继续管理私募基金能力的情形下的基金财产安全保障、维持基金运营或清算的应急处置预案和纠纷解决机制，保证即使因违反法律法规或自律规则而被执行注销程序的私募基金管理人和相关当事人，能够根据《基金法》、协会相关自律规则和基金合同的约定，妥善处置基金财产，依法保障投资者的合法权益。上述内容用于本次变更识别测试。\"\n}",
+              "raw": "{\n  \"paragraph\": \"预测验证主题C：投资者适当性与风险确认。投资者提交基金认购申请前，应完成风险承受能力测评，并确认自身风险等级与基金产品风险等级相匹配。\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -493,11 +814,28 @@
                 "predict"
               ]
             },
-            "description": "如果多标签投票没有达标，但第一名相似度较高，可观察CANDIDATE兜底。"
-          }
+            "description": "验证相似度较高不等于HIGH；类型25应以多数票成为CANDIDATE。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('业务码为0', function () { pm.expect(json.code).to.eql(0); });",
+                  "const data = json.data;",
+                  "const findType = function (code) { return (data.changeTypes || []).find(function (item) { return item.code === code; }); };",
+                  "pm.test('语义匹配', function () { pm.expect(data.matchType).to.eql('SEMANTIC'); });",
+                  "pm.test('类型25为候选', function () { const type = findType('25'); pm.expect(type).to.exist; pm.expect(type.level).to.eql('CANDIDATE'); pm.expect(type.score).to.be.at.least(0.55); pm.expect(type.score).to.be.below(0.80); });"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "NO_RELIABLE_MATCH_无关文本",
+          "name": "STRONG_SINGLE_MATCH_FALLBACK_十类分散",
           "request": {
             "method": "POST",
             "header": [
@@ -512,7 +850,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"paragraph\": \"本段文字描述办公楼停车位、会议室茶歇安排以及设备巡检计划，与基金合同核心条款没有直接关系。\"\n}",
+              "raw": "{\n  \"paragraph\": \"预测验证主题D：管理人丧失履职能力后的应急处置。管理人客观上无法继续履职时，应立即承担首要处置责任，并启动基金财产安全保障和应急接管安排。\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -530,8 +868,78 @@
                 "predict"
               ]
             },
-            "description": "预期无可靠历史证据，返回NO_RELIABLE_MATCH或空候选。"
-          }
+            "description": "正常投票无类型达标，但第一名达到强匹配阈值，返回类型57兜底候选。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('业务码为0', function () { pm.expect(json.code).to.eql(0); });",
+                  "const data = json.data;",
+                  "const findType = function (code) { return (data.changeTypes || []).find(function (item) { return item.code === code; }); };",
+                  "pm.test('强相似兜底仍属于SEMANTIC', function () { pm.expect(data.matchType).to.eql('SEMANTIC'); pm.expect(data.maxSimilarity).to.be.at.least(0.80); });",
+                  "pm.test('类型57以低分单条证据候选返回', function () { const type = findType('57'); pm.expect(type).to.exist; pm.expect(type.level).to.eql('CANDIDATE'); pm.expect(type.score).to.be.below(0.55); pm.expect(type.supportCount).to.eql(1); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "NO_RELIABLE_MATCH_跨领域无关文本",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "UserId",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paragraph\": \"射电望远镜阵列正在观测遥远星系的中性氢谱线，数据处理程序需要校准天线相位、消除电离层扰动并生成天区成像结果。\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/service/contract-change/predict",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service",
+                "contract-change",
+                "predict"
+              ]
+            },
+            "description": "跨领域文本不应输出变更类型；如果仍命中，应检查0.60相似度阈值是否适合当前模型。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('业务码为0', function () { pm.expect(json.code).to.eql(0); });",
+                  "const data = json.data;",
+                  "const findType = function (code) { return (data.changeTypes || []).find(function (item) { return item.code === code; }); };",
+                  "pm.test('无可靠匹配', function () { pm.expect(data.matchType).to.eql('NO_RELIABLE_MATCH'); pm.expect(data.changeTypes).to.be.an('array').that.is.empty; });"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "ERROR_EMPTY_PARAGRAPH_空段落",
@@ -568,7 +976,21 @@
               ]
             },
             "description": "请求体校验失败，提示合同段落不能为空。"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('空段落返回业务码400', function () { pm.expect(json.code).to.eql(400); });",
+                  "pm.test('错误信息明确', function () { pm.expect(json.message).to.include('合同段落不能为空'); });"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "ERROR_TOO_LONG_超长段落",
@@ -605,7 +1027,21 @@
               ]
             },
             "description": "超过2000字符，预期被业务校验拒绝。"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('超长段落返回业务码400', function () { pm.expect(json.code).to.eql(400); });",
+                  "pm.test('错误信息明确', function () { pm.expect(json.message).to.include('合同段落不能超过2000字符'); });"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "ERROR_MISSING_USERID_缺少UserId",
@@ -619,7 +1055,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"paragraph\": \"基金管理人：上海丹羿投资管理合伙企业（普通合伙）\"\n}",
+              "raw": "{\n  \"paragraph\": \"预测验证精确命中样本：基金托管人应依照合同约定保管基金财产，并对托管账户资金收付情况进行核对。\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -638,12 +1074,25 @@
               ]
             },
             "description": "验证预测接口必须携带UserId。"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('缺少UserId返回业务码400', function () { pm.expect(json.code).to.eql(400); pm.expect(json.message).to.include('UserId'); });"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
-      "name": "03 索引维护",
+      "name": "04 索引维护",
       "item": [
         {
           "name": "手工重载索引",
@@ -663,7 +1112,20 @@
               ]
             },
             "description": "从Oracle重新加载当前模型版本、当前维度、SFSX=1的历史段落向量。"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('重载成功', function () { pm.expect(json.code).to.eql(0); pm.expect(json.data.status).to.be.oneOf(['READY','EMPTY']); });"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "重载后查询索引状态",
@@ -683,7 +1145,20 @@
               ]
             },
             "description": "确认重载后的状态和样本数。"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP状态为200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('状态查询成功', function () { pm.expect(json.code).to.eql(0); pm.expect(json.data).to.be.an('object'); });"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

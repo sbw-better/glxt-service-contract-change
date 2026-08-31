@@ -1,4 +1,4 @@
-package com.citics.glxt.contractchange.docx.service;
+package com.citics.glxt.contractchange.service;
 
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.wml.*;

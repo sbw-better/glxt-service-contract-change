@@ -23,7 +23,7 @@ spring:
 
 # Mapper 只加载 XML 文件，核心 SQL 不写在 Java 注解中。
 mybatis-plus:
-  mapper-locations: classpath*:/mapper/**/*.xml
+  mapper-locations: classpath*:/mybatis/mapper/**/*.xml
   type-aliases-package: com.citics.glxt.contractchange.domain
   configuration:
     map-underscore-to-camel-case: true
@@ -71,3 +71,44 @@ logging:
     com.citics.glxt.contractchange.mapper: info
     # RestTemplate 的 DEBUG 日志可能打印网关请求信息，因此显式锁定为 INFO。
     org.springframework.web.client.RestTemplate: info
+
+commom:
+  glxt:
+    url: www.baidu.com
+
+# 本地启动默认值；部署环境通过环境变量覆盖。
+common:
+  file:
+    common:
+      ftp: ${GLXT_COMMON_FILE_FTP:D:/glxt/files/common/}
+    project:
+      ftp: ${GLXT_PROJECT_FTP:/glxt/}
+    szt:
+      broker_158:
+        file_path: ${GLXT_SZT_158_FILE_PATH:/send/158/}
+        file_type: ${GLXT_SZT_158_FILE_TYPE:xlsx}
+      broker_525:
+        file_path: ${GLXT_SZT_525_FILE_PATH:/send/525/}
+        file_type: ${GLXT_SZT_525_FILE_TYPE:xlsx}
+      broker_675:
+        file_path: ${GLXT_SZT_675_FILE_PATH:/send/675/}
+        file_type: ${GLXT_SZT_675_FILE_TYPE:xlsx}
+  glxt:
+    word2pdf_url: ${GLXT_WORD2PDF_URL:http://localhost:8080}
+  sftp:
+    host1:
+      host: ${GLXT_SFTP_HOST1:localhost}
+      port: ${GLXT_SFTP_PORT1:22}
+      username: ${GLXT_SFTP_USERNAME1:local}
+      password: ${GLXT_SFTP_PASSWORD1:local}
+    host2:
+      host: ${GLXT_SFTP_HOST2:localhost}
+      port: ${GLXT_SFTP_PORT2:22}
+      username: ${GLXT_SFTP_USERNAME2:local}
+      password: ${GLXT_SFTP_PASSWORD2:local}
+  ftp:
+    szt:
+      host: ${GLXT_SZT_FTP_HOST:localhost}
+      port: ${GLXT_SZT_FTP_PORT:21}
+      username: ${GLXT_SZT_FTP_USERNAME:local}
+      password: ${GLXT_SZT_FTP_PASSWORD:local}

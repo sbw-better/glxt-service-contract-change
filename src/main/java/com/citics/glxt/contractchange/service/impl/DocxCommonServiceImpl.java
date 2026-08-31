@@ -1,7 +1,7 @@
-package com.citics.glxt.contractchange.docx.service.impl;
+package com.citics.glxt.contractchange.service.impl;
 
 import com.citics.glxt.common.service.CommonService;
-import com.citics.glxt.contractchange.docx.service.DocxCommonService;
+import com.citics.glxt.contractchange.service.DocxCommonService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.docx4j.XmlUtils;
@@ -17,7 +17,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static com.citics.glxt.contractchange.common.utils.assertUtils.Assert.isFalse;
-import static com.citics.glxt.contractchange.docx.constants.Constants.*;
+import static com.citics.glxt.contractchange.constants.Constants.*;
 
 @Slf4j
 @Service

@@ -1,4 +1,4 @@
-package com.citics.glxt.contractchange.docx.model.dto;
+package com.citics.glxt.contractchange.model.dto;
 
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;

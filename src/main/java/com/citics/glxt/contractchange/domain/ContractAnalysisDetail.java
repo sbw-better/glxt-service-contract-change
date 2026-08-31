@@ -1,4 +1,4 @@
-package com.citics.glxt.contractchange.docx.domain;
+package com.citics.glxt.contractchange.domain;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.KeySequence;

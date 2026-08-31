@@ -39,6 +39,10 @@ Desktop.ini
 # Node.js依赖（文档、PPT、Excel生成工具会临时使用）
 **/node_modules/
 
+# Python缓存（测试数据生成与校验脚本）
+__pycache__/
+*.py[cod]
+
 # 本地文档渲染与校验临时产物
 /.doc_build/
 /.render_tmp/

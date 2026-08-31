@@ -2,9 +2,9 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.citics.glxtServiceBasic.docx.mapper.ContractAnalysisMainMapper">
+<mapper namespace="com.citics.glxt.contractchange.mapper.ContractAnalysisMainMapper">
 
-    <insert id="insert" parameterType="com.citics.glxtServiceBasic.docx.domain.ContractAnalysisMain">
+    <insert id="insert" parameterType="com.citics.glxt.contractchange.domain.ContractAnalysisMain">
         <selectKey resultType="Long" keyProperty="id" order="BEFORE">
             select SEQ_TPIF_HTJXZB.nextval id from dual
         </selectKey>

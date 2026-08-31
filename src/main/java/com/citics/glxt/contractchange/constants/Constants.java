@@ -1,4 +1,4 @@
-package com.citics.glxt.contractchange.docx.constants;
+package com.citics.glxt.contractchange.constants;
 
 public class Constants {
 

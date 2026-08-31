@@ -1,7 +1,7 @@
-package com.citics.glxt.contractchange.docx.mapper;
+package com.citics.glxt.contractchange.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.citics.glxt.contractchange.docx.domain.ContractAnalysisDetail;
+import com.citics.glxt.contractchange.domain.ContractAnalysisDetail;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import java.util.List;
