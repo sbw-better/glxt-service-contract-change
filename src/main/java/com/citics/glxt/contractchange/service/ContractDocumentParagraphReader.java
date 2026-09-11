@@ -73,7 +73,9 @@ public class ContractDocumentParagraphReader {
                 }
                 currentModuleId = docxCommonService.getCurrentModule(paragraphText, currentModuleId);
                 docxCommonService.updateTextTitleLevelMap(paragraphText, titleMap, null);
-                if (index == 0 && paragraphProperties != null && numbering != null) {
+                // 文档可以声明编号定义，但普通段落本身并不一定带有 NumPr。
+                if (index == 0 && paragraphProperties != null && paragraphProperties.getNumPr() != null
+                        && numbering != null) {
                     Map<String, String> titleModeMap = docxCommonService.getTitleModeFromP(numbering,
                             paragraphProperties);
                     paragraphText = docxCommonService.handleTitleMode(paragraph, paragraphProperties,
