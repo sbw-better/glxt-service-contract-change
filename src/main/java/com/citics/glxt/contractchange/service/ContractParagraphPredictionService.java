@@ -32,6 +32,8 @@ import java.util.Map;
 @Slf4j
 @Service
 public class ContractParagraphPredictionService {
+    private static final int MAX_EMBEDDING_BATCH_SIZE = 16;
+
     private final ParagraphVectorIndexService indexService;
     private final EmbeddingClient embeddingClient;
     private final ContractChangeProperties properties;
@@ -53,7 +55,46 @@ public class ContractParagraphPredictionService {
      * @return 匹配方式、类型得分以及参考历史段落
      */
     public PredictionResponse predict(String paragraph, String userId) {
+        return predictBatch(Collections.singletonList(paragraph), userId).get(0);
+    }
+
+    /**
+     * 按输入顺序批量预测多个段落。精确命中不调用模型，其余段落按网关上限分批生成向量。
+     */
+    public List<PredictionResponse> predictBatch(List<String> paragraphs, String userId) {
+        if (paragraphs == null || paragraphs.isEmpty()) {
+            return Collections.emptyList();
+        }
         long started = System.currentTimeMillis();
+        List<String> normalizedParagraphs = new ArrayList<String>(paragraphs.size());
+        List<PredictionResponse> responses = new ArrayList<PredictionResponse>(
+                Collections.nCopies(paragraphs.size(), (PredictionResponse) null));
+        List<Integer> semanticIndexes = new ArrayList<Integer>();
+        int exactCount = 0;
+
+        for (int i = 0; i < paragraphs.size(); i++) {
+            String normalized = normalizeAndValidate(paragraphs.get(i));
+            normalizedParagraphs.add(normalized);
+            ParagraphVectorSample exactSample = indexService.exact(HashUtils.sha256(normalized));
+            if (exactSample == null) {
+                semanticIndexes.add(i);
+            } else {
+                responses.set(i, exact(exactSample));
+                exactCount++;
+            }
+        }
+
+        if (!semanticIndexes.isEmpty()) {
+            predictSemanticBatches(normalizedParagraphs, semanticIndexes, responses, userId);
+        }
+        log.info("合同段落批量预测完成, total={}, exactCount={}, semanticCount={}, batchSize={}, elapsedMs={}",
+                paragraphs.size(), exactCount, semanticIndexes.size(), effectiveBatchSize(),
+                System.currentTimeMillis() - started);
+        return responses;
+    }
+
+    /** 校验业务字符上限并返回规范化文本，始终拒绝空段落和超长段落。 */
+    private String normalizeAndValidate(String paragraph) {
         String normalized = ContractTextNormalizer.normalize(paragraph);
         if (normalized.isEmpty()) {
             throw new ContractChangeBusinessException("合同段落不能为空");
@@ -62,25 +103,20 @@ public class ContractParagraphPredictionService {
             throw new ContractChangeBusinessException(
                     "合同段落不能超过" + properties.getSearch().getMaxParagraphLength() + "字符");
         }
-        String textHash = HashUtils.sha256(normalized);
-        log.info("合同段落预测开始, textHash={}, normalizedLength={}", textHash, normalized.length());
-        // 完全相同的规范化文本会得到相同Hash，可以直接复用历史类型，不需要调用模型。
-        ParagraphVectorSample exact = indexService.exact(textHash);
-        if (exact != null) {
-            PredictionResponse response = exact(exact);
-            log.info("合同段落预测精确命中, textHash={}, sampleId={}, typeCount={}, elapsedMs={}",
-                    textHash, exact.getSampleId(), response.getChangeTypes().size(),
-                    System.currentTimeMillis() - started);
-            return response;
-        }
+        return normalized;
+    }
 
-        // 没有历史样本时，即使生成新段落向量也没有比较对象，所以不调用模型。
-        // “历史库确实为空”和“索引加载失败”含义不同，必须返回不同结果。
+    /** 对未精确命中的段落检查索引状态，并按最多16条一批调用模型。 */
+    private void predictSemanticBatches(List<String> normalizedParagraphs,
+                                        List<Integer> semanticIndexes,
+                                        List<PredictionResponse> responses,
+                                        String userId) {
         IndexStatusResponse indexStatus = indexService.status();
         if ("EMPTY".equals(indexStatus.getStatus())) {
-            log.info("合同段落预测结束：历史样本库为空, textHash={}, elapsedMs={}",
-                    textHash, System.currentTimeMillis() - started);
-            return empty(0D, Collections.<PredictionReference>emptyList());
+            for (Integer index : semanticIndexes) {
+                responses.set(index, empty(0D, Collections.<PredictionReference>emptyList()));
+            }
+            return;
         }
         if ("NOT_READY".equals(indexStatus.getStatus()) || "LOAD_FAILED".equals(indexStatus.getStatus())
                 || indexStatus.getSampleCount() == 0) {
@@ -88,9 +124,30 @@ public class ContractParagraphPredictionService {
                     "历史段落向量索引不可用，当前状态=" + indexStatus.getStatus());
         }
 
-        // 到这里说明没有完全相同段落且内存索引可用，开始生成新段落向量并查找相似历史段落。
-        EmbeddingBatchResult embedded = embeddingClient.embed(Collections.singletonList(normalized), userId);
-        List<ParagraphSearchResult> allMatches = indexService.search(embedded.getVectors().get(0),
+        int batchSize = effectiveBatchSize();
+        for (int start = 0; start < semanticIndexes.size(); start += batchSize) {
+            int end = Math.min(start + batchSize, semanticIndexes.size());
+            List<String> batchTexts = new ArrayList<String>(end - start);
+            for (int i = start; i < end; i++) {
+                batchTexts.add(normalizedParagraphs.get(semanticIndexes.get(i)));
+            }
+            EmbeddingBatchResult embedded = embeddingClient.embed(batchTexts, userId);
+            if (embedded == null || embedded.getVectors() == null
+                    || embedded.getVectors().size() != batchTexts.size()) {
+                throw new ContractChangeBusinessException(CommonConstants.SERVICE_UNAVAILABLE,
+                        "Embedding返回数量与输入数量不一致");
+            }
+            for (int i = start; i < end; i++) {
+                int responseIndex = semanticIndexes.get(i);
+                float[] vector = embedded.getVectors().get(i - start);
+                responses.set(responseIndex, predictFromVector(vector));
+            }
+        }
+    }
+
+    /** 使用已归一化向量执行内存检索，并复用单段预测的阈值与投票规则。 */
+    private PredictionResponse predictFromVector(float[] vector) {
+        List<ParagraphSearchResult> allMatches = indexService.search(vector,
                 properties.getSearch().getRetrieveTopK());
         if (allMatches.isEmpty()) {
             throw new ContractChangeBusinessException(CommonConstants.SERVICE_UNAVAILABLE,
@@ -100,24 +157,15 @@ public class ContractParagraphPredictionService {
         List<ParagraphSearchResult> matches = reliableMatches(allMatches,
                 properties.getSearch().getMinSimilarity());
         if (matches.isEmpty()) {
-            log.info("合同段落预测无可靠匹配, textHash={}, minSimilarity={}, elapsedMs={}",
-                    textHash, properties.getSearch().getMinSimilarity(), System.currentTimeMillis() - started);
             return empty(maxSimilarity,
                     references(allMatches, properties.getSearch().getEvidenceTopK()));
         }
-        PredictionResponse response = semantic(matches);
-        if (response.getChangeTypes().isEmpty()) {
-            log.info("合同段落召回参考样本但无类型达到候选阈值, textHash={}, maxSimilarity={}, "
-                            + "candidateThreshold={}, referenceCount={}, matchType={}, elapsedMs={}",
-                    textHash, response.getMaxSimilarity(), properties.getSearch().getCandidateThreshold(),
-                    response.getReferences().size(), response.getMatchType(), System.currentTimeMillis() - started);
-        } else {
-            log.info("合同段落预测语义匹配完成, textHash={}, maxSimilarity={}, typeCount={}, "
-                            + "referenceCount={}, matchType={}, elapsedMs={}",
-                    textHash, response.getMaxSimilarity(), response.getChangeTypes().size(),
-                    response.getReferences().size(), response.getMatchType(), System.currentTimeMillis() - started);
-        }
-        return response;
+        return semantic(matches);
+    }
+
+    private int effectiveBatchSize() {
+        return Math.min(MAX_EMBEDDING_BATCH_SIZE,
+                Math.max(1, properties.getEmbedding().getBatchSize()));
     }
 
     /** 将 Hash 完全相同的历史样本转换为 100% 可信的精确匹配响应。 */

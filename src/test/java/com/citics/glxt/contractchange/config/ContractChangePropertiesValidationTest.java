@@ -18,7 +18,7 @@ public class ContractChangePropertiesValidationTest {
     public void shouldAcceptCompleteGatewayConfiguration() {
         ContractChangeProperties properties = validProperties();
         assertTrue(validator.validate(properties).isEmpty());
-        assertTrue(properties.getEmbedding().getBatchSize() == 1);
+        assertTrue(properties.getEmbedding().getBatchSize() == 16);
     }
 
     @Test
@@ -27,6 +27,14 @@ public class ContractChangePropertiesValidationTest {
         properties.getEmbedding().setBatchSize(0);
         properties.getSearch().setRetrieveTopK(5);
         properties.getSearch().setVoteTopK(10);
+
+        assertFalse(validator.validate(properties).isEmpty());
+    }
+
+    @Test
+    public void shouldRejectBatchSizeAboveGatewayLimit() {
+        ContractChangeProperties properties = validProperties();
+        properties.getEmbedding().setBatchSize(17);
 
         assertFalse(validator.validate(properties).isEmpty());
     }

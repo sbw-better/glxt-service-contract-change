@@ -4,8 +4,11 @@ import com.citics.glxt.common.result.ContractChangeResult;
 import com.citics.glxt.common.constants.CommonConstants;
 import com.citics.glxt.contractchange.model.ImportResponse;
 import com.citics.glxt.contractchange.model.IndexStatusResponse;
+import com.citics.glxt.contractchange.model.DocumentChangeTypeSummaryResponse;
 import com.citics.glxt.contractchange.model.PredictRequest;
 import com.citics.glxt.contractchange.model.PredictionResponse;
+import com.citics.glxt.contractchange.model.dto.DocxAnalysisDTO;
+import com.citics.glxt.contractchange.service.ContractDocumentChangePredictionService;
 import com.citics.glxt.contractchange.service.ContractParagraphImportService;
 import com.citics.glxt.contractchange.service.ContractParagraphPredictionService;
 import com.citics.glxt.contractchange.service.ParagraphVectorIndexService;
@@ -38,14 +41,17 @@ public class ContractChangeController {
     private final ContractParagraphImportService importService;
     private final ContractParagraphPredictionService predictionService;
     private final ParagraphVectorIndexService indexService;
+    private final ContractDocumentChangePredictionService documentPredictionService;
 
     /** 注入导入、预测和索引运维三个核心业务服务。 */
     public ContractChangeController(ContractParagraphImportService importService,
                                     ContractParagraphPredictionService predictionService,
-                                    ParagraphVectorIndexService indexService) {
+                                    ParagraphVectorIndexService indexService,
+                                    ContractDocumentChangePredictionService documentPredictionService) {
         this.importService = importService;
         this.predictionService = predictionService;
         this.indexService = indexService;
+        this.documentPredictionService = documentPredictionService;
     }
 
     /** 导入历史段落与变更类型编码对应关系。 */
@@ -71,6 +77,17 @@ public class ContractChangeController {
             @RequestHeader("UserId") @NotBlank(message = "UserId不能为空") String userId,
             @Valid @RequestBody PredictRequest request) {
         return ContractChangeResult.success(predictionService.predict(request.getParagraph(), userId));
+    }
+
+    /** 解析合同文件、汇总文件级变更类型，并沿用原流程保存解析主表和明细。 */
+    @PostMapping("/document/analyze-and-predict")
+    @ApiOperation(value = "解析合同文件并汇总变更类型",
+            notes = "必须携带UserId请求头；返回文件级变更类型编码，段落预测结果不落库")
+    public ContractChangeResult<DocumentChangeTypeSummaryResponse> analyzeAndPredictDocument(
+            @ApiParam(value = "实际操作人工号，用于统一模型平台审计", required = true)
+            @RequestHeader("UserId") @NotBlank(message = "UserId不能为空") String userId,
+            @RequestBody DocxAnalysisDTO request) {
+        return ContractChangeResult.success(documentPredictionService.analyzeAndPredict(request, userId));
     }
 
     /** 原子重建 JVM 内存向量索引，不重新生成向量。 */

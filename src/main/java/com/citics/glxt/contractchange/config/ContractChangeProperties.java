@@ -10,6 +10,7 @@ import javax.validation.constraints.AssertTrue;
 import javax.validation.constraints.DecimalMax;
 import javax.validation.constraints.DecimalMin;
 import javax.validation.constraints.Min;
+import javax.validation.constraints.Max;
 import javax.validation.constraints.NotBlank;
 
 /**
@@ -59,9 +60,10 @@ public class ContractChangeProperties {
          */
         @Min(1)
         private int dimension;
-        /** 单次发送给模型网关的最大文本数量；批量能力未确认前保持为 1。 */
+        /** 单次发送给模型网关的最大文本数量；公司网关当前确认上限为16。 */
         @Min(1)
-        private int batchSize = 1;
+        @Max(16)
+        private int batchSize = 16;
         /** HTTP 建连超时，单位毫秒。 */
         @Min(1)
         private int connectTimeoutMs = 3000;

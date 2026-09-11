@@ -3,6 +3,8 @@ package com.citics.glxt.contractchange.controller;
 import com.citics.glxt.common.handler.GlobalExceptionHandler;
 import com.citics.glxt.contractchange.model.ImportErrorItem;
 import com.citics.glxt.contractchange.model.ImportResponse;
+import com.citics.glxt.contractchange.model.DocumentChangeTypeSummaryResponse;
+import com.citics.glxt.contractchange.service.ContractDocumentChangePredictionService;
 import com.citics.glxt.contractchange.service.ContractParagraphImportService;
 import com.citics.glxt.contractchange.service.ContractParagraphPredictionService;
 import com.citics.glxt.contractchange.service.ParagraphVectorIndexService;
@@ -29,15 +31,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 public class ContractChangeControllerTest {
     private ContractParagraphImportService importService;
     private ContractParagraphPredictionService predictionService;
+    private ContractDocumentChangePredictionService documentPredictionService;
     private MockMvc mockMvc;
 
     @Before
     public void setUp() {
         importService = mock(ContractParagraphImportService.class);
         predictionService = mock(ContractParagraphPredictionService.class);
+        documentPredictionService = mock(ContractDocumentChangePredictionService.class);
         ParagraphVectorIndexService indexService = mock(ParagraphVectorIndexService.class);
         ContractChangeController controller = new ContractChangeController(
-                importService, predictionService, indexService);
+                importService, predictionService, indexService, documentPredictionService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -99,5 +103,34 @@ public class ContractChangeControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("请求JSON格式不正确"));
+    }
+
+    @Test
+    public void shouldRequireUserIdForDocumentPrediction() throws Exception {
+        mockMvc.perform(post("/service/contract-change/document/analyze-and-predict")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fileGetPath\":\"contract.docx\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("UserId请求头不能为空"));
+    }
+
+    @Test
+    public void shouldReturnDocumentChangeTypeSummary() throws Exception {
+        when(documentPredictionService.analyzeAndPredict(any(), eq("employee-001")))
+                .thenReturn(new DocumentChangeTypeSummaryResponse(99L,
+                        java.util.Arrays.asList("04", "19")));
+
+        mockMvc.perform(post("/service/contract-change/document/analyze-and-predict")
+                .header("UserId", "employee-001")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fileGetPath\":\"contract.docx\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.mainId").value(99))
+                .andExpect(jsonPath("$.data.fileChangeTypeCodes[0]").value("04"))
+                .andExpect(jsonPath("$.data.fileChangeTypeCodes[1]").value("19"));
+
+        verify(documentPredictionService).analyzeAndPredict(any(), eq("employee-001"));
     }
 }
