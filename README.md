@@ -127,6 +127,7 @@ POST /service/contract-change/samples/import
 POST /service/contract-change/predict
 POST /service/contract-change/index/reload
 GET  /service/contract-change/index/status
+POST /service/contract-compare/compare
 ```
 
 导入和预测接口必须携带：
@@ -137,6 +138,23 @@ UserId: 实际操作人工号
 
 该值只透传给模型平台用于审计，不写数据库、不输出到日志。索引重载和状态查询不调用模型，
 因此不要求该请求头。
+
+双版本比较接口不调用模型，也不要求 `UserId`。请求体传入服务器上的修改前、修改后 DOCX 路径：
+
+```json
+{
+  "oldFileGetPath": "/合同目录/修改前.docx",
+  "newFileGetPath": "/合同目录/修改后.docx"
+}
+```
+
+服务从主备 SFTP 读取原始文件，使用 Aspose.Words 19.9 忽略格式、目录、页眉页脚和批注差异，
+返回按合同条款聚合的 `ADDED`、`DELETED`、`MODIFIED`。只有编号或位置变化时不返回变更。
+该功能不调用 Embedding、不写数据库，也不触发原合同解析落库流程。
+
+部署时必须通过 `ASPOSE_WORDS_LICENSE_PATH` 配置授权文件的文件系统路径或 `classpath:` 路径。
+缺少或加载失败时，双版本比较返回业务码 `503`，其他接口继续可用。本地仅验证小文档时可显式设置
+`ASPOSE_WORDS_REQUIRE_LICENSE=false` 使用评估模式。
 
 预测请求示例：
 

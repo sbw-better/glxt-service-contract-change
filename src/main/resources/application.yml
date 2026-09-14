@@ -62,6 +62,14 @@ contract-change:
     # 投票无结果时，第一名达到该相似度则返回第一名标签作为候选，不标记为高可信。
     strong-match-threshold: ${SEARCH_STRONG_MATCH_THRESHOLD:0.80}
 
+# 双版本合同条款比较。授权文件只通过部署配置注入，不放入代码仓库。
+contract-compare:
+  aspose-license-path: ${ASPOSE_WORDS_LICENSE_PATH:}
+  require-aspose-license: ${ASPOSE_WORDS_REQUIRE_LICENSE:true}
+  max-file-size-bytes: ${CONTRACT_COMPARE_MAX_FILE_SIZE_BYTES:52428800}
+  min-match-score: ${CONTRACT_COMPARE_MIN_MATCH_SCORE:0.80}
+  ambiguity-margin: ${CONTRACT_COMPARE_AMBIGUITY_MARGIN:0.10}
+
 # 日志只记录 Hash、数量、耗时和状态，不记录合同正文或向量。
 logging:
   level:

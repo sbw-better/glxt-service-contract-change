@@ -27,6 +27,7 @@
         <poi.version>4.1.2</poi.version>
         <springfox.version>2.9.2</springfox.version>
         <ojdbc.version>19.3.0.0</ojdbc.version>
+        <aspose-words.version>19.9</aspose-words.version>
     </properties>
 
     <dependencies>
@@ -119,7 +120,30 @@
             <scope>compile</scope>
         </dependency>
 
+        <!-- 合同双版本比较；与内网19.9版本保持一致，jdk17 classifier 可运行于本项目 Java 8。 -->
+        <dependency>
+            <groupId>com.aspose</groupId>
+            <artifactId>aspose-words</artifactId>
+            <version>${aspose-words.version}</version>
+            <classifier>jdk17</classifier>
+            <exclusions>
+                <!-- 比较不做文档渲染，无需 javadoc 和 HarfBuzz classifier。 -->
+                <exclusion>
+                    <groupId>com.aspose</groupId>
+                    <artifactId>aspose-words</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
     </dependencies>
+
+    <repositories>
+        <repository>
+            <id>aspose-java-api</id>
+            <name>Aspose Java API</name>
+            <url>https://releases.aspose.com/java/repo/</url>
+        </repository>
+    </repositories>
 
     <build>
         <plugins>
