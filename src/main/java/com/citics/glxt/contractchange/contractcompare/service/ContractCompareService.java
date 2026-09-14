@@ -27,7 +27,6 @@ public class ContractCompareService {
     }
 
     public ContractCompareResponse compare(ContractCompareRequest request) {
-        asposeCompareService.assertReady();
         byte[] oldBytes = fileLoader.load(request.getOldFileGetPath());
         byte[] newBytes = fileLoader.load(request.getNewFileGetPath());
         ComparisonResult compared = asposeCompareService.compare(oldBytes, newBytes);

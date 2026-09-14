@@ -31,8 +31,7 @@ public class ContractCompareResponse implements Serializable {
         private ChangeType changeType;
         private String oldContent;
         private String newContent;
-        private List<ContentBlock> oldBlocks;
-        private List<ContentBlock> newBlocks;
+        private List<ChangeDetail> changeDetails;
         private Integer oldIndex;
         private Integer newIndex;
     }
@@ -41,28 +40,20 @@ public class ContractCompareResponse implements Serializable {
         ADDED, DELETED, MODIFIED
     }
 
-    /** 段落或表格内容块。 */
+    /** 条款内一处可定位的具体文字变化。 */
     @Data
-    public static class ContentBlock implements Serializable {
+    public static class ChangeDetail implements Serializable {
         private static final long serialVersionUID = 1L;
-        private String type;
-        private String text;
-        private List<TableRow> rows;
+        private DetailType detailType;
+        private String oldText;
+        private String newText;
+        private Integer oldStart;
+        private Integer oldEnd;
+        private Integer newStart;
+        private Integer newEnd;
     }
 
-    @Data
-    public static class TableRow implements Serializable {
-        private static final long serialVersionUID = 1L;
-        private int rowIndex;
-        private List<TableCell> cells;
-    }
-
-    @Data
-    public static class TableCell implements Serializable {
-        private static final long serialVersionUID = 1L;
-        private int columnIndex;
-        private String text;
-        private String horizontalMerge;
-        private String verticalMerge;
+    public enum DetailType {
+        INSERTED, DELETED, REPLACED
     }
 }

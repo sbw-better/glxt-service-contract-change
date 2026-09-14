@@ -2,17 +2,12 @@ package com.citics.glxt.contractchange.contractcompare.service;
 
 import com.aspose.words.Body;
 import com.aspose.words.Cell;
-import com.aspose.words.CellMerge;
 import com.aspose.words.Node;
 import com.aspose.words.NodeCollection;
 import com.aspose.words.NodeType;
 import com.aspose.words.Paragraph;
-import com.aspose.words.Row;
 import com.aspose.words.Section;
 import com.aspose.words.Table;
-import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ContentBlock;
-import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.TableCell;
-import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.TableRow;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.Clause;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.Parsed;
 import org.springframework.stereotype.Service;
@@ -70,7 +65,7 @@ public class ContractStructureParser {
                         current = addClause(clauses, hierarchy, versionPrefix, sequence,
                                 null, text.length() <= 30 ? text : "合同主体信息", 1, true);
                     }
-                    current.getBlocks().add(paragraphBlock(text));
+                    current.getContentParts().add(text);
                     Integer paragraphIndex = paragraphIndexes.get(paragraph);
                     if (paragraphIndex != null) {
                         current.getParagraphIndexes().add(paragraphIndex);
@@ -81,7 +76,7 @@ public class ContractStructureParser {
                                 null, "合同表格信息", 1, true);
                     }
                     Table table = (Table) node;
-                    current.getBlocks().add(tableBlock(table));
+                    current.getContentParts().add(tableText(table));
                     NodeCollection paragraphs = table.getChildNodes(NodeType.PARAGRAPH, true);
                     for (Object paragraphObject : paragraphs) {
                         Node paragraphNode = (Node) paragraphObject;
@@ -180,45 +175,20 @@ public class ContractStructureParser {
         return clause;
     }
 
-    private ContentBlock paragraphBlock(String text) {
-        ContentBlock block = new ContentBlock();
-        block.setType("PARAGRAPH");
-        block.setText(text);
-        return block;
-    }
-
-    private ContentBlock tableBlock(Table table) {
-        ContentBlock block = new ContentBlock();
-        block.setType("TABLE");
-        List<TableRow> rows = new ArrayList<TableRow>();
+    private String tableText(Table table) {
         StringBuilder readable = new StringBuilder();
-        int rowIndex = 0;
         for (Object rowObject : table.getRows()) {
-            Row row = (Row) rowObject;
-            TableRow rowData = new TableRow();
-            rowData.setRowIndex(++rowIndex);
-            List<TableCell> cells = new ArrayList<TableCell>();
             int columnIndex = 0;
-            for (Object cellObject : row.getCells()) {
+            for (Object cellObject : ((com.aspose.words.Row) rowObject).getCells()) {
                 Cell cell = (Cell) cellObject;
-                TableCell cellData = new TableCell();
-                cellData.setColumnIndex(++columnIndex);
-                cellData.setText(ContractCompareText.cleanDisplayText(cell.getText()));
-                cellData.setHorizontalMerge(CellMerge.toString(cell.getCellFormat().getHorizontalMerge()));
-                cellData.setVerticalMerge(CellMerge.toString(cell.getCellFormat().getVerticalMerge()));
-                cells.add(cellData);
-                if (columnIndex > 1) {
+                if (++columnIndex > 1) {
                     readable.append(" | ");
                 }
-                readable.append(cellData.getText().replace('\n', ' '));
+                readable.append(ContractCompareText.cleanDisplayText(cell.getText()).replace('\n', ' '));
             }
             readable.append('\n');
-            rowData.setCells(cells);
-            rows.add(rowData);
         }
-        block.setRows(rows);
-        block.setText(ContractCompareText.cleanDisplayText(readable.toString()));
-        return block;
+        return ContractCompareText.cleanDisplayText(readable.toString());
     }
 
     private static final class Heading {

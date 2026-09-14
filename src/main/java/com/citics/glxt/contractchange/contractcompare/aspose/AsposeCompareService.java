@@ -13,23 +13,14 @@ import com.aspose.words.Paragraph;
 import com.aspose.words.Revision;
 import com.aspose.words.RevisionType;
 import com.aspose.words.Section;
-import com.aspose.words.License;
 import com.citics.glxt.common.exception.ContractChangeBusinessException;
 import com.citics.glxt.common.constants.CommonConstants;
-import com.citics.glxt.contractchange.contractcompare.config.ContractCompareProperties;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.RevisionSignal;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
-import javax.annotation.PostConstruct;
 import java.io.ByteArrayInputStream;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.IdentityHashMap;
@@ -38,39 +29,8 @@ import java.util.Map;
 
 /** 使用 Aspose.Words 加载最终稿并生成文档 Revision。 */
 @Service
-@Slf4j
 public class AsposeCompareService {
-    private final ContractCompareProperties properties;
-    private final ResourceLoader resourceLoader;
-    private volatile boolean ready;
-
-    public AsposeCompareService(ContractCompareProperties properties, ResourceLoader resourceLoader) {
-        this.properties = properties;
-        this.resourceLoader = resourceLoader;
-    }
-
-    @PostConstruct
-    public void initialize() {
-        String path = properties.getAsposeLicensePath();
-        if (!StringUtils.hasText(path)) {
-            ready = !properties.isRequireAsposeLicense();
-            log.warn("Aspose.Words授权路径未配置, requireLicense={}", properties.isRequireAsposeLicense());
-            return;
-        }
-        Resource resource = path.startsWith("classpath:") || path.startsWith("file:")
-                ? resourceLoader.getResource(path) : new FileSystemResource(path);
-        try (InputStream input = resource.getInputStream()) {
-            new License().setLicense(input);
-            ready = true;
-            log.info("Aspose.Words授权加载成功");
-        } catch (Exception ex) {
-            ready = false;
-            log.error("Aspose.Words授权加载失败, exception={}", ex.getClass().getSimpleName());
-        }
-    }
-
     public ComparisonResult compare(byte[] oldBytes, byte[] newBytes) {
-        assertReady();
         Document oldDocument;
         Document newDocument;
         try {
@@ -99,13 +59,6 @@ public class AsposeCompareService {
         } catch (Exception ex) {
             throw new ContractChangeBusinessException(CommonConstants.SERVICE_UNAVAILABLE,
                     "合同比较引擎处理失败，请稍后重试");
-        }
-    }
-
-    public void assertReady() {
-        if (!ready) {
-            throw new ContractChangeBusinessException(CommonConstants.SERVICE_UNAVAILABLE,
-                    "合同比较引擎授权不可用，请联系管理员");
         }
     }
 

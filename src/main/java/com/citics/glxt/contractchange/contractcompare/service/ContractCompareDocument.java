@@ -1,6 +1,5 @@
 package com.citics.glxt.contractchange.contractcompare.service;
 
-import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ContentBlock;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
@@ -26,7 +25,7 @@ public final class ContractCompareDocument {
         private Clause parent;
         private int order;
         private boolean synthetic;
-        private final List<ContentBlock> blocks = new ArrayList<ContentBlock>();
+        private final List<String> contentParts = new ArrayList<String>();
         private final List<Clause> children = new ArrayList<Clause>();
         private final Set<Integer> paragraphIndexes = new LinkedHashSet<Integer>();
 

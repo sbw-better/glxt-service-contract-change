@@ -9,7 +9,6 @@ import com.citics.glxt.contractchange.contractcompare.model.ContractCompareReque
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeType;
 import org.junit.Test;
-import org.springframework.core.io.DefaultResourceLoader;
 
 import java.io.ByteArrayOutputStream;
 
@@ -29,9 +28,7 @@ public class ContractCompareServiceTest {
                 "第二条 合同金额", "本合同总金额为人民币120万元。"));
 
         ContractCompareProperties properties = new ContractCompareProperties();
-        properties.setRequireAsposeLicense(false);
-        AsposeCompareService aspose = new AsposeCompareService(properties, new DefaultResourceLoader());
-        aspose.initialize();
+        AsposeCompareService aspose = new AsposeCompareService();
         ContractCompareService service = new ContractCompareService(loader, aspose,
                 new ContractStructureParser(), new ClauseComparisonEngine(properties));
         ContractCompareRequest request = new ContractCompareRequest();
@@ -44,6 +41,8 @@ public class ContractCompareServiceTest {
         assertEquals(ChangeType.MODIFIED, response.getChanges().get(0).getChangeType());
         assertTrue(response.getChanges().get(0).getOldContent().contains("100万元"));
         assertTrue(response.getChanges().get(0).getNewContent().contains("120万元"));
+        assertEquals("100", response.getChanges().get(0).getChangeDetails().get(0).getOldText());
+        assertEquals("120", response.getChanges().get(0).getChangeDetails().get(0).getNewText());
     }
 
     private byte[] document(String... paragraphs) throws Exception {

@@ -1,6 +1,5 @@
 package com.citics.glxt.contractchange.contractcompare.service;
 
-import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ContentBlock;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.Clause;
 
 import java.util.HashMap;
@@ -29,8 +28,8 @@ final class ContractCompareText {
 
     static String ownContent(Clause clause) {
         StringBuilder value = new StringBuilder();
-        for (ContentBlock block : clause.getBlocks()) {
-            String text = cleanDisplayText(block.getText());
+        for (String part : clause.getContentParts()) {
+            String text = cleanDisplayText(part);
             if (!text.isEmpty()) {
                 if (value.length() > 0) {
                     value.append('\n');

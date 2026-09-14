@@ -2,8 +2,9 @@ package com.citics.glxt.contractchange.contractcompare.service;
 
 import com.citics.glxt.contractchange.contractcompare.config.ContractCompareProperties;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeType;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeDetail;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseChange;
-import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ContentBlock;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.DetailType;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.Clause;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.MatchResult;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.Parsed;
@@ -13,16 +14,21 @@ import lombok.Getter;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** 条款匹配、Revision定位和变更聚合。 */
 @Service
 public class ClauseComparisonEngine {
+    private static final int MAX_DIFF_TOKENS = 2000;
     private final ContractCompareProperties properties;
 
     public ClauseComparisonEngine(ContractCompareProperties properties) {
@@ -39,6 +45,12 @@ public class ClauseComparisonEngine {
         }
         if (revisions.isEmpty() && !changes.isEmpty()) {
             warnings.add("结构化文本存在差异，但Aspose未生成Revision，请人工复核");
+        }
+        for (ClauseChange change : changes) {
+            if (change.getChangeType() == ChangeType.MODIFIED
+                    && (change.getChangeDetails() == null || change.getChangeDetails().isEmpty())) {
+                warnings.add("条款" + displayName(change) + "的具体文字差异过长或无法可靠生成，请结合完整内容复核");
+            }
         }
         return new Analysis(changes, warnings);
     }
@@ -238,10 +250,12 @@ public class ClauseComparisonEngine {
         change.setOldClauseNo(oldClause.getClauseNo());
         change.setNewClauseNo(newClause.getClauseNo());
         change.setChangeType(ChangeType.MODIFIED);
-        change.setOldContent(ContractCompareText.ownContent(oldClause));
-        change.setNewContent(ContractCompareText.ownContent(newClause));
-        change.setOldBlocks(new ArrayList<ContentBlock>(oldClause.getBlocks()));
-        change.setNewBlocks(new ArrayList<ContentBlock>(newClause.getBlocks()));
+        String oldContent = ContractCompareText.ownContent(oldClause);
+        String newContent = ContractCompareText.ownContent(newClause);
+        change.setOldContent(oldContent);
+        change.setNewContent(newContent);
+        change.setChangeDetails(diffDetails(oldContent, newContent,
+                oldClause.getClauseNo(), newClause.getClauseNo()));
         change.setOldIndex(oldClause.getOrder());
         change.setNewIndex(newClause.getOrder());
         return change;
@@ -251,8 +265,9 @@ public class ClauseComparisonEngine {
         ClauseChange change = base(clause);
         change.setNewClauseNo(clause.getClauseNo());
         change.setChangeType(ChangeType.ADDED);
-        change.setNewContent(ContractCompareText.subtreeContent(clause));
-        change.setNewBlocks(subtreeBlocks(clause));
+        String newContent = ContractCompareText.subtreeContent(clause);
+        change.setNewContent(newContent);
+        change.setChangeDetails(singleDetail(DetailType.INSERTED, null, newContent));
         change.setNewIndex(clause.getOrder());
         return change;
     }
@@ -261,8 +276,9 @@ public class ClauseComparisonEngine {
         ClauseChange change = base(clause);
         change.setOldClauseNo(clause.getClauseNo());
         change.setChangeType(ChangeType.DELETED);
-        change.setOldContent(ContractCompareText.subtreeContent(clause));
-        change.setOldBlocks(subtreeBlocks(clause));
+        String oldContent = ContractCompareText.subtreeContent(clause);
+        change.setOldContent(oldContent);
+        change.setChangeDetails(singleDetail(DetailType.DELETED, oldContent, null));
         change.setOldIndex(clause.getOrder());
         return change;
     }
@@ -276,14 +292,6 @@ public class ClauseComparisonEngine {
         change.setParentClauseNo(clause.getParentClauseNo());
         change.setLevel(clause.getLevel());
         return change;
-    }
-
-    private List<ContentBlock> subtreeBlocks(Clause clause) {
-        List<ContentBlock> blocks = new ArrayList<ContentBlock>(clause.getBlocks());
-        for (Clause child : clause.getChildren()) {
-            blocks.addAll(subtreeBlocks(child));
-        }
-        return blocks;
     }
 
     private boolean hasUnmatchedAncestor(Clause clause, Set<Clause> unmatched) {
@@ -306,6 +314,229 @@ public class ClauseComparisonEngine {
             }
         }
         return 0;
+    }
+
+    private String displayName(ClauseChange change) {
+        if (change.getClauseNo() != null && !change.getClauseNo().isEmpty()) {
+            return change.getClauseNo();
+        }
+        return "位置" + (change.getNewIndex() != null ? change.getNewIndex() : change.getOldIndex());
+    }
+
+    private List<ChangeDetail> singleDetail(DetailType type, String oldText, String newText) {
+        ChangeDetail detail = new ChangeDetail();
+        detail.setDetailType(type);
+        if (oldText != null) {
+            detail.setOldText(oldText);
+            detail.setOldStart(0);
+            detail.setOldEnd(oldText.length());
+        }
+        if (newText != null) {
+            detail.setNewText(newText);
+            detail.setNewStart(0);
+            detail.setNewEnd(newText.length());
+        }
+        List<ChangeDetail> details = new ArrayList<ChangeDetail>();
+        details.add(detail);
+        return details;
+    }
+
+    private List<ChangeDetail> diffDetails(String oldContent, String newContent,
+                                           String oldClauseNo, String newClauseNo) {
+        List<Token> oldTokens = tokens(oldContent, contentStart(oldContent, oldClauseNo));
+        List<Token> newTokens = tokens(newContent, contentStart(newContent, newClauseNo));
+        int prefix = 0;
+        while (prefix < oldTokens.size() && prefix < newTokens.size()
+                && oldTokens.get(prefix).key.equals(newTokens.get(prefix).key)) {
+            prefix++;
+        }
+        int oldEnd = oldTokens.size();
+        int newEnd = newTokens.size();
+        while (oldEnd > prefix && newEnd > prefix
+                && oldTokens.get(oldEnd - 1).key.equals(newTokens.get(newEnd - 1).key)) {
+            oldEnd--;
+            newEnd--;
+        }
+        List<Token> oldMiddle = oldTokens.subList(prefix, oldEnd);
+        List<Token> newMiddle = newTokens.subList(prefix, newEnd);
+        if (oldMiddle.isEmpty() && newMiddle.isEmpty()) {
+            return Collections.emptyList();
+        }
+        if (oldMiddle.size() + newMiddle.size() > MAX_DIFF_TOKENS) {
+            return Collections.emptyList();
+        }
+        return detailsFromAtoms(myers(oldMiddle, newMiddle), oldContent, newContent);
+    }
+
+    private int contentStart(String content, String clauseNo) {
+        if (content == null || clauseNo == null || clauseNo.isEmpty()) {
+            return 0;
+        }
+        Matcher matcher = Pattern.compile("^\\s*" + Pattern.quote(clauseNo)
+                + "[\\s\\u3000、:：.．]*").matcher(content);
+        return matcher.find() ? matcher.end() : 0;
+    }
+
+    private List<Token> tokens(String content, int start) {
+        List<Token> result = new ArrayList<Token>();
+        int index = Math.max(0, start);
+        while (index < content.length()) {
+            int codePoint = content.codePointAt(index);
+            if (ignored(codePoint)) {
+                index += Character.charCount(codePoint);
+                continue;
+            }
+            int end = index + Character.charCount(codePoint);
+            if (isAsciiLetter(codePoint)) {
+                while (end < content.length() && isAsciiWordPart(content.codePointAt(end))) {
+                    end += Character.charCount(content.codePointAt(end));
+                }
+            } else if (Character.isDigit(codePoint)) {
+                while (end < content.length() && isNumberPart(content.codePointAt(end))) {
+                    end += Character.charCount(content.codePointAt(end));
+                }
+            }
+            String value = content.substring(index, end);
+            result.add(new Token(value.toLowerCase(Locale.ROOT), index, end));
+            index = end;
+        }
+        return result;
+    }
+
+    private boolean ignored(int codePoint) {
+        return codePoint == 7 || Character.isWhitespace(codePoint)
+                || Character.getType(codePoint) == Character.SPACE_SEPARATOR;
+    }
+
+    private boolean isAsciiLetter(int codePoint) {
+        return codePoint >= 'A' && codePoint <= 'Z' || codePoint >= 'a' && codePoint <= 'z';
+    }
+
+    private boolean isAsciiWordPart(int codePoint) {
+        return isAsciiLetter(codePoint) || Character.isDigit(codePoint)
+                || codePoint == '_' || codePoint == '-';
+    }
+
+    private boolean isNumberPart(int codePoint) {
+        return Character.isDigit(codePoint) || codePoint == '.' || codePoint == ','
+                || codePoint == '%' || codePoint == '％';
+    }
+
+    private List<DiffAtom> myers(List<Token> oldTokens, List<Token> newTokens) {
+        int oldSize = oldTokens.size();
+        int newSize = newTokens.size();
+        int max = oldSize + newSize;
+        if (max == 0) {
+            return Collections.emptyList();
+        }
+        int offset = max + 1;
+        int[] furthest = new int[2 * max + 3];
+        Arrays.fill(furthest, -1);
+        furthest[offset + 1] = 0;
+        List<int[]> trace = new ArrayList<int[]>();
+        for (int distance = 0; distance <= max; distance++) {
+            trace.add(furthest.clone());
+            for (int diagonal = -distance; diagonal <= distance; diagonal += 2) {
+                int x;
+                if (diagonal == -distance || (diagonal != distance
+                        && furthest[offset + diagonal - 1] < furthest[offset + diagonal + 1])) {
+                    x = furthest[offset + diagonal + 1];
+                } else {
+                    x = furthest[offset + diagonal - 1] + 1;
+                }
+                int y = x - diagonal;
+                while (x < oldSize && y < newSize
+                        && oldTokens.get(x).key.equals(newTokens.get(y).key)) {
+                    x++;
+                    y++;
+                }
+                furthest[offset + diagonal] = x;
+                if (x >= oldSize && y >= newSize) {
+                    return backtrack(trace, oldTokens, newTokens, distance, offset);
+                }
+            }
+        }
+        return Collections.emptyList();
+    }
+
+    private List<DiffAtom> backtrack(List<int[]> trace, List<Token> oldTokens,
+                                     List<Token> newTokens, int distance, int offset) {
+        int x = oldTokens.size();
+        int y = newTokens.size();
+        List<DiffAtom> reversed = new ArrayList<DiffAtom>();
+        for (int current = distance; current >= 0; current--) {
+            int[] furthest = trace.get(current);
+            int diagonal = x - y;
+            int previousDiagonal;
+            if (diagonal == -current || (diagonal != current
+                    && furthest[offset + diagonal - 1] < furthest[offset + diagonal + 1])) {
+                previousDiagonal = diagonal + 1;
+            } else {
+                previousDiagonal = diagonal - 1;
+            }
+            int previousX = furthest[offset + previousDiagonal];
+            int previousY = previousX - previousDiagonal;
+            while (x > previousX && y > previousY) {
+                reversed.add(DiffAtom.equal(oldTokens.get(--x), newTokens.get(--y)));
+            }
+            if (current == 0) {
+                break;
+            }
+            if (x == previousX) {
+                reversed.add(DiffAtom.inserted(newTokens.get(--y)));
+            } else {
+                reversed.add(DiffAtom.deleted(oldTokens.get(--x)));
+            }
+        }
+        Collections.reverse(reversed);
+        return reversed;
+    }
+
+    private List<ChangeDetail> detailsFromAtoms(List<DiffAtom> atoms,
+                                                String oldContent, String newContent) {
+        List<ChangeDetail> details = new ArrayList<ChangeDetail>();
+        int index = 0;
+        while (index < atoms.size()) {
+            if (atoms.get(index).type == EditType.EQUAL) {
+                index++;
+                continue;
+            }
+            Token firstOld = null;
+            Token lastOld = null;
+            Token firstNew = null;
+            Token lastNew = null;
+            while (index < atoms.size() && atoms.get(index).type != EditType.EQUAL) {
+                DiffAtom atom = atoms.get(index++);
+                if (atom.oldToken != null) {
+                    firstOld = firstOld == null ? atom.oldToken : firstOld;
+                    lastOld = atom.oldToken;
+                }
+                if (atom.newToken != null) {
+                    firstNew = firstNew == null ? atom.newToken : firstNew;
+                    lastNew = atom.newToken;
+                }
+            }
+            ChangeDetail detail = new ChangeDetail();
+            if (firstOld != null && firstNew != null) {
+                detail.setDetailType(DetailType.REPLACED);
+            } else if (firstNew != null) {
+                detail.setDetailType(DetailType.INSERTED);
+            } else {
+                detail.setDetailType(DetailType.DELETED);
+            }
+            if (firstOld != null) {
+                detail.setOldStart(firstOld.start);
+                detail.setOldEnd(lastOld.end);
+                detail.setOldText(oldContent.substring(firstOld.start, lastOld.end));
+            }
+            if (firstNew != null) {
+                detail.setNewStart(firstNew.start);
+                detail.setNewEnd(lastNew.end);
+                detail.setNewText(newContent.substring(firstNew.start, lastNew.end));
+            }
+            details.add(detail);
+        }
+        return details;
     }
 
     private String context(Clause clause, List<Clause> all) {
@@ -409,6 +640,46 @@ public class ClauseComparisonEngine {
 
         private int getDeletedOrder() {
             return deletedOrder;
+        }
+    }
+
+    private enum EditType {
+        EQUAL, INSERTED, DELETED
+    }
+
+    private static final class Token {
+        private final String key;
+        private final int start;
+        private final int end;
+
+        private Token(String key, int start, int end) {
+            this.key = key;
+            this.start = start;
+            this.end = end;
+        }
+    }
+
+    private static final class DiffAtom {
+        private final EditType type;
+        private final Token oldToken;
+        private final Token newToken;
+
+        private DiffAtom(EditType type, Token oldToken, Token newToken) {
+            this.type = type;
+            this.oldToken = oldToken;
+            this.newToken = newToken;
+        }
+
+        private static DiffAtom equal(Token oldToken, Token newToken) {
+            return new DiffAtom(EditType.EQUAL, oldToken, newToken);
+        }
+
+        private static DiffAtom inserted(Token newToken) {
+            return new DiffAtom(EditType.INSERTED, null, newToken);
+        }
+
+        private static DiffAtom deleted(Token oldToken) {
+            return new DiffAtom(EditType.DELETED, oldToken, null);
         }
     }
 }

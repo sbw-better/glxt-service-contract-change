@@ -13,10 +13,6 @@ import javax.validation.constraints.Min;
 @Validated
 @ConfigurationProperties(prefix = "contract-compare")
 public class ContractCompareProperties {
-    /** Aspose.Words 授权文件路径，支持文件系统路径和 classpath: 前缀。 */
-    private String asposeLicensePath;
-    /** 生产默认要求有效授权；本地小文档试验可显式关闭。 */
-    private boolean requireAsposeLicense = true;
     /** 单份合同下载后的最大字节数。 */
     @Min(1)
     private int maxFileSizeBytes = 50 * 1024 * 1024;

@@ -150,11 +150,9 @@ UserId: 实际操作人工号
 
 服务从主备 SFTP 读取原始文件，使用 Aspose.Words 19.9 忽略格式、目录、页眉页脚和批注差异，
 返回按合同条款聚合的 `ADDED`、`DELETED`、`MODIFIED`。只有编号或位置变化时不返回变更。
-该功能不调用 Embedding、不写数据库，也不触发原合同解析落库流程。
-
-部署时必须通过 `ASPOSE_WORDS_LICENSE_PATH` 配置授权文件的文件系统路径或 `classpath:` 路径。
-缺少或加载失败时，双版本比较返回业务码 `503`，其他接口继续可用。本地仅验证小文档时可显式设置
-`ASPOSE_WORDS_REQUIRE_LICENSE=false` 使用评估模式。
+每条结果通过 `oldContent`、`newContent` 返回完整条款，并通过 `changeDetails` 返回具体的
+`INSERTED`、`DELETED`、`REPLACED` 文字及其在完整内容中的 UTF-16 起止下标。响应不再返回
+`oldBlocks`、`newBlocks`。该功能不调用 Embedding、不写数据库，也不触发原合同解析落库流程。
 
 预测请求示例：
 
