@@ -2,7 +2,6 @@ package com.citics.glxt.contractchange.contractcompare.controller;
 
 import com.citics.glxt.common.handler.GlobalExceptionHandler;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest;
-import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.ChangeDocumentType;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeDetail;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangedParagraph;
@@ -84,18 +83,15 @@ public class ContractCompareControllerTest {
     @Test
     public void shouldAcceptChangeDocumentRequest() throws Exception {
         when(service.compare(any())).thenReturn(new ContractCompareResponse(0,
-                Collections.emptyList(), Collections.emptyList(),
-                ChangeDocumentType.SUPPLEMENTAL_AGREEMENT));
+                Collections.emptyList(), Collections.emptyList()));
 
         mockMvc.perform(post("/service/contract-compare/compare")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"analysisType\":\"CHANGE_DOCUMENT\","
-                        + "\"changeFileGetPath\":\"/supplement.docx\","
-                        + "\"changeDocumentType\":\"SUPPLEMENTAL_AGREEMENT\"}"))
+                        + "\"changeFileGetPath\":\"/supplement.docx\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data.changeDocumentType")
-                        .value("SUPPLEMENTAL_AGREEMENT"));
+                .andExpect(jsonPath("$.data.changeDocumentType").doesNotExist());
 
         verify(service).compare(any(ContractCompareRequest.class));
     }
@@ -104,24 +100,10 @@ public class ContractCompareControllerTest {
     public void shouldRejectMissingChangeDocumentPath() throws Exception {
         mockMvc.perform(post("/service/contract-compare/compare")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"analysisType\":\"CHANGE_DOCUMENT\","
-                        + "\"changeDocumentType\":\"SUPPLEMENTAL_AGREEMENT\"}"))
+                .content("{\"analysisType\":\"CHANGE_DOCUMENT\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("变更函文件路径不能为空"));
-
-        verifyZeroInteractions(service);
-    }
-
-    @Test
-    public void shouldRejectMissingChangeDocumentType() throws Exception {
-        mockMvc.perform(post("/service/contract-compare/compare")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"analysisType\":\"CHANGE_DOCUMENT\","
-                        + "\"changeFileGetPath\":\"/supplement.docx\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(400))
-                .andExpect(jsonPath("$.message").value("变更函类型不能为空"));
 
         verifyZeroInteractions(service);
     }
@@ -196,8 +178,7 @@ public class ContractCompareControllerTest {
         mockMvc.perform(post("/service/contract-compare/export")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"analysisType\":\"CHANGE_DOCUMENT\","
-                        + "\"changeFileGetPath\":\"/supplement.docx\","
-                        + "\"changeDocumentType\":\"SUPPLEMENTAL_AGREEMENT\"}"))
+                        + "\"changeFileGetPath\":\"/supplement.docx\"}"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition",
                         "attachment; filename=contract-change-extract-result.xlsx"))
@@ -241,8 +222,7 @@ public class ContractCompareControllerTest {
         mockMvc.perform(post("/service/contract-compare/compare")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"analysisType\":\"LETTER\","
-                        + "\"changeFileGetPath\":\"/supplement.docx\","
-                        + "\"changeDocumentType\":\"SUPPLEMENTAL_AGREEMENT\"}"))
+                        + "\"changeFileGetPath\":\"/supplement.docx\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("请求JSON格式不正确"));

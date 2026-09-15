@@ -154,26 +154,19 @@ UserId: 实际操作人工号
 }
 ```
 
-单文件变更函提取请求体传入一份 DOCX 路径和函件类型：
+单文件变更函提取请求体只需传入一份 DOCX 路径：
 
 ```json
 {
   "analysisType": "CHANGE_DOCUMENT",
   "changeFileGetPath": "/合同目录/补充协议.docx",
-  "changeDocumentType": "SUPPLEMENTAL_AGREEMENT",
   "resultMode": "SIMPLE"
 }
 ```
 
-`changeDocumentType` 可选值为：
-
-- `SUPPLEMENTAL_AGREEMENT`：补充协议。
-- `INQUIRY_LETTER`：征询意见函。
-- `NEGOTIATION_LETTER`：协商函。
-
 `DOUBLE_VERSION` 必须提供 `oldFileGetPath`、`newFileGetPath`；`CHANGE_DOCUMENT` 必须提供
-`changeFileGetPath`、`changeDocumentType`。非当前模式字段即使存在也不参与处理。非法枚举或缺少
-当前模式必填字段时返回业务码 400。
+`changeFileGetPath`。非当前模式字段即使存在也不参与处理。非法枚举或缺少当前模式必填字段时
+返回业务码 400。
 
 `resultMode` 可选值为 `SIMPLE`、`CONTEXT`，未传或传 `null` 时默认使用 `SIMPLE`。
 `SIMPLE` 保持精简响应，只返回变化段落；`CONTEXT` 在每条变更中额外返回
@@ -218,7 +211,6 @@ Embedding、不写数据库，也不触发原合同解析落库流程。
 ```json
 {
   "totalChanges": 1,
-  "changeDocumentType": "SUPPLEMENTAL_AGREEMENT",
   "changes": [
     {
       "clauseNo": null,
@@ -244,9 +236,10 @@ Embedding、不写数据库，也不触发原合同解析落库流程。
 ```
 
 变更函按正文阅读顺序解析可复制文字、Word列表、表格和文本框，不处理图片OCR、页眉页脚、
-批注或签章。三种函件均识别以“阿拉伯数字+顿号或点号+《基金合同》”开头的标题；补充协议和
-征询意见函额外识别包含“自本协议/函件的变更执行日起”的新增、删除或修改标题。当前标题至
-下一标题之间形成一个变更分段：
+批注或签章。补充协议、征询意见函和协商函统一按正文格式识别，不要求调用方指定函件类型。
+解析器识别以“阿拉伯数字+顿号或点号+《基金合同》”开头的标题，也识别包含“自本协议/函件的
+变更执行日起”、《基金合同》和新增、删除或修改动作的标题。当前标题至下一标题之间形成一个
+变更分段：
 
 - 找到“内容变更如下”时，标记前内容为变更前内容，标记后的下一个非空内容块为变更后内容。
 - 标题包含“增加”或“新增”时，分段内容作为新增内容。
@@ -262,9 +255,9 @@ Embedding、不写数据库，也不触发原合同解析落库流程。
 “完整变更后条款”两列。存在匹配或识别提示时额外生成“提示信息”工作表。
 
 `CHANGE_DOCUMENT` 导出文件名为 `contract-change-extract-result.xlsx`，主工作表为“提取结果”，
-按一个变更分段一行输出函件类型、来源标题、目标条款、变更类型、变更前后内容和具体变化；
-`CONTEXT` 额外增加完整变更前后内容两列。Controller 继续通过 `HttpServletResponse` 直接写入
-Excel，方法返回值保持 `void`。
+按一个变更分段一行输出来源标题、目标条款、变更类型、变更前后内容和具体变化。`SIMPLE`
+共 8 列；`CONTEXT` 额外增加完整变更前后内容两列，共 10 列。Controller 继续通过
+`HttpServletResponse` 直接写入 Excel，方法返回值保持 `void`。
 
 预测请求示例：
 

@@ -33,7 +33,7 @@ public class ContractCompareController {
 
     @PostMapping("/compare")
     @ApiOperation(value = "比较双版本合同或提取变更函条款",
-            notes = "analysisType默认DOUBLE_VERSION；CHANGE_DOCUMENT按函件类型从单份DOCX提取变更条款")
+            notes = "analysisType默认DOUBLE_VERSION；CHANGE_DOCUMENT按文档内容从单份DOCX提取变更条款")
     public ContractChangeResult<ContractCompareResponse> compare(
             @Valid @RequestBody ContractCompareRequest request) {
         return ContractChangeResult.success(compareService.compare(request));

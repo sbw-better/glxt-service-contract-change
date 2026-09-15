@@ -21,9 +21,6 @@ public class ContractCompareRequestValidator
             if (!StringUtils.hasText(request.getChangeFileGetPath())) {
                 return violation(context, "变更函文件路径不能为空", "changeFileGetPath");
             }
-            if (request.getChangeDocumentType() == null) {
-                return violation(context, "变更函类型不能为空", "changeDocumentType");
-            }
             return true;
         }
         if (!StringUtils.hasText(request.getOldFileGetPath())) {

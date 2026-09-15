@@ -11,7 +11,6 @@ import com.aspose.words.Section;
 import com.aspose.words.Table;
 import com.citics.glxt.common.exception.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.contractcompare.aspose.AsposeCompareService;
-import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.ChangeDocumentType;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.ResultMode;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeType;
@@ -37,6 +36,8 @@ public class ChangeDocumentExtractionService {
             Pattern.DOTALL);
     private static final Pattern CHANGE_MARKER = Pattern.compile(
             "(?:上述)?内容\\s*变更\\s*如下\\s*[：:]?");
+    private static final Pattern EXECUTION_DATE_PREFIX = Pattern.compile(
+            "^\\s*自本(?:协议|函件)(?:的)?变更执行日起\\s*[，,]?\\s*$");
     private static final Pattern TARGET_SUFFIX = Pattern.compile(
             "\\s*(?:中)?(?:增加|新增|删除|修改|变更)?如下约定\\s*[：:]?.*$"
                     + "|\\s*约定如下\\s*[：:]?.*$", Pattern.DOTALL);
@@ -50,14 +51,13 @@ public class ChangeDocumentExtractionService {
         this.comparisonEngine = comparisonEngine;
     }
 
-    public ContractCompareResponse extract(byte[] bytes, ChangeDocumentType documentType,
-                                           ResultMode resultMode) {
+    public ContractCompareResponse extract(byte[] bytes, ResultMode resultMode) {
         Document document = asposeCompareService.load(bytes);
         List<TextBlock> blocks = readBlocks(document);
         if (blocks.isEmpty()) {
             throw new ContractChangeBusinessException("变更函中未读取到可解析文本");
         }
-        List<Integer> headingIndexes = headingIndexes(blocks, documentType);
+        List<Integer> headingIndexes = headingIndexes(blocks);
         if (headingIndexes.isEmpty()) {
             throw new ContractChangeBusinessException("变更函中未识别到变更条款标题");
         }
@@ -73,7 +73,7 @@ public class ChangeDocumentExtractionService {
             changes.add(extractChange(changes.size() + 1, blocks.get(headingIndex).text,
                     segment, resultMode, warnings));
         }
-        return new ContractCompareResponse(changes.size(), changes, warnings, documentType);
+        return new ContractCompareResponse(changes.size(), changes, warnings);
     }
 
     private List<TextBlock> readBlocks(Document document) {
@@ -136,15 +136,12 @@ public class ChangeDocumentExtractionService {
         return text.toString();
     }
 
-    private List<Integer> headingIndexes(List<TextBlock> blocks,
-                                         ChangeDocumentType documentType) {
+    private List<Integer> headingIndexes(List<TextBlock> blocks) {
         List<Integer> indexes = new ArrayList<Integer>();
-        boolean allowSpecial = documentType == ChangeDocumentType.SUPPLEMENTAL_AGREEMENT
-                || documentType == ChangeDocumentType.INQUIRY_LETTER;
         for (int index = 0; index < blocks.size(); index++) {
             String text = blocks.get(index).text;
             if (COMMON_HEADING.matcher(text).matches()
-                    || allowSpecial && SPECIAL_HEADING.matcher(text).matches()) {
+                    || SPECIAL_HEADING.matcher(text).matches()) {
                 indexes.add(index);
             }
         }
@@ -219,8 +216,12 @@ public class ChangeDocumentExtractionService {
             return new ExtractedContent(join(segment), null);
         }
 
-        String oldContent = join(segment.subList(0, markerIndex));
         String markerText = segment.get(markerIndex).text;
+        String markerPrefix = markerText.substring(0, marker.start()).trim();
+        if (EXECUTION_DATE_PREFIX.matcher(markerPrefix).matches()) {
+            markerPrefix = "";
+        }
+        String oldContent = append(join(segment.subList(0, markerIndex)), markerPrefix);
         String sameBlockNew = markerText.substring(marker.end()).trim();
         String newContent = sameBlockNew;
         if (newContent.isEmpty() && markerIndex + 1 < segment.size()) {
@@ -233,6 +234,16 @@ public class ChangeDocumentExtractionService {
             warnings.add("第" + sequence + "个变更标题未提取到变更后内容，请人工复核");
         }
         return new ExtractedContent(oldContent, newContent);
+    }
+
+    private String append(String first, String second) {
+        if (first.isEmpty()) {
+            return second;
+        }
+        if (second.isEmpty()) {
+            return first;
+        }
+        return first + '\n' + second;
     }
 
     private String targetReference(String heading) {

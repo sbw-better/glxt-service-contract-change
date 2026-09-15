@@ -15,21 +15,11 @@ public class ContractCompareResponse implements Serializable {
     private int totalChanges;
     private List<ClauseChange> changes;
     private List<String> warnings;
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    private ContractCompareRequest.ChangeDocumentType changeDocumentType;
-
     public ContractCompareResponse(int totalChanges, List<ClauseChange> changes,
                                    List<String> warnings) {
-        this(totalChanges, changes, warnings, null);
-    }
-
-    public ContractCompareResponse(int totalChanges, List<ClauseChange> changes,
-                                   List<String> warnings,
-                                   ContractCompareRequest.ChangeDocumentType changeDocumentType) {
         this.totalChanges = totalChanges;
         this.changes = changes;
         this.warnings = warnings;
-        this.changeDocumentType = changeDocumentType;
     }
 
     /** 一条完整条款变更。 */
