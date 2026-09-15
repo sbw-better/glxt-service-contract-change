@@ -4,6 +4,7 @@ import com.aspose.words.Document;
 import com.aspose.words.DocumentBuilder;
 import com.citics.glxt.contractchange.contractcompare.config.ContractCompareProperties;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeDetail;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangedParagraph;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseChange;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.Clause;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.Parsed;
@@ -35,7 +36,7 @@ public class ContractStructureParserTest {
         builder.writeln("3.2.1");
         builder.writeln("尾款应在验收后支付。");
 
-        Parsed parsed = new ContractStructureParser().parse(document, "NEW");
+        Parsed parsed = new ContractStructureParser().parse(document);
 
         assertEquals(5, parsed.getClauses().size());
         Clause preamble = parsed.getClauses().get(0);
@@ -53,19 +54,21 @@ public class ContractStructureParserTest {
     @Test
     public void shouldLocateDetailedAmountChangeInsideFlattenedTable() throws Exception {
         ContractStructureParser parser = new ContractStructureParser();
-        Parsed oldContract = parser.parse(tableDocument("100万元"), "OLD");
-        Parsed newContract = parser.parse(tableDocument("120万元"), "NEW");
+        Parsed oldContract = parser.parse(tableDocument("100万元"));
+        Parsed newContract = parser.parse(tableDocument("120万元"));
         ClauseComparisonEngine engine = new ClauseComparisonEngine(new ContractCompareProperties());
 
         List<ClauseChange> changes = engine.merge(oldContract, newContract,
                 engine.match(oldContract, newContract));
 
         assertEquals(1, changes.size());
-        ChangeDetail detail = changes.get(0).getChangeDetails().get(0);
+        assertEquals(1, changes.get(0).getChangedParagraphs().size());
+        ChangedParagraph paragraph = changes.get(0).getChangedParagraphs().get(0);
+        ChangeDetail detail = paragraph.getChangeDetails().get(0);
         assertEquals("100", detail.getOldText());
         assertEquals("120", detail.getNewText());
-        assertEquals("100", changes.get(0).getOldContent().substring(detail.getOldStart(), detail.getOldEnd()));
-        assertEquals("120", changes.get(0).getNewContent().substring(detail.getNewStart(), detail.getNewEnd()));
+        assertTrue(paragraph.getOldContent().contains("合同金额 | 100万元"));
+        assertTrue(paragraph.getNewContent().contains("合同金额 | 120万元"));
     }
 
     private Document tableDocument(String amount) throws Exception {

@@ -40,20 +40,6 @@ final class ContractCompareText {
         return value.toString();
     }
 
-    static String subtreeContent(Clause clause) {
-        StringBuilder value = new StringBuilder(ownContent(clause));
-        for (Clause child : clause.getChildren()) {
-            String childText = subtreeContent(child);
-            if (!childText.isEmpty()) {
-                if (value.length() > 0) {
-                    value.append('\n');
-                }
-                value.append(childText);
-            }
-        }
-        return value.toString();
-    }
-
     static String comparableContent(Clause clause) {
         String content = ownContent(clause);
         if (clause.getClauseNo() != null && !clause.getClauseNo().isEmpty()) {

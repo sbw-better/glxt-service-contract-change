@@ -7,9 +7,12 @@ import com.citics.glxt.contractchange.contractcompare.aspose.AsposeCompareServic
 import com.citics.glxt.contractchange.contractcompare.config.ContractCompareProperties;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangedParagraph;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeType;
 import org.junit.Test;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 
 import static org.junit.Assert.assertEquals;
@@ -39,10 +42,41 @@ public class ContractCompareServiceTest {
 
         assertEquals(1, response.getTotalChanges());
         assertEquals(ChangeType.MODIFIED, response.getChanges().get(0).getChangeType());
-        assertTrue(response.getChanges().get(0).getOldContent().contains("100万元"));
-        assertTrue(response.getChanges().get(0).getNewContent().contains("120万元"));
-        assertEquals("100", response.getChanges().get(0).getChangeDetails().get(0).getOldText());
-        assertEquals("120", response.getChanges().get(0).getChangeDetails().get(0).getNewText());
+        ChangedParagraph paragraph = response.getChanges().get(0).getChangedParagraphs().get(0);
+        assertTrue(paragraph.getOldContent().contains("100万元"));
+        assertTrue(paragraph.getNewContent().contains("120万元"));
+        assertEquals("100", paragraph.getChangeDetails().get(0).getOldText());
+        assertEquals("120", paragraph.getChangeDetails().get(0).getNewText());
+    }
+
+    @Test
+    public void shouldExportComparisonAsReadableExcel() throws Exception {
+        SftpContractFileLoader loader = mock(SftpContractFileLoader.class);
+        when(loader.load("/old.docx")).thenReturn(document(
+                "第二条 合同金额", "本合同总金额为人民币100万元。"));
+        when(loader.load("/new.docx")).thenReturn(document(
+                "第二条 合同金额", "本合同总金额为人民币120万元。"));
+        ContractCompareService service = new ContractCompareService(loader,
+                new AsposeCompareService(), new ContractStructureParser(),
+                new ClauseComparisonEngine(new ContractCompareProperties()));
+        ContractCompareRequest request = new ContractCompareRequest();
+        request.setOldFileGetPath("/old.docx");
+        request.setNewFileGetPath("/new.docx");
+
+        byte[] excel = service.exportExcel(request);
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(excel))) {
+            assertEquals("比对结果", workbook.getSheetAt(0).getSheetName());
+            assertEquals("条款编号", workbook.getSheetAt(0).getRow(1).getCell(1).getStringCellValue());
+            assertEquals("第二条", workbook.getSheetAt(0).getRow(2).getCell(1).getStringCellValue());
+            assertEquals("修改", workbook.getSheetAt(0).getRow(2).getCell(4).getStringCellValue());
+            assertEquals("本合同总金额为人民币100万元。",
+                    workbook.getSheetAt(0).getRow(2).getCell(6).getStringCellValue());
+            assertEquals("本合同总金额为人民币120万元。",
+                    workbook.getSheetAt(0).getRow(2).getCell(7).getStringCellValue());
+            assertEquals("替换：100 → 120",
+                    workbook.getSheetAt(0).getRow(2).getCell(8).getStringCellValue());
+        }
     }
 
     private byte[] document(String... paragraphs) throws Exception {

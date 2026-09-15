@@ -4,6 +4,8 @@ import com.citics.glxt.common.handler.GlobalExceptionHandler;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeDetail;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangedParagraph;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeType;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseChange;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.DetailType;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareService;
@@ -19,6 +21,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -65,12 +69,13 @@ public class ContractCompareControllerTest {
         detail.setDetailType(DetailType.REPLACED);
         detail.setOldText("100");
         detail.setNewText("120");
-        detail.setOldStart(0);
-        detail.setOldEnd(3);
-        detail.setNewStart(0);
-        detail.setNewEnd(3);
         ClauseChange change = new ClauseChange();
-        change.setChangeDetails(Collections.singletonList(detail));
+        ChangedParagraph paragraph = new ChangedParagraph();
+        paragraph.setParagraphChangeType(ChangeType.MODIFIED);
+        paragraph.setOldContent("金额100万元");
+        paragraph.setNewContent("金额120万元");
+        paragraph.setChangeDetails(Collections.singletonList(detail));
+        change.setChangedParagraphs(Collections.singletonList(paragraph));
         when(service.compare(any())).thenReturn(new ContractCompareResponse(1,
                 Collections.singletonList(change), Collections.emptyList()));
 
@@ -78,9 +83,41 @@ public class ContractCompareControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"oldFileGetPath\":\"/old.docx\",\"newFileGetPath\":\"/new.docx\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.changes[0].changeDetails[0].detailType").value("REPLACED"))
-                .andExpect(jsonPath("$.data.changes[0].changeDetails[0].oldText").value("100"))
-                .andExpect(jsonPath("$.data.changes[0].oldBlocks").doesNotExist())
-                .andExpect(jsonPath("$.data.changes[0].newBlocks").doesNotExist());
+                .andExpect(jsonPath("$.data.changes[0].changedParagraphs[0].changeDetails[0].detailType").value("REPLACED"))
+                .andExpect(jsonPath("$.data.changes[0].changedParagraphs[0].changeDetails[0].oldText").value("100"))
+                .andExpect(jsonPath("$.data.changes[0].changedParagraphs[0].paragraphChangeType").value("MODIFIED"))
+                .andExpect(jsonPath("$.data.changes[0].clauseId").doesNotExist())
+                .andExpect(jsonPath("$.data.changes[0].parentClauseId").doesNotExist())
+                .andExpect(jsonPath("$.data.changes[0].level").doesNotExist())
+                .andExpect(jsonPath("$.data.changes[0].oldClauseNo").doesNotExist())
+                .andExpect(jsonPath("$.data.changes[0].newClauseNo").doesNotExist())
+                .andExpect(jsonPath("$.data.changes[0].oldContent").doesNotExist())
+                .andExpect(jsonPath("$.data.changes[0].newContent").doesNotExist())
+                .andExpect(jsonPath("$.data.changes[0].changeDetails").doesNotExist())
+                .andExpect(jsonPath("$.data.changes[0].oldIndex").doesNotExist())
+                .andExpect(jsonPath("$.data.changes[0].newIndex").doesNotExist())
+                .andExpect(jsonPath("$.data.changes[0].changedParagraphs[0].contentType").doesNotExist())
+                .andExpect(jsonPath("$.data.changes[0].changedParagraphs[0].oldParagraphIndex").doesNotExist())
+                .andExpect(jsonPath("$.data.changes[0].changedParagraphs[0].newParagraphIndex").doesNotExist())
+                .andExpect(jsonPath("$.data.changes[0].changedParagraphs[0].oldStart").doesNotExist())
+                .andExpect(jsonPath("$.data.changes[0].changedParagraphs[0].changeDetails[0].oldStart").doesNotExist());
+    }
+
+    @Test
+    public void shouldDownloadComparisonExcel() throws Exception {
+        byte[] excel = new byte[]{0x50, 0x4B, 0x03, 0x04};
+        when(service.exportExcel(any())).thenReturn(excel);
+
+        mockMvc.perform(post("/service/contract-compare/export")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"oldFileGetPath\":\"/old.docx\",\"newFileGetPath\":\"/new.docx\"}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        "attachment; filename=contract-compare-result.xlsx"))
+                .andExpect(content().contentType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .andExpect(content().bytes(excel));
+
+        verify(service).exportExcel(any(ContractCompareRequest.class));
     }
 }

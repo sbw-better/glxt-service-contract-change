@@ -3,6 +3,7 @@ package com.citics.glxt.contractchange.contractcompare.service;
 import com.citics.glxt.contractchange.contractcompare.config.ContractCompareProperties;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeType;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeDetail;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangedParagraph;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseChange;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.DetailType;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.Clause;
@@ -29,6 +30,13 @@ import java.util.regex.Pattern;
 @Service
 public class ClauseComparisonEngine {
     private static final int MAX_DIFF_TOKENS = 2000;
+    private static final Pattern SEMANTIC_VALUE = Pattern.compile(
+            "(?:[0-9]{4}[-/][0-9]{1,2}(?:[-/][0-9]{1,2})?)"
+                    + "|(?:[0-9]{4}年[0-9]{1,2}月(?:[0-9]{1,2}日)?)"
+                    + "|(?:[0-9]+(?:\\.[0-9]+)?[-~～—–至][0-9]+(?:\\.[0-9]+)?(?:个月|月|年|日|天)?)"
+                    + "|(?:[0-9]{1,3}(?:,[0-9]{3})+(?:\\.[0-9]+)?[%％]?)"
+                    + "|(?:[0-9]+(?:\\.[0-9]+)?[%％])"
+                    + "|(?:[vV]?[0-9]+(?:\\.[0-9]+){1,3})");
     private final ContractCompareProperties properties;
 
     public ClauseComparisonEngine(ContractCompareProperties properties) {
@@ -47,9 +55,11 @@ public class ClauseComparisonEngine {
             warnings.add("结构化文本存在差异，但Aspose未生成Revision，请人工复核");
         }
         for (ClauseChange change : changes) {
-            if (change.getChangeType() == ChangeType.MODIFIED
-                    && (change.getChangeDetails() == null || change.getChangeDetails().isEmpty())) {
-                warnings.add("条款" + displayName(change) + "的具体文字差异过长或无法可靠生成，请结合完整内容复核");
+            if (change.getChangeType() == ChangeType.MODIFIED && hasMissingDetails(change)) {
+                warnings.add("条款" + displayName(change) + "的具体文字差异无法可靠生成，请结合变化段落复核");
+            } else if (change.getChangeType() == ChangeType.MODIFIED
+                    && hasWholeParagraphReplacement(change)) {
+                warnings.add("条款" + displayName(change) + "存在无法可靠细分的变化，已按整段替换返回");
             }
         }
         return new Analysis(changes, warnings);
@@ -247,50 +257,33 @@ public class ClauseComparisonEngine {
 
     private ClauseChange modified(Clause oldClause, Clause newClause) {
         ClauseChange change = base(newClause);
-        change.setOldClauseNo(oldClause.getClauseNo());
-        change.setNewClauseNo(newClause.getClauseNo());
         change.setChangeType(ChangeType.MODIFIED);
-        String oldContent = ContractCompareText.ownContent(oldClause);
-        String newContent = ContractCompareText.ownContent(newClause);
-        change.setOldContent(oldContent);
-        change.setNewContent(newContent);
-        change.setChangeDetails(diffDetails(oldContent, newContent,
+        List<PartSpan> oldParts = contentParts(oldClause, false);
+        List<PartSpan> newParts = contentParts(newClause, false);
+        change.setChangedParagraphs(changedParagraphs(oldParts, newParts,
                 oldClause.getClauseNo(), newClause.getClauseNo()));
-        change.setOldIndex(oldClause.getOrder());
-        change.setNewIndex(newClause.getOrder());
         return change;
     }
 
     private ClauseChange added(Clause clause) {
         ClauseChange change = base(clause);
-        change.setNewClauseNo(clause.getClauseNo());
         change.setChangeType(ChangeType.ADDED);
-        String newContent = ContractCompareText.subtreeContent(clause);
-        change.setNewContent(newContent);
-        change.setChangeDetails(singleDetail(DetailType.INSERTED, null, newContent));
-        change.setNewIndex(clause.getOrder());
+        change.setChangedParagraphs(oneSidedParagraphs(null, contentParts(clause, true)));
         return change;
     }
 
     private ClauseChange deleted(Clause clause) {
         ClauseChange change = base(clause);
-        change.setOldClauseNo(clause.getClauseNo());
         change.setChangeType(ChangeType.DELETED);
-        String oldContent = ContractCompareText.subtreeContent(clause);
-        change.setOldContent(oldContent);
-        change.setChangeDetails(singleDetail(DetailType.DELETED, oldContent, null));
-        change.setOldIndex(clause.getOrder());
+        change.setChangedParagraphs(oneSidedParagraphs(contentParts(clause, true), null));
         return change;
     }
 
     private ClauseChange base(Clause clause) {
         ClauseChange change = new ClauseChange();
-        change.setClauseId(clause.getClauseId());
-        change.setParentClauseId(clause.getParentClauseId());
         change.setClauseNo(clause.getClauseNo());
         change.setClauseTitle(clause.getTitle());
         change.setParentClauseNo(clause.getParentClauseNo());
-        change.setLevel(clause.getLevel());
         return change;
     }
 
@@ -320,7 +313,41 @@ public class ClauseComparisonEngine {
         if (change.getClauseNo() != null && !change.getClauseNo().isEmpty()) {
             return change.getClauseNo();
         }
-        return "位置" + (change.getNewIndex() != null ? change.getNewIndex() : change.getOldIndex());
+        return change.getClauseTitle() == null || change.getClauseTitle().isEmpty()
+                ? "未编号条款" : change.getClauseTitle();
+    }
+
+    private boolean hasMissingDetails(ClauseChange change) {
+        if (change.getChangedParagraphs() == null || change.getChangedParagraphs().isEmpty()) {
+            return true;
+        }
+        for (ChangedParagraph paragraph : change.getChangedParagraphs()) {
+            if (paragraph.getChangeDetails() == null || paragraph.getChangeDetails().isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasWholeParagraphReplacement(ClauseChange change) {
+        for (ChangedParagraph paragraph : change.getChangedParagraphs()) {
+            if (paragraph.getParagraphChangeType() != ChangeType.MODIFIED
+                    || paragraph.getChangeDetails() == null
+                    || paragraph.getChangeDetails().size() != 1) {
+                continue;
+            }
+            ChangeDetail detail = paragraph.getChangeDetails().get(0);
+            if (detail.getDetailType() == DetailType.REPLACED
+                    && equalsText(paragraph.getOldContent(), detail.getOldText())
+                    && equalsText(paragraph.getNewContent(), detail.getNewText())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean equalsText(String left, String right) {
+        return left == null ? right == null : left.equals(right);
     }
 
     private List<ChangeDetail> singleDetail(DetailType type, String oldText, String newText) {
@@ -328,13 +355,9 @@ public class ClauseComparisonEngine {
         detail.setDetailType(type);
         if (oldText != null) {
             detail.setOldText(oldText);
-            detail.setOldStart(0);
-            detail.setOldEnd(oldText.length());
         }
         if (newText != null) {
             detail.setNewText(newText);
-            detail.setNewStart(0);
-            detail.setNewEnd(newText.length());
         }
         List<ChangeDetail> details = new ArrayList<ChangeDetail>();
         details.add(detail);
@@ -387,7 +410,11 @@ public class ClauseComparisonEngine {
                 continue;
             }
             int end = index + Character.charCount(codePoint);
-            if (isAsciiLetter(codePoint)) {
+            Matcher semantic = SEMANTIC_VALUE.matcher(content);
+            semantic.region(index, content.length());
+            if (semantic.lookingAt()) {
+                end = semantic.end();
+            } else if (isAsciiLetter(codePoint)) {
                 while (end < content.length() && isAsciiWordPart(content.codePointAt(end))) {
                     end += Character.charCount(content.codePointAt(end));
                 }
@@ -420,6 +447,139 @@ public class ClauseComparisonEngine {
     private boolean isNumberPart(int codePoint) {
         return Character.isDigit(codePoint) || codePoint == '.' || codePoint == ','
                 || codePoint == '%' || codePoint == '％';
+    }
+
+    private List<PartSpan> contentParts(Clause clause, boolean includeChildren) {
+        List<PartSpan> spans = new ArrayList<PartSpan>();
+        appendContent(clause, includeChildren, spans);
+        return spans;
+    }
+
+    private void appendContent(Clause clause, boolean includeChildren,
+                               List<PartSpan> spans) {
+        for (String part : clause.getContentParts()) {
+            String text = ContractCompareText.cleanDisplayText(part);
+            if (text.isEmpty()) {
+                continue;
+            }
+            spans.add(new PartSpan(text, spans.size() + 1));
+        }
+        if (includeChildren) {
+            for (Clause child : clause.getChildren()) {
+                appendContent(child, true, spans);
+            }
+        }
+    }
+
+    private List<ChangedParagraph> changedParagraphs(List<PartSpan> oldParts,
+                                                     List<PartSpan> newParts,
+                                                     String oldClauseNo, String newClauseNo) {
+        int[][] cost = new int[oldParts.size() + 1][newParts.size() + 1];
+        for (int oldIndex = 0; oldIndex <= oldParts.size(); oldIndex++) {
+            cost[oldIndex][0] = oldIndex;
+        }
+        for (int newIndex = 0; newIndex <= newParts.size(); newIndex++) {
+            cost[0][newIndex] = newIndex;
+        }
+        for (int oldIndex = 1; oldIndex <= oldParts.size(); oldIndex++) {
+            for (int newIndex = 1; newIndex <= newParts.size(); newIndex++) {
+                boolean equal = partKey(oldParts.get(oldIndex - 1), oldClauseNo)
+                        .equals(partKey(newParts.get(newIndex - 1), newClauseNo));
+                int replace = cost[oldIndex - 1][newIndex - 1] + (equal ? 0 : 1);
+                int delete = cost[oldIndex - 1][newIndex] + 1;
+                int insert = cost[oldIndex][newIndex - 1] + 1;
+                cost[oldIndex][newIndex] = Math.min(replace, Math.min(delete, insert));
+            }
+        }
+
+        int oldIndex = oldParts.size();
+        int newIndex = newParts.size();
+        List<PartEdit> reversed = new ArrayList<PartEdit>();
+        while (oldIndex > 0 || newIndex > 0) {
+            if (oldIndex > 0 && newIndex > 0) {
+                PartSpan oldPart = oldParts.get(oldIndex - 1);
+                PartSpan newPart = newParts.get(newIndex - 1);
+                boolean equal = partKey(oldPart, oldClauseNo).equals(partKey(newPart, newClauseNo));
+                int diagonal = cost[oldIndex - 1][newIndex - 1] + (equal ? 0 : 1);
+                if (cost[oldIndex][newIndex] == diagonal) {
+                    reversed.add(new PartEdit(equal ? PartEditType.EQUAL : PartEditType.MODIFIED,
+                            oldPart, newPart));
+                    oldIndex--;
+                    newIndex--;
+                    continue;
+                }
+            }
+            if (newIndex > 0 && cost[oldIndex][newIndex] == cost[oldIndex][newIndex - 1] + 1) {
+                reversed.add(new PartEdit(PartEditType.ADDED, null, newParts.get(--newIndex)));
+            } else {
+                reversed.add(new PartEdit(PartEditType.DELETED, oldParts.get(--oldIndex), null));
+            }
+        }
+        Collections.reverse(reversed);
+        List<ChangedParagraph> result = new ArrayList<ChangedParagraph>();
+        for (PartEdit edit : reversed) {
+            if (edit.type != PartEditType.EQUAL) {
+                result.add(toChangedParagraph(edit, oldClauseNo, newClauseNo));
+            }
+        }
+        return result;
+    }
+
+    private String partKey(PartSpan part, String clauseNo) {
+        String text = part.text;
+        if (part.index == 1 && clauseNo != null && !clauseNo.isEmpty()) {
+            int start = contentStart(text, clauseNo);
+            text = text.substring(start);
+        }
+        return ContractCompareText.normalize(text);
+    }
+
+    private List<ChangedParagraph> oneSidedParagraphs(List<PartSpan> oldParts,
+                                                       List<PartSpan> newParts) {
+        List<ChangedParagraph> result = new ArrayList<ChangedParagraph>();
+        if (oldParts != null) {
+            for (PartSpan part : oldParts) {
+                result.add(toChangedParagraph(new PartEdit(PartEditType.DELETED, part, null), null, null));
+            }
+        } else if (newParts != null) {
+            for (PartSpan part : newParts) {
+                result.add(toChangedParagraph(new PartEdit(PartEditType.ADDED, null, part), null, null));
+            }
+        }
+        return result;
+    }
+
+    private ChangedParagraph toChangedParagraph(PartEdit edit,
+                                                String oldClauseNo, String newClauseNo) {
+        ChangedParagraph changed = new ChangedParagraph();
+        changed.setParagraphChangeType(edit.type == PartEditType.ADDED
+                ? ChangeType.ADDED : edit.type == PartEditType.DELETED
+                ? ChangeType.DELETED : ChangeType.MODIFIED);
+        if (edit.oldPart != null) {
+            changed.setOldContent(edit.oldPart.text);
+        }
+        if (edit.newPart != null) {
+            changed.setNewContent(edit.newPart.text);
+        }
+        if (edit.type == PartEditType.ADDED) {
+            changed.setChangeDetails(singleDetail(DetailType.INSERTED, null, edit.newPart.text));
+        } else if (edit.type == PartEditType.DELETED) {
+            changed.setChangeDetails(singleDetail(DetailType.DELETED, edit.oldPart.text, null));
+        } else {
+            String detailOldNo = edit.oldPart.index == 1 ? oldClauseNo : null;
+            String detailNewNo = edit.newPart.index == 1 ? newClauseNo : null;
+            if (ContractCompareText.dice(edit.oldPart.text, edit.newPart.text) < 0.35D) {
+                changed.setChangeDetails(singleDetail(DetailType.REPLACED,
+                        edit.oldPart.text, edit.newPart.text));
+            } else {
+                List<ChangeDetail> details = diffDetails(edit.oldPart.text, edit.newPart.text,
+                        detailOldNo, detailNewNo);
+                changed.setChangeDetails(details.isEmpty()
+                        ? singleDetail(DetailType.REPLACED, edit.oldPart.text, edit.newPart.text)
+                        : details);
+            }
+        }
+        return changed;
     }
 
     private List<DiffAtom> myers(List<Token> oldTokens, List<Token> newTokens) {
@@ -525,13 +685,9 @@ public class ClauseComparisonEngine {
                 detail.setDetailType(DetailType.DELETED);
             }
             if (firstOld != null) {
-                detail.setOldStart(firstOld.start);
-                detail.setOldEnd(lastOld.end);
                 detail.setOldText(oldContent.substring(firstOld.start, lastOld.end));
             }
             if (firstNew != null) {
-                detail.setNewStart(firstNew.start);
-                detail.setNewEnd(lastNew.end);
                 detail.setNewText(newContent.substring(firstNew.start, lastNew.end));
             }
             details.add(detail);
@@ -645,6 +801,32 @@ public class ClauseComparisonEngine {
 
     private enum EditType {
         EQUAL, INSERTED, DELETED
+    }
+
+    private enum PartEditType {
+        EQUAL, ADDED, DELETED, MODIFIED
+    }
+
+    private static final class PartSpan {
+        private final String text;
+        private final int index;
+
+        private PartSpan(String text, int index) {
+            this.text = text;
+            this.index = index;
+        }
+    }
+
+    private static final class PartEdit {
+        private final PartEditType type;
+        private final PartSpan oldPart;
+        private final PartSpan newPart;
+
+        private PartEdit(PartEditType type, PartSpan oldPart, PartSpan newPart) {
+            this.type = type;
+            this.oldPart = oldPart;
+            this.newPart = newPart;
+        }
     }
 
     private static final class Token {

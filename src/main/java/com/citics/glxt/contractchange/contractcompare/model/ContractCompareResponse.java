@@ -20,37 +20,34 @@ public class ContractCompareResponse implements Serializable {
     @Data
     public static class ClauseChange implements Serializable {
         private static final long serialVersionUID = 1L;
-        private String clauseId;
-        private String parentClauseId;
         private String clauseNo;
         private String clauseTitle;
         private String parentClauseNo;
-        private Integer level;
-        private String oldClauseNo;
-        private String newClauseNo;
         private ChangeType changeType;
-        private String oldContent;
-        private String newContent;
-        private List<ChangeDetail> changeDetails;
-        private Integer oldIndex;
-        private Integer newIndex;
+        private List<ChangedParagraph> changedParagraphs;
     }
 
     public enum ChangeType {
         ADDED, DELETED, MODIFIED
     }
 
-    /** 条款内一处可定位的具体文字变化。 */
+    /** 条款内一个发生变化的段落；表格以阅读顺序文本表示。 */
+    @Data
+    public static class ChangedParagraph implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private ChangeType paragraphChangeType;
+        private String oldContent;
+        private String newContent;
+        private List<ChangeDetail> changeDetails;
+    }
+
+    /** 变化段落内一处具体文字变化。 */
     @Data
     public static class ChangeDetail implements Serializable {
         private static final long serialVersionUID = 1L;
         private DetailType detailType;
         private String oldText;
         private String newText;
-        private Integer oldStart;
-        private Integer oldEnd;
-        private Integer newStart;
-        private Integer newEnd;
     }
 
     public enum DetailType {

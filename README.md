@@ -128,6 +128,7 @@ POST /service/contract-change/predict
 POST /service/contract-change/index/reload
 GET  /service/contract-change/index/status
 POST /service/contract-compare/compare
+POST /service/contract-compare/export
 ```
 
 导入和预测接口必须携带：
@@ -150,9 +151,15 @@ UserId: 实际操作人工号
 
 服务从主备 SFTP 读取原始文件，使用 Aspose.Words 19.9 忽略格式、目录、页眉页脚和批注差异，
 返回按合同条款聚合的 `ADDED`、`DELETED`、`MODIFIED`。只有编号或位置变化时不返回变更。
-每条结果通过 `oldContent`、`newContent` 返回完整条款，并通过 `changeDetails` 返回具体的
-`INSERTED`、`DELETED`、`REPLACED` 文字及其在完整内容中的 UTF-16 起止下标。响应不再返回
-`oldBlocks`、`newBlocks`。该功能不调用 Embedding、不写数据库，也不触发原合同解析落库流程。
+每条结果只返回条款编号、标题、父条款编号、变更类型和 `changedParagraphs`。变化段落通过
+`oldContent`、`newContent` 提供上下文，段落内的 `changeDetails` 返回具体 `INSERTED`、
+`DELETED`、`REPLACED` 文字。响应不返回内部节点标识、条款完整内容、顺序、内容类型或高亮
+下标。日期、百分比、千分位金额、数值区间和版本号会尽量作为完整语义片段返回。该功能不调用
+Embedding、不写数据库，也不触发原合同解析落库流程。
+
+`/service/contract-compare/export` 使用与 `/compare` 相同的 JSON 请求体，直接下载
+`contract-compare-result.xlsx`。主工作表按一个变化段落一行输出条款编号、标题、上级条款、
+条款及段落变更类型、变更前后内容和具体变化；存在匹配或识别提示时额外生成“提示信息”工作表。
 
 预测请求示例：
 

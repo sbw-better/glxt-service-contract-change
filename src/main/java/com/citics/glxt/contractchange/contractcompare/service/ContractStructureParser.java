@@ -31,7 +31,7 @@ public class ContractStructureParser {
     private static final Pattern SIGNATURE_START = Pattern.compile(
             "^(?:（?以下无正文|签署页|签字|盖章|甲方[：:]|乙方[：:]|法定代表人[：:]).*$");
 
-    public Parsed parse(com.aspose.words.Document document, String versionPrefix) throws Exception {
+    public Parsed parse(com.aspose.words.Document document) throws Exception {
         document.updateListLabels();
         Map<Paragraph, Integer> paragraphIndexes = paragraphIndexes(document);
         List<Clause> clauses = new ArrayList<Clause>();
@@ -53,16 +53,16 @@ public class ContractStructureParser {
                     }
                     Heading heading = heading(paragraph, text);
                     if (heading != null) {
-                        current = addClause(clauses, hierarchy, versionPrefix, sequence,
+                        current = addClause(clauses, hierarchy, sequence,
                                 heading.clauseNo, heading.title, heading.level, false);
                     } else if (SIGNATURE_START.matcher(text).matches()) {
                         if (current == null || !"签署信息".equals(current.getTitle())) {
                             hierarchy.clear();
-                            current = addClause(clauses, hierarchy, versionPrefix, sequence,
+                            current = addClause(clauses, hierarchy, sequence,
                                     null, "签署信息", 1, true);
                         }
                     } else if (current == null) {
-                        current = addClause(clauses, hierarchy, versionPrefix, sequence,
+                        current = addClause(clauses, hierarchy, sequence,
                                 null, text.length() <= 30 ? text : "合同主体信息", 1, true);
                     }
                     current.getContentParts().add(text);
@@ -72,7 +72,7 @@ public class ContractStructureParser {
                     }
                 } else if (node.getNodeType() == NodeType.TABLE) {
                     if (current == null) {
-                        current = addClause(clauses, hierarchy, versionPrefix, sequence,
+                        current = addClause(clauses, hierarchy, sequence,
                                 null, "合同表格信息", 1, true);
                     }
                     Table table = (Table) node;
@@ -154,17 +154,17 @@ public class ContractStructureParser {
     }
 
     private Clause addClause(List<Clause> clauses, Deque<Clause> hierarchy,
-                                     String prefix, int[] sequence, String number, String title,
+                                     int[] sequence, String number, String title,
                                      int level, boolean synthetic) {
         while (!hierarchy.isEmpty() && hierarchy.peekLast().getLevel() >= level) {
             hierarchy.removeLast();
         }
         Clause clause = new Clause();
-        clause.setClauseId(prefix + "-" + String.format("%04d", ++sequence[0]));
+        int order = ++sequence[0];
         clause.setClauseNo(number);
         clause.setTitle(title);
         clause.setLevel(level);
-        clause.setOrder(sequence[0]);
+        clause.setOrder(order);
         clause.setSynthetic(synthetic);
         if (!hierarchy.isEmpty()) {
             clause.setParent(hierarchy.peekLast());

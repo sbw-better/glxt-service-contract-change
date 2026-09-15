@@ -18,7 +18,6 @@ public final class ContractCompareDocument {
     @Getter
     @Setter
     static final class Clause {
-        private String clauseId;
         private String clauseNo;
         private String title;
         private int level;
@@ -28,10 +27,6 @@ public final class ContractCompareDocument {
         private final List<String> contentParts = new ArrayList<String>();
         private final List<Clause> children = new ArrayList<Clause>();
         private final Set<Integer> paragraphIndexes = new LinkedHashSet<Integer>();
-
-        String getParentClauseId() {
-            return parent == null ? null : parent.getClauseId();
-        }
 
         String getParentClauseNo() {
             return parent == null ? null : parent.getClauseNo();
