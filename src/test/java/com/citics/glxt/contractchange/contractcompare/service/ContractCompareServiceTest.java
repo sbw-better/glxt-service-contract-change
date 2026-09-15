@@ -136,7 +136,8 @@ public class ContractCompareServiceTest {
     }
 
     @Test
-    public void shouldExtractChangeDocumentAndExportDedicatedColumns() throws Exception {
+    public void shouldIgnoreContextModeForChangeDocumentAndExportEightColumns()
+            throws Exception {
         SftpContractFileLoader loader = mock(SftpContractFileLoader.class);
         when(loader.load("/supplement.docx")).thenReturn(document(
                 "1、《基金合同》第二条“合同金额”约定如下：",
@@ -156,21 +157,18 @@ public class ContractCompareServiceTest {
         assertEquals(1, response.getTotalChanges());
         assertEquals("1、《基金合同》第二条“合同金额”约定如下：",
                 response.getChanges().get(0).getSourceHeading());
-        assertEquals("合同金额为120万元。",
-                response.getChanges().get(0).getContext().getNewContent());
+        assertNull(response.getChanges().get(0).getContext());
 
         byte[] excel = service.exportExcel(request);
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(excel))) {
             assertEquals("提取结果", workbook.getSheetAt(0).getSheetName());
-            assertEquals(10, workbook.getSheetAt(0).getRow(1).getLastCellNum());
+            assertEquals(8, workbook.getSheetAt(0).getRow(1).getLastCellNum());
             assertEquals("来源标题",
                     workbook.getSheetAt(0).getRow(1).getCell(1).getStringCellValue());
             assertEquals("合同金额为100万元。",
                     workbook.getSheetAt(0).getRow(2).getCell(5).getStringCellValue());
             assertEquals("合同金额为120万元。",
                     workbook.getSheetAt(0).getRow(2).getCell(6).getStringCellValue());
-            assertEquals("完整变更前内容",
-                    workbook.getSheetAt(0).getRow(1).getCell(8).getStringCellValue());
         }
 
         request.setResultMode(ResultMode.SIMPLE);

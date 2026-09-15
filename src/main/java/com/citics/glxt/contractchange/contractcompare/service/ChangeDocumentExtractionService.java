@@ -11,12 +11,10 @@ import com.aspose.words.Section;
 import com.aspose.words.Table;
 import com.citics.glxt.common.exception.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.contractcompare.aspose.AsposeCompareService;
-import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.ResultMode;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeType;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangedParagraph;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseChange;
-import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseContext;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -29,7 +27,9 @@ import java.util.regex.Pattern;
 @Service
 public class ChangeDocumentExtractionService {
     private static final Pattern COMMON_HEADING = Pattern.compile(
-            "^\\s*[0-9]+\\s*[、.．]\\s*《基金合同》.+$", Pattern.DOTALL);
+            "^\\s*[0-9]+\\s*[、.．]"
+                    + "(?=.*《基金合同》)(?=.*(?:约定如下|如下约定|增加|新增|删除|修改|变更)).+$",
+            Pattern.DOTALL);
     private static final Pattern SPECIAL_HEADING = Pattern.compile(
             "^\\s*(?:[0-9]+\\s*[、.．]\\s*)?自本(?:协议|函件)的变更执行日起"
                     + "(?=.*《基金合同》)(?=.*(?:增加|新增|删除|修改|变更)).*$",
@@ -51,7 +51,7 @@ public class ChangeDocumentExtractionService {
         this.comparisonEngine = comparisonEngine;
     }
 
-    public ContractCompareResponse extract(byte[] bytes, ResultMode resultMode) {
+    public ContractCompareResponse extract(byte[] bytes) {
         Document document = asposeCompareService.load(bytes);
         List<TextBlock> blocks = readBlocks(document);
         if (blocks.isEmpty()) {
@@ -71,7 +71,7 @@ public class ChangeDocumentExtractionService {
             List<TextBlock> segment = new ArrayList<TextBlock>(
                     blocks.subList(headingIndex + 1, end));
             changes.add(extractChange(changes.size() + 1, blocks.get(headingIndex).text,
-                    segment, resultMode, warnings));
+                    segment, warnings));
         }
         return new ContractCompareResponse(changes.size(), changes, warnings);
     }
@@ -149,13 +149,15 @@ public class ChangeDocumentExtractionService {
     }
 
     private ClauseChange extractChange(int sequence, String heading, List<TextBlock> segment,
-                                       ResultMode resultMode, List<String> warnings) {
+                                       List<String> warnings) {
         ChangeType type = changeType(heading, segment);
         ExtractedContent content;
         if (type == ChangeType.ADDED) {
-            content = new ExtractedContent(null, join(segment));
+            content = new ExtractedContent(null,
+                    logicalContent(segment, sequence, warnings));
         } else if (type == ChangeType.DELETED) {
-            content = new ExtractedContent(join(segment), null);
+            content = new ExtractedContent(
+                    logicalContent(segment, sequence, warnings), null);
         } else {
             content = modifiedContent(segment, sequence, warnings);
         }
@@ -177,9 +179,6 @@ public class ChangeDocumentExtractionService {
         } else {
             change.setChangedParagraphs(Collections.singletonList(
                     comparisonEngine.describeTextChange(type, oldContent, newContent)));
-        }
-        if (resultMode == ResultMode.CONTEXT) {
-            change.setContext(new ClauseContext(oldContent, newContent));
         }
         return change;
     }
@@ -213,7 +212,7 @@ public class ChangeDocumentExtractionService {
         }
         if (markerIndex < 0) {
             warnings.add("第" + sequence + "个变更标题未找到“内容变更如下”标记，请人工复核");
-            return new ExtractedContent(join(segment), null);
+            return new ExtractedContent(logicalContent(segment, sequence, warnings), null);
         }
 
         String markerText = segment.get(markerIndex).text;
@@ -221,12 +220,20 @@ public class ChangeDocumentExtractionService {
         if (EXECUTION_DATE_PREFIX.matcher(markerPrefix).matches()) {
             markerPrefix = "";
         }
-        String oldContent = append(join(segment.subList(0, markerIndex)), markerPrefix);
-        String sameBlockNew = markerText.substring(marker.end()).trim();
-        String newContent = sameBlockNew;
-        if (newContent.isEmpty() && markerIndex + 1 < segment.size()) {
-            newContent = segment.get(markerIndex + 1).text;
+        List<TextBlock> oldBlocks = new ArrayList<TextBlock>(
+                segment.subList(0, markerIndex));
+        if (!markerPrefix.isEmpty()) {
+            oldBlocks.add(new TextBlock(markerPrefix));
         }
+        String oldContent = logicalContent(oldBlocks, sequence, warnings);
+
+        String sameBlockNew = markerText.substring(marker.end()).trim();
+        List<TextBlock> newBlocks = new ArrayList<TextBlock>();
+        if (!sameBlockNew.isEmpty()) {
+            newBlocks.add(new TextBlock(sameBlockNew));
+        }
+        newBlocks.addAll(segment.subList(markerIndex + 1, segment.size()));
+        String newContent = contentAfterMarker(newBlocks, sequence, warnings);
         if (oldContent.isEmpty()) {
             warnings.add("第" + sequence + "个变更标题未提取到变更前内容，请人工复核");
         }
@@ -236,14 +243,87 @@ public class ChangeDocumentExtractionService {
         return new ExtractedContent(oldContent, newContent);
     }
 
-    private String append(String first, String second) {
+    private String logicalContent(List<TextBlock> blocks, int sequence,
+                                  List<String> warnings) {
+        QuotedContent quoted = quotedContent(blocks);
+        if (quoted == null) {
+            return join(blocks);
+        }
+        if (!quoted.closed) {
+            warnings.add("第" + sequence + "个变更内容的双引号未闭合，请人工复核");
+        }
+        return quoted.text;
+    }
+
+    private String contentAfterMarker(List<TextBlock> blocks, int sequence,
+                                      List<String> warnings) {
+        QuotedContent quoted = quotedContent(blocks);
+        if (quoted != null) {
+            if (!quoted.closed) {
+                warnings.add("第" + sequence + "个变更后内容的双引号未闭合，请人工复核");
+            }
+            return quoted.text;
+        }
+        return blocks.isEmpty() ? "" : blocks.get(0).text;
+    }
+
+    private QuotedContent quotedContent(List<TextBlock> blocks) {
+        if (blocks.isEmpty()) {
+            return null;
+        }
+        String first = ContractCompareText.cleanDisplayText(blocks.get(0).text);
         if (first.isEmpty()) {
-            return second;
+            return null;
         }
-        if (second.isEmpty()) {
-            return first;
+        char opening = first.charAt(0);
+        char closing;
+        if (opening == '“') {
+            closing = '”';
+        } else if (opening == '"' || opening == '＂') {
+            closing = opening;
+        } else {
+            return null;
         }
-        return first + '\n' + second;
+
+        StringBuilder text = new StringBuilder();
+        int depth = 0;
+        boolean opened = false;
+        for (TextBlock block : blocks) {
+            String value = ContractCompareText.cleanDisplayText(block.text);
+            int closingIndex = -1;
+            for (int index = 0; index < value.length(); index++) {
+                char current = value.charAt(index);
+                if (opening == closing) {
+                    if (current == opening) {
+                        if (!opened) {
+                            opened = true;
+                            depth = 1;
+                        } else {
+                            depth = 0;
+                            closingIndex = index;
+                            break;
+                        }
+                    }
+                } else if (current == opening) {
+                    opened = true;
+                    depth++;
+                } else if (current == closing && opened) {
+                    depth--;
+                    if (depth == 0) {
+                        closingIndex = index;
+                        break;
+                    }
+                }
+            }
+            if (text.length() > 0) {
+                text.append('\n');
+            }
+            text.append(closingIndex < 0 ? value : value.substring(0, closingIndex + 1));
+            if (closingIndex >= 0) {
+                return new QuotedContent(text.toString(), true);
+            }
+        }
+        return new QuotedContent(text.toString(), false);
     }
 
     private String targetReference(String heading) {
@@ -290,6 +370,16 @@ public class ChangeDocumentExtractionService {
         private ExtractedContent(String oldContent, String newContent) {
             this.oldContent = oldContent;
             this.newContent = newContent;
+        }
+    }
+
+    private static final class QuotedContent {
+        private final String text;
+        private final boolean closed;
+
+        private QuotedContent(String text, boolean closed) {
+            this.text = text;
+            this.closed = closed;
         }
     }
 }

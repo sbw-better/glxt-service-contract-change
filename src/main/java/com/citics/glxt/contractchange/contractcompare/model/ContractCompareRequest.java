@@ -23,7 +23,7 @@ public class ContractCompareRequest implements Serializable {
     @ApiModelProperty(value = "单文件变更函服务器路径，CHANGE_DOCUMENT时必填")
     private String changeFileGetPath;
 
-    @ApiModelProperty(value = "结果模式：SIMPLE仅返回变化段落，CONTEXT额外返回完整条款上下文",
+    @ApiModelProperty(value = "双版本结果模式：SIMPLE仅返回变化段落，CONTEXT额外返回完整条款上下文；单文件模式忽略",
             allowableValues = "SIMPLE, CONTEXT", example = "SIMPLE")
     private ResultMode resultMode = ResultMode.SIMPLE;
 

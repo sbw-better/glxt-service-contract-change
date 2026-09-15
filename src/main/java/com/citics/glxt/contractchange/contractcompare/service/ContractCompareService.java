@@ -51,11 +51,6 @@ public class ContractCompareService {
             "序号", "来源标题", "目标条款", "条款变更类型",
             "段落变更类型", "变更前内容", "变更后内容", "具体变化"
     };
-    private static final String[] CHANGE_DOCUMENT_CONTEXT_HEADERS = new String[]{
-            "序号", "来源标题", "目标条款", "条款变更类型",
-            "段落变更类型", "变更前内容", "变更后内容", "具体变化",
-            "完整变更前内容", "完整变更后内容"
-    };
     private final SftpContractFileLoader fileLoader;
     private final AsposeCompareService asposeCompareService;
     private final ContractStructureParser structureParser;
@@ -88,7 +83,7 @@ public class ContractCompareService {
         ResultMode mode = resultMode(request);
         if (analysisType(request) == AnalysisType.CHANGE_DOCUMENT) {
             byte[] bytes = fileLoader.load(request.getChangeFileGetPath());
-            return extractionService.extract(bytes, mode);
+            return extractionService.extract(bytes);
         }
         byte[] oldBytes = fileLoader.load(request.getOldFileGetPath());
         byte[] newBytes = fileLoader.load(request.getNewFileGetPath());
@@ -119,7 +114,7 @@ public class ContractCompareService {
         try (XSSFWorkbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             if (analysisType(request) == AnalysisType.CHANGE_DOCUMENT) {
-                writeChangeDocumentSheet(workbook, response, mode);
+                writeChangeDocumentSheet(workbook, response);
             } else {
                 writeResultSheet(workbook, response, mode);
             }
@@ -141,11 +136,8 @@ public class ContractCompareService {
     }
 
     private void writeChangeDocumentSheet(XSSFWorkbook workbook,
-                                          ContractCompareResponse response,
-                                          ResultMode mode) {
-        boolean includeContext = mode == ResultMode.CONTEXT;
-        String[] headers = includeContext
-                ? CHANGE_DOCUMENT_CONTEXT_HEADERS : CHANGE_DOCUMENT_SIMPLE_HEADERS;
+                                          ContractCompareResponse response) {
+        String[] headers = CHANGE_DOCUMENT_SIMPLE_HEADERS;
         Sheet sheet = workbook.createSheet("提取结果");
         CellStyle titleStyle = titleStyle(workbook);
         CellStyle headerStyle = headerStyle(workbook);
@@ -172,29 +164,27 @@ public class ContractCompareService {
             List<ChangedParagraph> paragraphs = change.getChangedParagraphs();
             if (paragraphs == null || paragraphs.isEmpty()) {
                 rowNumber = writeChangeDocumentRow(sheet, rowNumber, sequence++,
-                        change, null, contentStyle, includeContext);
+                        change, null, contentStyle);
                 continue;
             }
             for (ChangedParagraph paragraph : paragraphs) {
                 rowNumber = writeChangeDocumentRow(sheet, rowNumber, sequence++,
-                        change, paragraph, contentStyle, includeContext);
+                        change, paragraph, contentStyle);
             }
         }
 
         sheet.createFreezePane(0, 2);
         sheet.setAutoFilter(new CellRangeAddress(1, Math.max(1, rowNumber - 1),
                 0, headers.length - 1));
-        int[] widths = includeContext
-                ? new int[]{8, 55, 45, 14, 14, 60, 60, 60, 80, 80}
-                : new int[]{8, 55, 45, 14, 14, 60, 60, 60};
+        int[] widths = new int[]{8, 55, 45, 14, 14, 60, 60, 60};
         for (int column = 0; column < widths.length; column++) {
             sheet.setColumnWidth(column, widths[column] * 256);
         }
     }
 
     private int writeChangeDocumentRow(Sheet sheet, int rowNumber, int sequence,
-                                       ClauseChange change, ChangedParagraph paragraph, CellStyle style,
-                                       boolean includeContext) {
+                                       ClauseChange change, ChangedParagraph paragraph,
+                                       CellStyle style) {
         Row row = sheet.createRow(rowNumber);
         row.setHeightInPoints(48);
         setCell(row, 0, String.valueOf(sequence), style);
@@ -207,12 +197,6 @@ public class ContractCompareService {
         setCell(row, 6, paragraph == null ? null : paragraph.getNewContent(), style);
         setCell(row, 7, paragraph == null ? null
                 : detailText(paragraph.getChangeDetails()), style);
-        if (includeContext) {
-            setCell(row, 8, change.getContext() == null ? null
-                    : change.getContext().getOldContent(), style);
-            setCell(row, 9, change.getContext() == null ? null
-                    : change.getContext().getNewContent(), style);
-        }
         return rowNumber + 1;
     }
 

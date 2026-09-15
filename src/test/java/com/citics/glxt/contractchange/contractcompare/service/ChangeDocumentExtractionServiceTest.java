@@ -7,7 +7,6 @@ import com.aspose.words.Shape;
 import com.aspose.words.ShapeType;
 import com.citics.glxt.contractchange.contractcompare.aspose.AsposeCompareService;
 import com.citics.glxt.contractchange.contractcompare.config.ContractCompareProperties;
-import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.ResultMode;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeType;
 import org.junit.Before;
@@ -41,7 +40,7 @@ public class ChangeDocumentExtractionServiceTest {
                 "新增信息披露义务。"
         );
 
-        ContractCompareResponse response = service.extract(bytes, ResultMode.CONTEXT);
+        ContractCompareResponse response = service.extract(bytes);
 
         assertEquals(2, response.getTotalChanges());
         assertEquals(ChangeType.MODIFIED, response.getChanges().get(0).getChangeType());
@@ -53,8 +52,7 @@ public class ChangeDocumentExtractionServiceTest {
                 .getChangeDetails().get(0).getOldText());
         assertTrue(response.getChanges().get(0).getTargetClauseReference()
                 .startsWith("《基金合同》第九节"));
-        assertEquals("本合同总金额为人民币120万元。",
-                response.getChanges().get(0).getContext().getNewContent());
+        assertNull(response.getChanges().get(0).getContext());
 
         assertEquals(ChangeType.ADDED, response.getChanges().get(1).getChangeType());
         assertNull(response.getChanges().get(1).getChangedParagraphs().get(0).getOldContent());
@@ -69,7 +67,7 @@ public class ChangeDocumentExtractionServiceTest {
                 "本基金投资于单一资产的资金不得超过基金净资产的25%。"
         );
 
-        ContractCompareResponse response = service.extract(bytes, ResultMode.SIMPLE);
+        ContractCompareResponse response = service.extract(bytes);
 
         assertEquals(1, response.getTotalChanges());
         assertEquals(ChangeType.DELETED, response.getChanges().get(0).getChangeType());
@@ -94,7 +92,7 @@ public class ChangeDocumentExtractionServiceTest {
         builder.endRow();
         builder.endTable();
 
-        ContractCompareResponse response = service.extract(save(document), ResultMode.SIMPLE);
+        ContractCompareResponse response = service.extract(save(document));
 
         assertEquals(1, response.getTotalChanges());
         assertEquals(ChangeType.ADDED, response.getChanges().get(0).getChangeType());
@@ -107,8 +105,7 @@ public class ChangeDocumentExtractionServiceTest {
     public void shouldKeepRecognizedItemAndWarnWhenMarkerIsMissing() throws Exception {
         ContractCompareResponse response = service.extract(document(
                         "1、《基金合同》第二十三节“合同的变更”约定如下：",
-                        "原约定内容。"),
-                ResultMode.SIMPLE);
+                        "原约定内容。"));
 
         assertEquals(1, response.getTotalChanges());
         assertEquals(ChangeType.MODIFIED, response.getChanges().get(0).getChangeType());
@@ -128,7 +125,7 @@ public class ChangeDocumentExtractionServiceTest {
         builder.write("文本框中的新增风险提示。");
         builder.moveToDocumentEnd();
 
-        ContractCompareResponse response = service.extract(save(document), ResultMode.SIMPLE);
+        ContractCompareResponse response = service.extract(save(document));
 
         assertTrue(response.getChanges().get(0).getChangedParagraphs().get(0).getNewContent()
                 .contains("文本框中的新增风险提示"));
@@ -138,8 +135,7 @@ public class ChangeDocumentExtractionServiceTest {
     public void shouldApplyExecutionDateHeadingRuleWithoutDocumentType() throws Exception {
         ContractCompareResponse response = service.extract(document(
                         "1、自本函件的变更执行日起，在《基金合同》第一条中增加如下约定：",
-                        "新增内容。"),
-                ResultMode.SIMPLE);
+                        "新增内容。"));
 
         assertEquals(1, response.getTotalChanges());
         assertEquals(ChangeType.ADDED, response.getChanges().get(0).getChangeType());
@@ -151,13 +147,39 @@ public class ChangeDocumentExtractionServiceTest {
     public void shouldKeepOldTextBeforeMarkerInSameParagraph() throws Exception {
         ContractCompareResponse response = service.extract(document(
                         "1、《基金合同》第二条“合同金额”约定如下：",
-                        "合同金额为100万元。上述内容变更如下：合同金额为120万元。"),
-                ResultMode.SIMPLE);
+                        "合同金额为100万元。上述内容变更如下：合同金额为120万元。"));
 
         assertEquals("合同金额为100万元。",
                 response.getChanges().get(0).getChangedParagraphs().get(0).getOldContent());
         assertEquals("合同金额为120万元。",
                 response.getChanges().get(0).getChangedParagraphs().get(0).getNewContent());
+    }
+
+    @Test
+    public void shouldExtractQuotedContentAcrossParagraphsAndHeadingWithPrefix()
+            throws Exception {
+        ContractCompareResponse response = service.extract(document(
+                        "1、《基金合同》第十二部分第（三）条约定如下：",
+                        "“（三）投资策略",
+                        "商品及金融期货的跨期套利。",
+                        "原投资策略说明。”",
+                        "上述内容变更如下：",
+                        "“（三）投资策略",
+                        "商品期货期权及金融期货的跨期套利。",
+                        "新投资策略说明。”",
+                        "2、在《基金合同》“声明与承诺”部分增加如下约定：",
+                        "“新增声明第一段。",
+                        "新增声明第二段。”",
+                        "二、本次变更的后续办理流程。"));
+
+        assertEquals(2, response.getTotalChanges());
+        assertEquals("“（三）投资策略\n商品期货期权及金融期货的跨期套利。\n新投资策略说明。”",
+                response.getChanges().get(0).getChangedParagraphs().get(0).getNewContent());
+        assertEquals(ChangeType.ADDED, response.getChanges().get(1).getChangeType());
+        assertEquals("“新增声明第一段。\n新增声明第二段。”",
+                response.getChanges().get(1).getChangedParagraphs().get(0).getNewContent());
+        assertFalse(response.getChanges().get(1).getChangedParagraphs().get(0)
+                .getNewContent().contains("后续办理流程"));
     }
 
     private byte[] document(String... paragraphs) throws Exception {
