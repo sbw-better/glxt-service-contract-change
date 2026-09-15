@@ -140,15 +140,40 @@ UserId: 实际操作人工号
 该值只透传给模型平台用于审计，不写数据库、不输出到日志。索引重载和状态查询不调用模型，
 因此不要求该请求头。
 
-双版本比较接口不调用模型，也不要求 `UserId`。请求体传入服务器上的修改前、修改后 DOCX 路径：
+合同分析接口不调用模型，也不要求 `UserId`。`analysisType` 控制双版本比较或单文件变更函提取，
+未传或传 `null` 时默认使用 `DOUBLE_VERSION`。
+
+双版本比较请求体传入服务器上的修改前、修改后 DOCX 路径：
 
 ```json
 {
+  "analysisType": "DOUBLE_VERSION",
   "oldFileGetPath": "/合同目录/修改前.docx",
   "newFileGetPath": "/合同目录/修改后.docx",
   "resultMode": "SIMPLE"
 }
 ```
+
+单文件变更函提取请求体传入一份 DOCX 路径和函件类型：
+
+```json
+{
+  "analysisType": "CHANGE_DOCUMENT",
+  "changeFileGetPath": "/合同目录/补充协议.docx",
+  "changeDocumentType": "SUPPLEMENTAL_AGREEMENT",
+  "resultMode": "SIMPLE"
+}
+```
+
+`changeDocumentType` 可选值为：
+
+- `SUPPLEMENTAL_AGREEMENT`：补充协议。
+- `INQUIRY_LETTER`：征询意见函。
+- `NEGOTIATION_LETTER`：协商函。
+
+`DOUBLE_VERSION` 必须提供 `oldFileGetPath`、`newFileGetPath`；`CHANGE_DOCUMENT` 必须提供
+`changeFileGetPath`、`changeDocumentType`。非当前模式字段即使存在也不参与处理。非法枚举或缺少
+当前模式必填字段时返回业务码 400。
 
 `resultMode` 可选值为 `SIMPLE`、`CONTEXT`，未传或传 `null` 时默认使用 `SIMPLE`。
 `SIMPLE` 保持精简响应，只返回变化段落；`CONTEXT` 在每条变更中额外返回
@@ -187,10 +212,59 @@ UserId: 实际操作人工号
 完整条款内容仅由 `CONTEXT` 模式的 `context` 提供。日期、百分比、千分位金额、数值区间和版本号会尽量作为完整语义片段返回。该功能不调用
 Embedding、不写数据库，也不触发原合同解析落库流程。
 
+`CHANGE_DOCUMENT` 继续复用 `changes` 和 `changedParagraphs`。每项额外返回
+`sourceHeading`（函件中的原始变更标题）和 `targetClauseReference`（标题中提取的目标条款）：
+
+```json
+{
+  "totalChanges": 1,
+  "changeDocumentType": "SUPPLEMENTAL_AGREEMENT",
+  "changes": [
+    {
+      "clauseNo": null,
+      "clauseTitle": "《基金合同》第二条“合同金额”",
+      "parentClauseNo": null,
+      "changeType": "MODIFIED",
+      "sourceHeading": "1、《基金合同》第二条“合同金额”约定如下：",
+      "targetClauseReference": "《基金合同》第二条“合同金额”",
+      "changedParagraphs": [
+        {
+          "paragraphChangeType": "MODIFIED",
+          "oldContent": "合同金额为100万元。",
+          "newContent": "合同金额为120万元。",
+          "changeDetails": [
+            {"detailType": "REPLACED", "oldText": "100", "newText": "120"}
+          ]
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}
+```
+
+变更函按正文阅读顺序解析可复制文字、Word列表、表格和文本框，不处理图片OCR、页眉页脚、
+批注或签章。三种函件均识别以“阿拉伯数字+顿号或点号+《基金合同》”开头的标题；补充协议和
+征询意见函额外识别包含“自本协议/函件的变更执行日起”的新增、删除或修改标题。当前标题至
+下一标题之间形成一个变更分段：
+
+- 找到“内容变更如下”时，标记前内容为变更前内容，标记后的下一个非空内容块为变更后内容。
+- 标题包含“增加”或“新增”时，分段内容作为新增内容。
+- 标题包含“删除”时，分段内容作为删除前内容。
+- 标题已识别但内容不完整时仍返回该项，并在 `warnings` 中提示人工复核；没有可解析正文或
+  没有识别到任何变更标题时返回业务码 400。
+
+单文件模式同样支持 `SIMPLE` 和 `CONTEXT`；`CONTEXT` 额外返回完整的变更前后逻辑块。
+
 `/service/contract-compare/export` 使用与 `/compare` 相同的 JSON 请求体，直接下载
 `contract-compare-result.xlsx`。主工作表按一个变化段落一行输出条款编号、标题、上级条款、
 条款及段落变更类型、变更前后内容和具体变化；`CONTEXT` 模式额外增加“完整变更前条款”和
 “完整变更后条款”两列。存在匹配或识别提示时额外生成“提示信息”工作表。
+
+`CHANGE_DOCUMENT` 导出文件名为 `contract-change-extract-result.xlsx`，主工作表为“提取结果”，
+按一个变更分段一行输出函件类型、来源标题、目标条款、变更类型、变更前后内容和具体变化；
+`CONTEXT` 额外增加完整变更前后内容两列。Controller 继续通过 `HttpServletResponse` 直接写入
+Excel，方法返回值保持 `void`。
 
 预测请求示例：
 

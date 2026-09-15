@@ -9,13 +9,28 @@ import java.util.List;
 
 /** 合同双版本比较结果。 */
 @Data
-@AllArgsConstructor
 public class ContractCompareResponse implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private int totalChanges;
     private List<ClauseChange> changes;
     private List<String> warnings;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private ContractCompareRequest.ChangeDocumentType changeDocumentType;
+
+    public ContractCompareResponse(int totalChanges, List<ClauseChange> changes,
+                                   List<String> warnings) {
+        this(totalChanges, changes, warnings, null);
+    }
+
+    public ContractCompareResponse(int totalChanges, List<ClauseChange> changes,
+                                   List<String> warnings,
+                                   ContractCompareRequest.ChangeDocumentType changeDocumentType) {
+        this.totalChanges = totalChanges;
+        this.changes = changes;
+        this.warnings = warnings;
+        this.changeDocumentType = changeDocumentType;
+    }
 
     /** 一条完整条款变更。 */
     @Data
@@ -26,6 +41,10 @@ public class ContractCompareResponse implements Serializable {
         private String parentClauseNo;
         private ChangeType changeType;
         private List<ChangedParagraph> changedParagraphs;
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private String sourceHeading;
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private String targetClauseReference;
         @JsonInclude(JsonInclude.Include.NON_NULL)
         private ClauseContext context;
     }

@@ -5,6 +5,8 @@ import com.citics.glxt.common.exception.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.contractcompare.aspose.AsposeCompareService;
 import com.citics.glxt.contractchange.contractcompare.aspose.AsposeCompareService.ComparisonResult;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.AnalysisType;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.ChangeDocumentType;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.ResultMode;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeDetail;
@@ -26,6 +28,7 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.VerticalAlignment;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -45,22 +48,49 @@ public class ContractCompareService {
             "段落变更类型", "变更前内容", "变更后内容", "具体变化",
             "完整变更前条款", "完整变更后条款"
     };
+    private static final String[] CHANGE_DOCUMENT_SIMPLE_HEADERS = new String[]{
+            "序号", "函件类型", "来源标题", "目标条款", "条款变更类型",
+            "段落变更类型", "变更前内容", "变更后内容", "具体变化"
+    };
+    private static final String[] CHANGE_DOCUMENT_CONTEXT_HEADERS = new String[]{
+            "序号", "函件类型", "来源标题", "目标条款", "条款变更类型",
+            "段落变更类型", "变更前内容", "变更后内容", "具体变化",
+            "完整变更前内容", "完整变更后内容"
+    };
     private final SftpContractFileLoader fileLoader;
     private final AsposeCompareService asposeCompareService;
     private final ContractStructureParser structureParser;
     private final ClauseComparisonEngine comparisonEngine;
+    private final ChangeDocumentExtractionService extractionService;
 
+    @Autowired
     public ContractCompareService(SftpContractFileLoader fileLoader,
                                   AsposeCompareService asposeCompareService,
                                   ContractStructureParser structureParser,
-                                  ClauseComparisonEngine comparisonEngine) {
+                                  ClauseComparisonEngine comparisonEngine,
+                                  ChangeDocumentExtractionService extractionService) {
         this.fileLoader = fileLoader;
         this.asposeCompareService = asposeCompareService;
         this.structureParser = structureParser;
         this.comparisonEngine = comparisonEngine;
+        this.extractionService = extractionService;
+    }
+
+    /** 保留核心链路单元测试和直接调用的兼容构造方式。 */
+    public ContractCompareService(SftpContractFileLoader fileLoader,
+                                  AsposeCompareService asposeCompareService,
+                                  ContractStructureParser structureParser,
+                                  ClauseComparisonEngine comparisonEngine) {
+        this(fileLoader, asposeCompareService, structureParser, comparisonEngine,
+                new ChangeDocumentExtractionService(asposeCompareService, comparisonEngine));
     }
 
     public ContractCompareResponse compare(ContractCompareRequest request) {
+        ResultMode mode = resultMode(request);
+        if (analysisType(request) == AnalysisType.CHANGE_DOCUMENT) {
+            byte[] bytes = fileLoader.load(request.getChangeFileGetPath());
+            return extractionService.extract(bytes, request.getChangeDocumentType(), mode);
+        }
         byte[] oldBytes = fileLoader.load(request.getOldFileGetPath());
         byte[] newBytes = fileLoader.load(request.getNewFileGetPath());
         ComparisonResult compared = asposeCompareService.compare(oldBytes, newBytes);
@@ -68,7 +98,7 @@ public class ContractCompareService {
             Parsed oldContract = structureParser.parse(compared.getOldDocument());
             Parsed newContract = structureParser.parse(compared.getNewDocument());
             Analysis analysis = comparisonEngine.analyze(oldContract, newContract, compared.getRevisions());
-            if (resultMode(request) == ResultMode.SIMPLE) {
+            if (mode == ResultMode.SIMPLE) {
                 for (ClauseChange change : analysis.getChanges()) {
                     change.setContext(null);
                 }
@@ -89,7 +119,11 @@ public class ContractCompareService {
         ContractCompareResponse response = compare(request);
         try (XSSFWorkbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            writeResultSheet(workbook, response, mode);
+            if (analysisType(request) == AnalysisType.CHANGE_DOCUMENT) {
+                writeChangeDocumentSheet(workbook, response, mode);
+            } else {
+                writeResultSheet(workbook, response, mode);
+            }
             writeWarningSheet(workbook, response.getWarnings());
             workbook.write(output);
             return output.toByteArray();
@@ -100,6 +134,99 @@ public class ContractCompareService {
 
     private ResultMode resultMode(ContractCompareRequest request) {
         return request.getResultMode() == null ? ResultMode.SIMPLE : request.getResultMode();
+    }
+
+    private AnalysisType analysisType(ContractCompareRequest request) {
+        return request.getAnalysisType() == null
+                ? AnalysisType.DOUBLE_VERSION : request.getAnalysisType();
+    }
+
+    private void writeChangeDocumentSheet(XSSFWorkbook workbook,
+                                          ContractCompareResponse response,
+                                          ResultMode mode) {
+        boolean includeContext = mode == ResultMode.CONTEXT;
+        String[] headers = includeContext
+                ? CHANGE_DOCUMENT_CONTEXT_HEADERS : CHANGE_DOCUMENT_SIMPLE_HEADERS;
+        Sheet sheet = workbook.createSheet("提取结果");
+        CellStyle titleStyle = titleStyle(workbook);
+        CellStyle headerStyle = headerStyle(workbook);
+        CellStyle contentStyle = contentStyle(workbook);
+
+        Row title = sheet.createRow(0);
+        title.setHeightInPoints(28);
+        Cell titleCell = title.createCell(0);
+        titleCell.setCellValue("变更函条款提取结果（条款数：" + response.getTotalChanges() + "）");
+        titleCell.setCellStyle(titleStyle);
+        sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, headers.length - 1));
+
+        Row header = sheet.createRow(1);
+        header.setHeightInPoints(24);
+        for (int column = 0; column < headers.length; column++) {
+            Cell cell = header.createCell(column);
+            cell.setCellValue(headers[column]);
+            cell.setCellStyle(headerStyle);
+        }
+
+        int rowNumber = 2;
+        int sequence = 1;
+        for (ClauseChange change : response.getChanges()) {
+            List<ChangedParagraph> paragraphs = change.getChangedParagraphs();
+            if (paragraphs == null || paragraphs.isEmpty()) {
+                rowNumber = writeChangeDocumentRow(sheet, rowNumber, sequence++, response,
+                        change, null, contentStyle, includeContext);
+                continue;
+            }
+            for (ChangedParagraph paragraph : paragraphs) {
+                rowNumber = writeChangeDocumentRow(sheet, rowNumber, sequence++, response,
+                        change, paragraph, contentStyle, includeContext);
+            }
+        }
+
+        sheet.createFreezePane(0, 2);
+        sheet.setAutoFilter(new CellRangeAddress(1, Math.max(1, rowNumber - 1),
+                0, headers.length - 1));
+        int[] widths = includeContext
+                ? new int[]{8, 18, 55, 45, 14, 14, 60, 60, 60, 80, 80}
+                : new int[]{8, 18, 55, 45, 14, 14, 60, 60, 60};
+        for (int column = 0; column < widths.length; column++) {
+            sheet.setColumnWidth(column, widths[column] * 256);
+        }
+    }
+
+    private int writeChangeDocumentRow(Sheet sheet, int rowNumber, int sequence,
+                                       ContractCompareResponse response, ClauseChange change,
+                                       ChangedParagraph paragraph, CellStyle style,
+                                       boolean includeContext) {
+        Row row = sheet.createRow(rowNumber);
+        row.setHeightInPoints(48);
+        setCell(row, 0, String.valueOf(sequence), style);
+        setCell(row, 1, changeDocumentTypeText(response.getChangeDocumentType()), style);
+        setCell(row, 2, change.getSourceHeading(), style);
+        setCell(row, 3, change.getTargetClauseReference(), style);
+        setCell(row, 4, changeTypeText(change.getChangeType()), style);
+        setCell(row, 5, paragraph == null ? null
+                : changeTypeText(paragraph.getParagraphChangeType()), style);
+        setCell(row, 6, paragraph == null ? null : paragraph.getOldContent(), style);
+        setCell(row, 7, paragraph == null ? null : paragraph.getNewContent(), style);
+        setCell(row, 8, paragraph == null ? null
+                : detailText(paragraph.getChangeDetails()), style);
+        if (includeContext) {
+            setCell(row, 9, change.getContext() == null ? null
+                    : change.getContext().getOldContent(), style);
+            setCell(row, 10, change.getContext() == null ? null
+                    : change.getContext().getNewContent(), style);
+        }
+        return rowNumber + 1;
+    }
+
+    private String changeDocumentTypeText(ChangeDocumentType type) {
+        if (type == ChangeDocumentType.SUPPLEMENTAL_AGREEMENT) {
+            return "补充协议";
+        }
+        if (type == ChangeDocumentType.INQUIRY_LETTER) {
+            return "征询意见函";
+        }
+        return type == ChangeDocumentType.NEGOTIATION_LETTER ? "协商函" : "";
     }
 
     private void writeResultSheet(XSSFWorkbook workbook, ContractCompareResponse response,

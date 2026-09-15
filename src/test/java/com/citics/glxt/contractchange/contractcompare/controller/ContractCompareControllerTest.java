@@ -2,6 +2,7 @@ package com.citics.glxt.contractchange.contractcompare.controller;
 
 import com.citics.glxt.common.handler.GlobalExceptionHandler;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.ChangeDocumentType;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeDetail;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangedParagraph;
@@ -66,6 +67,66 @@ public class ContractCompareControllerTest {
     }
 
     @Test
+    public void shouldTreatExplicitNullAnalysisTypeAsDoubleVersion() throws Exception {
+        when(service.compare(any())).thenReturn(new ContractCompareResponse(0,
+                Collections.emptyList(), Collections.emptyList()));
+
+        mockMvc.perform(post("/service/contract-compare/compare")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"analysisType\":null,\"oldFileGetPath\":\"/old.docx\","
+                        + "\"newFileGetPath\":\"/new.docx\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        verify(service).compare(any(ContractCompareRequest.class));
+    }
+
+    @Test
+    public void shouldAcceptChangeDocumentRequest() throws Exception {
+        when(service.compare(any())).thenReturn(new ContractCompareResponse(0,
+                Collections.emptyList(), Collections.emptyList(),
+                ChangeDocumentType.SUPPLEMENTAL_AGREEMENT));
+
+        mockMvc.perform(post("/service/contract-compare/compare")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"analysisType\":\"CHANGE_DOCUMENT\","
+                        + "\"changeFileGetPath\":\"/supplement.docx\","
+                        + "\"changeDocumentType\":\"SUPPLEMENTAL_AGREEMENT\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.changeDocumentType")
+                        .value("SUPPLEMENTAL_AGREEMENT"));
+
+        verify(service).compare(any(ContractCompareRequest.class));
+    }
+
+    @Test
+    public void shouldRejectMissingChangeDocumentPath() throws Exception {
+        mockMvc.perform(post("/service/contract-compare/compare")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"analysisType\":\"CHANGE_DOCUMENT\","
+                        + "\"changeDocumentType\":\"SUPPLEMENTAL_AGREEMENT\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("变更函文件路径不能为空"));
+
+        verifyZeroInteractions(service);
+    }
+
+    @Test
+    public void shouldRejectMissingChangeDocumentType() throws Exception {
+        mockMvc.perform(post("/service/contract-compare/compare")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"analysisType\":\"CHANGE_DOCUMENT\","
+                        + "\"changeFileGetPath\":\"/supplement.docx\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("变更函类型不能为空"));
+
+        verifyZeroInteractions(service);
+    }
+
+    @Test
     public void shouldExposeDetailedChangesWithoutContentBlocks() throws Exception {
         ChangeDetail detail = new ChangeDetail();
         detail.setDetailType(DetailType.REPLACED);
@@ -99,6 +160,9 @@ public class ContractCompareControllerTest {
                 .andExpect(jsonPath("$.data.changes[0].oldIndex").doesNotExist())
                 .andExpect(jsonPath("$.data.changes[0].newIndex").doesNotExist())
                 .andExpect(jsonPath("$.data.changes[0].context").doesNotExist())
+                .andExpect(jsonPath("$.data.changeDocumentType").doesNotExist())
+                .andExpect(jsonPath("$.data.changes[0].sourceHeading").doesNotExist())
+                .andExpect(jsonPath("$.data.changes[0].targetClauseReference").doesNotExist())
                 .andExpect(jsonPath("$.data.changes[0].changedParagraphs[0].contentType").doesNotExist())
                 .andExpect(jsonPath("$.data.changes[0].changedParagraphs[0].oldParagraphIndex").doesNotExist())
                 .andExpect(jsonPath("$.data.changes[0].changedParagraphs[0].newParagraphIndex").doesNotExist())
@@ -122,6 +186,22 @@ public class ContractCompareControllerTest {
                 .andExpect(content().bytes(excel));
 
         verify(service).exportExcel(any(ContractCompareRequest.class));
+    }
+
+    @Test
+    public void shouldDownloadChangeDocumentExcelWithDedicatedFilename() throws Exception {
+        byte[] excel = new byte[]{0x50, 0x4B, 0x03, 0x04};
+        when(service.exportExcel(any())).thenReturn(excel);
+
+        mockMvc.perform(post("/service/contract-compare/export")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"analysisType\":\"CHANGE_DOCUMENT\","
+                        + "\"changeFileGetPath\":\"/supplement.docx\","
+                        + "\"changeDocumentType\":\"SUPPLEMENTAL_AGREEMENT\"}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        "attachment; filename=contract-change-extract-result.xlsx"))
+                .andExpect(content().bytes(excel));
     }
 
     @Test
@@ -149,6 +229,20 @@ public class ContractCompareControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"oldFileGetPath\":\"/old.docx\",\"newFileGetPath\":\"/new.docx\","
                         + "\"resultMode\":\"FULL\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("请求JSON格式不正确"));
+
+        verifyZeroInteractions(service);
+    }
+
+    @Test
+    public void shouldRejectUnknownAnalysisTypeBeforeComparison() throws Exception {
+        mockMvc.perform(post("/service/contract-compare/compare")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"analysisType\":\"LETTER\","
+                        + "\"changeFileGetPath\":\"/supplement.docx\","
+                        + "\"changeDocumentType\":\"SUPPLEMENTAL_AGREEMENT\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("请求JSON格式不正确"));

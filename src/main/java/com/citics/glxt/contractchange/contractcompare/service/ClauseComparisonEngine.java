@@ -110,6 +110,28 @@ public class ClauseComparisonEngine {
         return changes;
     }
 
+    /** 使用双版本比较相同的分词及精细差异规则描述一组已提取文本。 */
+    ChangedParagraph describeTextChange(ChangeType type, String oldContent, String newContent) {
+        if (type == ChangeType.ADDED) {
+            return toChangedParagraph(new PartEdit(PartEditType.ADDED, null,
+                    new PartSpan(newContent, 1)), null, null);
+        }
+        if (type == ChangeType.DELETED) {
+            return toChangedParagraph(new PartEdit(PartEditType.DELETED,
+                    new PartSpan(oldContent, 1), null), null, null);
+        }
+        if (oldContent == null || newContent == null) {
+            ChangedParagraph changed = new ChangedParagraph();
+            changed.setParagraphChangeType(ChangeType.MODIFIED);
+            changed.setOldContent(oldContent);
+            changed.setNewContent(newContent);
+            changed.setChangeDetails(Collections.<ChangeDetail>emptyList());
+            return changed;
+        }
+        return toChangedParagraph(new PartEdit(PartEditType.MODIFIED,
+                new PartSpan(oldContent, 1), new PartSpan(newContent, 1)), null, null);
+    }
+
     private void matchExactContent(Set<Clause> oldRemaining, Set<Clause> newRemaining,
                                    Map<Clause, Clause> matches) {
         for (Clause oldClause : new ArrayList<Clause>(oldRemaining)) {

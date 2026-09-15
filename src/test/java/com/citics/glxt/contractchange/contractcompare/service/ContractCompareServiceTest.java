@@ -6,6 +6,8 @@ import com.aspose.words.SaveFormat;
 import com.citics.glxt.contractchange.contractcompare.aspose.AsposeCompareService;
 import com.citics.glxt.contractchange.contractcompare.config.ContractCompareProperties;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.AnalysisType;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.ChangeDocumentType;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.ResultMode;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangedParagraph;
@@ -132,6 +134,56 @@ public class ContractCompareServiceTest {
         request.setResultMode(null);
 
         assertNull(service.compare(request).getChanges().get(0).getContext());
+    }
+
+    @Test
+    public void shouldExtractChangeDocumentAndExportDedicatedColumns() throws Exception {
+        SftpContractFileLoader loader = mock(SftpContractFileLoader.class);
+        when(loader.load("/supplement.docx")).thenReturn(document(
+                "1、《基金合同》第二条“合同金额”约定如下：",
+                "合同金额为100万元。",
+                "上述内容变更如下：",
+                "合同金额为120万元。"));
+        ContractCompareService service = new ContractCompareService(loader,
+                new AsposeCompareService(), new ContractStructureParser(),
+                new ClauseComparisonEngine(new ContractCompareProperties()));
+        ContractCompareRequest request = new ContractCompareRequest();
+        request.setAnalysisType(AnalysisType.CHANGE_DOCUMENT);
+        request.setChangeFileGetPath("/supplement.docx");
+        request.setChangeDocumentType(ChangeDocumentType.SUPPLEMENTAL_AGREEMENT);
+        request.setResultMode(ResultMode.CONTEXT);
+
+        ContractCompareResponse response = service.compare(request);
+
+        assertEquals(1, response.getTotalChanges());
+        assertEquals(ChangeDocumentType.SUPPLEMENTAL_AGREEMENT,
+                response.getChangeDocumentType());
+        assertEquals("1、《基金合同》第二条“合同金额”约定如下：",
+                response.getChanges().get(0).getSourceHeading());
+        assertEquals("合同金额为120万元。",
+                response.getChanges().get(0).getContext().getNewContent());
+
+        byte[] excel = service.exportExcel(request);
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(excel))) {
+            assertEquals("提取结果", workbook.getSheetAt(0).getSheetName());
+            assertEquals(11, workbook.getSheetAt(0).getRow(1).getLastCellNum());
+            assertEquals("函件类型",
+                    workbook.getSheetAt(0).getRow(1).getCell(1).getStringCellValue());
+            assertEquals("补充协议",
+                    workbook.getSheetAt(0).getRow(2).getCell(1).getStringCellValue());
+            assertEquals("合同金额为100万元。",
+                    workbook.getSheetAt(0).getRow(2).getCell(6).getStringCellValue());
+            assertEquals("合同金额为120万元。",
+                    workbook.getSheetAt(0).getRow(2).getCell(7).getStringCellValue());
+            assertEquals("完整变更前内容",
+                    workbook.getSheetAt(0).getRow(1).getCell(9).getStringCellValue());
+        }
+
+        request.setResultMode(ResultMode.SIMPLE);
+        byte[] simpleExcel = service.exportExcel(request);
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(simpleExcel))) {
+            assertEquals(9, workbook.getSheetAt(0).getRow(1).getLastCellNum());
+        }
     }
 
     private byte[] document(String... paragraphs) throws Exception {

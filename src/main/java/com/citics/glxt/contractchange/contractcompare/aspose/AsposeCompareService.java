@@ -31,16 +31,8 @@ import java.util.Map;
 @Service
 public class AsposeCompareService {
     public ComparisonResult compare(byte[] oldBytes, byte[] newBytes) {
-        Document oldDocument;
-        Document newDocument;
-        try {
-            oldDocument = loadFinalDocument(oldBytes);
-            newDocument = loadFinalDocument(newBytes);
-        } catch (ContractChangeBusinessException ex) {
-            throw ex;
-        } catch (Exception ex) {
-            throw new ContractChangeBusinessException("合同文件解析失败，请确认文件未损坏且未加密");
-        }
+        Document oldDocument = load(oldBytes);
+        Document newDocument = load(newBytes);
         try {
             Document comparedOld = oldDocument.deepClone();
             Document comparedNew = newDocument.deepClone();
@@ -59,6 +51,17 @@ public class AsposeCompareService {
         } catch (Exception ex) {
             throw new ContractChangeBusinessException(CommonConstants.SERVICE_UNAVAILABLE,
                     "合同比较引擎处理失败，请稍后重试");
+        }
+    }
+
+    /** 加载一份可供比较或规则提取使用的最终版DOCX。 */
+    public Document load(byte[] bytes) {
+        try {
+            return loadFinalDocument(bytes);
+        } catch (ContractChangeBusinessException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new ContractChangeBusinessException("合同文件解析失败，请确认文件未损坏且未加密");
         }
     }
 
