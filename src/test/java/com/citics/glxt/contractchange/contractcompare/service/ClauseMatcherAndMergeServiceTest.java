@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 public class ClauseMatcherAndMergeServiceTest {
     private final ClauseComparisonEngine engine = new ClauseComparisonEngine(new ContractCompareProperties());
@@ -50,6 +51,10 @@ public class ClauseMatcherAndMergeServiceTest {
                 "本合同总金额为人民币100万元。", "本合同总金额为人民币120万元。");
         assertDetail(changes.get(0).getChangedParagraphs().get(0), 0,
                 DetailType.REPLACED, "100", "120");
+        assertEquals("2.1 合同金额\n本合同总金额为人民币100万元。",
+                changes.get(0).getContext().getOldContent());
+        assertEquals("2.1 合同金额\n本合同总金额为人民币120万元。",
+                changes.get(0).getContext().getNewContent());
     }
 
     @Test
@@ -70,6 +75,9 @@ public class ClauseMatcherAndMergeServiceTest {
         assertChangedParagraph(changes.get(0), 0, ChangeType.ADDED, null, "第八条 数据保护");
         assertChangedParagraph(changes.get(0), 1, ChangeType.ADDED, null, "8.1 保护措施");
         assertChangedParagraph(changes.get(0), 2, ChangeType.ADDED, null, "双方应依法保护个人信息。");
+        assertNull(changes.get(0).getContext().getOldContent());
+        assertEquals("第八条 数据保护\n8.1 保护措施\n双方应依法保护个人信息。",
+                changes.get(0).getContext().getNewContent());
     }
 
     @Test
@@ -130,6 +138,9 @@ public class ClauseMatcherAndMergeServiceTest {
         assertEquals(2, change.getChangedParagraphs().size());
         assertChangedParagraph(change, 0, ChangeType.DELETED, "第九条 自动续约", null);
         assertChangedParagraph(change, 1, ChangeType.DELETED, "合同到期后自动续约一年。", null);
+        assertEquals("第九条 自动续约\n合同到期后自动续约一年。",
+                change.getContext().getOldContent());
+        assertNull(change.getContext().getNewContent());
     }
 
     @Test

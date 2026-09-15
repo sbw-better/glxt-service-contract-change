@@ -5,6 +5,7 @@ import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRespo
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeDetail;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangedParagraph;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseChange;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseContext;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.DetailType;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.Clause;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.MatchResult;
@@ -262,6 +263,8 @@ public class ClauseComparisonEngine {
         List<PartSpan> newParts = contentParts(newClause, false);
         change.setChangedParagraphs(changedParagraphs(oldParts, newParts,
                 oldClause.getClauseNo(), newClause.getClauseNo()));
+        change.setContext(new ClauseContext(ContractCompareText.ownContent(oldClause),
+                ContractCompareText.ownContent(newClause)));
         return change;
     }
 
@@ -269,6 +272,7 @@ public class ClauseComparisonEngine {
         ClauseChange change = base(clause);
         change.setChangeType(ChangeType.ADDED);
         change.setChangedParagraphs(oneSidedParagraphs(null, contentParts(clause, true)));
+        change.setContext(new ClauseContext(null, ContractCompareText.subtreeContent(clause)));
         return change;
     }
 
@@ -276,6 +280,7 @@ public class ClauseComparisonEngine {
         ClauseChange change = base(clause);
         change.setChangeType(ChangeType.DELETED);
         change.setChangedParagraphs(oneSidedParagraphs(contentParts(clause, true), null));
+        change.setContext(new ClauseContext(ContractCompareText.subtreeContent(clause), null));
         return change;
     }
 

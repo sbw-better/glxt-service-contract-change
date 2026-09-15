@@ -1,5 +1,6 @@
 package com.citics.glxt.contractchange.contractcompare.model;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -25,6 +26,17 @@ public class ContractCompareResponse implements Serializable {
         private String parentClauseNo;
         private ChangeType changeType;
         private List<ChangedParagraph> changedParagraphs;
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private ClauseContext context;
+    }
+
+    /** CONTEXT模式下返回的完整条款内容。 */
+    @Data
+    @AllArgsConstructor
+    public static class ClauseContext implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private String oldContent;
+        private String newContent;
     }
 
     public enum ChangeType {

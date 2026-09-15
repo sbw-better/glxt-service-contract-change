@@ -7,6 +7,7 @@ import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRespo
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangedParagraph;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeType;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseChange;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseContext;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.DetailType;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareService;
 import org.junit.Before;
@@ -20,6 +21,7 @@ import java.util.Collections;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -96,6 +98,7 @@ public class ContractCompareControllerTest {
                 .andExpect(jsonPath("$.data.changes[0].changeDetails").doesNotExist())
                 .andExpect(jsonPath("$.data.changes[0].oldIndex").doesNotExist())
                 .andExpect(jsonPath("$.data.changes[0].newIndex").doesNotExist())
+                .andExpect(jsonPath("$.data.changes[0].context").doesNotExist())
                 .andExpect(jsonPath("$.data.changes[0].changedParagraphs[0].contentType").doesNotExist())
                 .andExpect(jsonPath("$.data.changes[0].changedParagraphs[0].oldParagraphIndex").doesNotExist())
                 .andExpect(jsonPath("$.data.changes[0].changedParagraphs[0].newParagraphIndex").doesNotExist())
@@ -119,5 +122,37 @@ public class ContractCompareControllerTest {
                 .andExpect(content().bytes(excel));
 
         verify(service).exportExcel(any(ContractCompareRequest.class));
+    }
+
+    @Test
+    public void shouldExposeFullContextInContextMode() throws Exception {
+        ClauseChange change = new ClauseChange();
+        change.setClauseNo("第二条");
+        change.setChangeType(ChangeType.MODIFIED);
+        change.setChangedParagraphs(Collections.<ChangedParagraph>emptyList());
+        change.setContext(new ClauseContext("修改前完整条款", "修改后完整条款"));
+        when(service.compare(any())).thenReturn(new ContractCompareResponse(1,
+                Collections.singletonList(change), Collections.emptyList()));
+
+        mockMvc.perform(post("/service/contract-compare/compare")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"oldFileGetPath\":\"/old.docx\",\"newFileGetPath\":\"/new.docx\","
+                        + "\"resultMode\":\"CONTEXT\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.changes[0].context.oldContent").value("修改前完整条款"))
+                .andExpect(jsonPath("$.data.changes[0].context.newContent").value("修改后完整条款"));
+    }
+
+    @Test
+    public void shouldRejectUnknownResultModeBeforeComparison() throws Exception {
+        mockMvc.perform(post("/service/contract-compare/compare")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"oldFileGetPath\":\"/old.docx\",\"newFileGetPath\":\"/new.docx\","
+                        + "\"resultMode\":\"FULL\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("请求JSON格式不正确"));
+
+        verifyZeroInteractions(service);
     }
 }

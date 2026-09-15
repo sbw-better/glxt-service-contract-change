@@ -6,6 +6,7 @@ import com.aspose.words.SaveFormat;
 import com.citics.glxt.contractchange.contractcompare.aspose.AsposeCompareService;
 import com.citics.glxt.contractchange.contractcompare.config.ContractCompareProperties;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.ResultMode;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangedParagraph;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeType;
@@ -16,6 +17,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -47,6 +49,7 @@ public class ContractCompareServiceTest {
         assertTrue(paragraph.getNewContent().contains("120万元"));
         assertEquals("100", paragraph.getChangeDetails().get(0).getOldText());
         assertEquals("120", paragraph.getChangeDetails().get(0).getNewText());
+        assertNull(response.getChanges().get(0).getContext());
     }
 
     @Test
@@ -76,7 +79,59 @@ public class ContractCompareServiceTest {
                     workbook.getSheetAt(0).getRow(2).getCell(7).getStringCellValue());
             assertEquals("替换：100 → 120",
                     workbook.getSheetAt(0).getRow(2).getCell(8).getStringCellValue());
+            assertEquals(9, workbook.getSheetAt(0).getRow(1).getLastCellNum());
         }
+    }
+
+    @Test
+    public void shouldReturnFullClauseContextAndExportContextColumns() throws Exception {
+        SftpContractFileLoader loader = mock(SftpContractFileLoader.class);
+        when(loader.load("/old.docx")).thenReturn(document(
+                "第二条 合同金额", "前置约定不变。", "本合同总金额为人民币100万元。", "后置约定不变。"));
+        when(loader.load("/new.docx")).thenReturn(document(
+                "第二条 合同金额", "前置约定不变。", "本合同总金额为人民币120万元。", "后置约定不变。"));
+        ContractCompareService service = new ContractCompareService(loader,
+                new AsposeCompareService(), new ContractStructureParser(),
+                new ClauseComparisonEngine(new ContractCompareProperties()));
+        ContractCompareRequest request = new ContractCompareRequest();
+        request.setOldFileGetPath("/old.docx");
+        request.setNewFileGetPath("/new.docx");
+        request.setResultMode(ResultMode.CONTEXT);
+
+        ContractCompareResponse response = service.compare(request);
+
+        assertEquals(1, response.getChanges().get(0).getChangedParagraphs().size());
+        assertEquals("第二条 合同金额\n前置约定不变。\n本合同总金额为人民币100万元。\n后置约定不变。",
+                response.getChanges().get(0).getContext().getOldContent());
+        assertEquals("第二条 合同金额\n前置约定不变。\n本合同总金额为人民币120万元。\n后置约定不变。",
+                response.getChanges().get(0).getContext().getNewContent());
+
+        byte[] excel = service.exportExcel(request);
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(excel))) {
+            assertEquals(11, workbook.getSheetAt(0).getRow(1).getLastCellNum());
+            assertEquals("完整变更前条款",
+                    workbook.getSheetAt(0).getRow(1).getCell(9).getStringCellValue());
+            assertTrue(workbook.getSheetAt(0).getRow(2).getCell(9).getStringCellValue()
+                    .contains("前置约定不变。"));
+            assertTrue(workbook.getSheetAt(0).getRow(2).getCell(10).getStringCellValue()
+                    .contains("后置约定不变。"));
+        }
+    }
+
+    @Test
+    public void shouldTreatExplicitNullModeAsSimple() throws Exception {
+        SftpContractFileLoader loader = mock(SftpContractFileLoader.class);
+        when(loader.load("/old.docx")).thenReturn(document("第一条 金额", "金额为100万元。"));
+        when(loader.load("/new.docx")).thenReturn(document("第一条 金额", "金额为120万元。"));
+        ContractCompareService service = new ContractCompareService(loader,
+                new AsposeCompareService(), new ContractStructureParser(),
+                new ClauseComparisonEngine(new ContractCompareProperties()));
+        ContractCompareRequest request = new ContractCompareRequest();
+        request.setOldFileGetPath("/old.docx");
+        request.setNewFileGetPath("/new.docx");
+        request.setResultMode(null);
+
+        assertNull(service.compare(request).getChanges().get(0).getContext());
     }
 
     private byte[] document(String... paragraphs) throws Exception {

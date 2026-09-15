@@ -145,21 +145,52 @@ UserId: 实际操作人工号
 ```json
 {
   "oldFileGetPath": "/合同目录/修改前.docx",
-  "newFileGetPath": "/合同目录/修改后.docx"
+  "newFileGetPath": "/合同目录/修改后.docx",
+  "resultMode": "SIMPLE"
 }
 ```
 
+`resultMode` 可选值为 `SIMPLE`、`CONTEXT`，未传或传 `null` 时默认使用 `SIMPLE`。
+`SIMPLE` 保持精简响应，只返回变化段落；`CONTEXT` 在每条变更中额外返回
+`context.oldContent/context.newContent` 完整条款内容。修改条款的上下文不重复包含子条款，
+整条新增或删除时上下文包含被折叠输出的完整子树。两种模式使用相同的条款匹配和差异结果。
+
+```json
+{
+  "clauseNo": "第二条",
+  "changeType": "MODIFIED",
+  "changedParagraphs": [
+    {
+      "paragraphChangeType": "MODIFIED",
+      "oldContent": "合同金额为100万元。",
+      "newContent": "合同金额为120万元。",
+      "changeDetails": [
+        {"detailType": "REPLACED", "oldText": "100", "newText": "120"}
+      ]
+    }
+  ],
+  "context": {
+    "oldContent": "第二条 合同金额\n合同金额为100万元。\n其他约定不变。",
+    "newContent": "第二条 合同金额\n合同金额为120万元。\n其他约定不变。"
+  }
+}
+```
+
+上例中的 `context` 仅在 `CONTEXT` 模式出现；`SIMPLE` 模式的条款对象在
+`changedParagraphs` 后结束。
+
 服务从主备 SFTP 读取原始文件，使用 Aspose.Words 19.9 忽略格式、目录、页眉页脚和批注差异，
 返回按合同条款聚合的 `ADDED`、`DELETED`、`MODIFIED`。只有编号或位置变化时不返回变更。
-每条结果只返回条款编号、标题、父条款编号、变更类型和 `changedParagraphs`。变化段落通过
+每条结果固定返回条款编号、标题、父条款编号、变更类型和 `changedParagraphs`。变化段落通过
 `oldContent`、`newContent` 提供上下文，段落内的 `changeDetails` 返回具体 `INSERTED`、
-`DELETED`、`REPLACED` 文字。响应不返回内部节点标识、条款完整内容、顺序、内容类型或高亮
-下标。日期、百分比、千分位金额、数值区间和版本号会尽量作为完整语义片段返回。该功能不调用
+`DELETED`、`REPLACED` 文字。两种模式均不返回内部节点标识、顺序、内容类型或高亮下标；
+完整条款内容仅由 `CONTEXT` 模式的 `context` 提供。日期、百分比、千分位金额、数值区间和版本号会尽量作为完整语义片段返回。该功能不调用
 Embedding、不写数据库，也不触发原合同解析落库流程。
 
 `/service/contract-compare/export` 使用与 `/compare` 相同的 JSON 请求体，直接下载
 `contract-compare-result.xlsx`。主工作表按一个变化段落一行输出条款编号、标题、上级条款、
-条款及段落变更类型、变更前后内容和具体变化；存在匹配或识别提示时额外生成“提示信息”工作表。
+条款及段落变更类型、变更前后内容和具体变化；`CONTEXT` 模式额外增加“完整变更前条款”和
+“完整变更后条款”两列。存在匹配或识别提示时额外生成“提示信息”工作表。
 
 预测请求示例：
 

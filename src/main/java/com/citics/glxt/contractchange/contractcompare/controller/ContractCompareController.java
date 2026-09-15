@@ -32,7 +32,7 @@ public class ContractCompareController {
 
     @PostMapping("/compare")
     @ApiOperation(value = "比较修改前和修改后的合同",
-            notes = "从服务器路径读取两份DOCX，返回按合同结构聚合的新增、删除和修改条款")
+            notes = "从服务器路径读取两份DOCX；resultMode为SIMPLE时返回变化段落，CONTEXT时额外返回完整条款上下文")
     public ContractChangeResult<ContractCompareResponse> compare(
             @Valid @RequestBody ContractCompareRequest request) {
         return ContractChangeResult.success(compareService.compare(request));
@@ -40,7 +40,7 @@ public class ContractCompareController {
 
     @PostMapping("/export")
     @ApiOperation(value = "导出修改前后合同的比对结果Excel",
-            notes = "请求参数与compare接口相同，返回一个变化段落一行的xlsx文件")
+            notes = "请求参数与compare接口相同；CONTEXT模式额外导出完整变更前后条款")
     public void export(@Valid @RequestBody ContractCompareRequest request,
                        HttpServletResponse response) throws IOException {
         byte[] excel = compareService.exportExcel(request);
