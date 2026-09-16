@@ -6,6 +6,7 @@ import com.citics.glxt.contractchange.embedding.EmbeddingClient;
 import com.citics.glxt.contractchange.mapper.ContractParagraphMapper;
 import com.citics.glxt.contractchange.model.EmbeddingBatchResult;
 import com.citics.glxt.contractchange.model.PredictionResponse;
+import com.citics.glxt.contractchange.service.ContractParagraphPredictionService.LenientPrediction;
 import com.citics.glxt.contractchange.util.HashUtils;
 import com.citics.glxt.contractchange.util.VectorCodec;
 import org.junit.Before;
@@ -80,6 +81,23 @@ public class BatchPredictionServiceTest {
         service.predictBatch(Arrays.asList("历史段落", "历史段落"), "employee-001");
 
         verify(client, never()).embed(anyList(), eq("employee-001"));
+    }
+
+    @Test
+    public void shouldContinueAfterOneLenientEmbeddingBatchFails() {
+        properties.getEmbedding().setBatchSize(1);
+        EmbeddingClient client = mock(EmbeddingClient.class);
+        when(client.embed(anyList(), eq("employee-001")))
+                .thenThrow(new RuntimeException("gateway unavailable"))
+                .thenReturn(vectors(1));
+        ContractParagraphPredictionService service =
+                new ContractParagraphPredictionService(indexService, client, properties);
+
+        List<LenientPrediction> responses = service.predictBatchLenient(
+                Arrays.asList("失败段落", "成功段落"), "employee-001");
+
+        assertEquals("EMBEDDING_UNAVAILABLE", responses.get(0).getErrorCode());
+        assertEquals("SEMANTIC", responses.get(1).getPrediction().getMatchType());
     }
 
     private void assertBatchSizes(int paragraphCount, List<Integer> expectedSizes) {

@@ -14,6 +14,8 @@ import com.citics.glxt.contractchange.util.HashUtils;
 import com.citics.glxt.contractchange.vector.ParagraphSearchResult;
 import com.citics.glxt.contractchange.vector.ParagraphVectorSample;
 import lombok.extern.slf4j.Slf4j;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -91,6 +93,104 @@ public class ContractParagraphPredictionService {
                 paragraphs.size(), exactCount, semanticIndexes.size(), effectiveBatchSize(),
                 System.currentTimeMillis() - started);
         return responses;
+    }
+
+    /**
+     * 集成到合同比对流程时使用的宽容批量预测。一个模型批次失败时只标记该批输入，
+     * 不丢失其他批次和Hash精确命中的结果。
+     */
+    public List<LenientPrediction> predictBatchLenient(List<String> paragraphs, String userId) {
+        if (paragraphs == null || paragraphs.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<String> normalized = new ArrayList<String>(paragraphs.size());
+        List<LenientPrediction> results = new ArrayList<LenientPrediction>(
+                Collections.nCopies(paragraphs.size(), (LenientPrediction) null));
+        List<Integer> semanticIndexes = new ArrayList<Integer>();
+        for (int index = 0; index < paragraphs.size(); index++) {
+            try {
+                String value = normalizeAndValidate(paragraphs.get(index));
+                normalized.add(value);
+                ParagraphVectorSample exactSample = indexService.exact(HashUtils.sha256(value));
+                if (exactSample == null) {
+                    semanticIndexes.add(index);
+                } else {
+                    results.set(index, LenientPrediction.success(exact(exactSample)));
+                }
+            } catch (RuntimeException ex) {
+                normalized.add(ContractTextNormalizer.normalize(paragraphs.get(index)));
+                results.set(index, LenientPrediction.failed("INVALID_INPUT"));
+            }
+        }
+        if (semanticIndexes.isEmpty()) {
+            return results;
+        }
+
+        IndexStatusResponse status = indexService.status();
+        if ("EMPTY".equals(status.getStatus())) {
+            for (Integer index : semanticIndexes) {
+                results.set(index, LenientPrediction.success(
+                        empty(0D, Collections.<PredictionReference>emptyList())));
+            }
+            return results;
+        }
+        if ("NOT_READY".equals(status.getStatus()) || "LOAD_FAILED".equals(status.getStatus())
+                || status.getSampleCount() == 0) {
+            for (Integer index : semanticIndexes) {
+                results.set(index, LenientPrediction.failed("INDEX_UNAVAILABLE"));
+            }
+            return results;
+        }
+
+        int batchSize = effectiveBatchSize();
+        for (int start = 0; start < semanticIndexes.size(); start += batchSize) {
+            int end = Math.min(start + batchSize, semanticIndexes.size());
+            List<String> texts = new ArrayList<String>(end - start);
+            for (int cursor = start; cursor < end; cursor++) {
+                texts.add(normalized.get(semanticIndexes.get(cursor)));
+            }
+            try {
+                EmbeddingBatchResult embedded = embeddingClient.embed(texts, userId);
+                if (embedded == null || embedded.getVectors() == null
+                        || embedded.getVectors().size() != texts.size()) {
+                    throw new ContractChangeBusinessException(CommonConstants.SERVICE_UNAVAILABLE,
+                            "Embedding返回数量与输入数量不一致");
+                }
+                for (int cursor = start; cursor < end; cursor++) {
+                    int resultIndex = semanticIndexes.get(cursor);
+                    results.set(resultIndex, LenientPrediction.success(
+                            predictFromVector(embedded.getVectors().get(cursor - start))));
+                }
+            } catch (RuntimeException ex) {
+                log.warn("合同比对类型识别批次失败, batchSize={}, exception={}",
+                        texts.size(), ex.getClass().getSimpleName());
+                for (int cursor = start; cursor < end; cursor++) {
+                    results.set(semanticIndexes.get(cursor),
+                            LenientPrediction.failed("EMBEDDING_UNAVAILABLE"));
+                }
+            }
+        }
+        return results;
+    }
+
+    /** 宽容批量预测的单项结果，不向调用方暴露底层异常。 */
+    @Getter
+    @AllArgsConstructor
+    public static class LenientPrediction {
+        private final PredictionResponse prediction;
+        private final String errorCode;
+
+        public static LenientPrediction success(PredictionResponse prediction) {
+            return new LenientPrediction(prediction, null);
+        }
+
+        public static LenientPrediction failed(String errorCode) {
+            return new LenientPrediction(null, errorCode);
+        }
+
+        public boolean isSuccess() {
+            return prediction != null;
+        }
     }
 
     /** 校验业务字符上限并返回规范化文本，始终拒绝空段落和超长段落。 */

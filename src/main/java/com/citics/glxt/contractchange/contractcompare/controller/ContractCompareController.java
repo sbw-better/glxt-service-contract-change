@@ -10,11 +10,13 @@ import io.swagger.annotations.ApiOperation;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.servlet.http.HttpServletResponse;
 import javax.validation.Valid;
+import javax.validation.constraints.NotBlank;
 import java.io.IOException;
 
 /** 合同双版本比较和变更函条款提取接口。 */
@@ -35,16 +37,19 @@ public class ContractCompareController {
     @ApiOperation(value = "比较双版本合同或提取变更函条款",
             notes = "analysisType默认DOUBLE_VERSION；CHANGE_DOCUMENT按文档内容从单份DOCX提取变更条款")
     public ContractChangeResult<ContractCompareResponse> compare(
+            @RequestHeader("UserId") @NotBlank(message = "UserId不能为空") String userId,
             @Valid @RequestBody ContractCompareRequest request) {
-        return ContractChangeResult.success(compareService.compare(request));
+        return ContractChangeResult.success(compareService.compare(request, userId));
     }
 
     @PostMapping("/export")
     @ApiOperation(value = "导出合同分析结果Excel",
             notes = "请求参数与compare接口相同；根据analysisType导出双版本比对或变更函提取结果")
-    public void export(@Valid @RequestBody ContractCompareRequest request,
+    public void export(
+                       @RequestHeader("UserId") @NotBlank(message = "UserId不能为空") String userId,
+                       @Valid @RequestBody ContractCompareRequest request,
                        HttpServletResponse response) throws IOException {
-        byte[] excel = compareService.exportExcel(request);
+        byte[] excel = compareService.exportExcel(request, userId);
         response.setContentType(XLSX_MEDIA_TYPE);
         response.setHeader("Content-Disposition",
                 "attachment; filename=" + exportFilename(request));

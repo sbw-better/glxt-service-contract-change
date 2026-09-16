@@ -9,7 +9,7 @@ Embedding 网关，实现“历史段落导入—语义检索—多标签变更�
 - 多个编码以英文分号保存，例如 `TYPE01;TYPE02;TYPE03`。
 - Oracle负责持久化，JVM内存负责1万条以内向量的精确检索。
 - 单次Excel最多1000条；导入同步执行，默认逐条调用模型网关。
-- 预测结果不入库，接口输入必须是已经切分好的单个合同段落。
+- 合同比对预测结果只随响应返回，不会自动写入历史向量库；历史样本继续通过 Excel 导入维护。
 - 段落默认最多2000字符，超过上限明确拒绝，不做自动截断。
 - 第一版Java服务按单实例部署，保证导入后JVM内存索引立即一致。
 - 变更类型只作为历史段落标签参与投票，不与新段落进行向量比较。
@@ -18,13 +18,13 @@ Embedding 网关，实现“历史段落导入—语义检索—多标签变更�
 
 ## 数据库初始化
 
-使用业务用户执行：
+使用业务用户按顺序执行：
 
 ```text
 database/oracle/01_schema.sql
 ```
 
-脚本只创建 `TPIF_HTDLYB`、`SEQ_TPIF_HTDLYB` 和 `IDX_HTDLYB_MODEL`。
+`01_schema.sql`创建历史段落向量库。
 `99_rollback.sql`会删除本版表及序列，表内数据不可恢复，生产环境谨慎执行。
 
 接入统一模型网关不需要修改表结构。`MODEL_VERSION`与`VECTOR_DIM`用于隔离不同模型产生的向量。
@@ -84,7 +84,7 @@ Java会校验返回数量、批量响应`index`、实际维度、非法浮点数
 | `EMBEDDING_MODEL_NAME` | `gen-studio-Qwen3-Embedding-8B` | 请求体`model`字段使用的模型名称 |
 | `EMBEDDING_MODEL_VERSION` | `gen-studio-Qwen3-Embedding-8B-1024-v1` | 数据库存储和索引隔离使用的模型版本 |
 | `EMBEDDING_DIMENSION` | `1024` | 网关实际返回且项目用于校验、存储和检索的向量维度 |
-| `EMBEDDING_BATCH_SIZE` | `1` | 单次网关请求文本数量，确认平台上限后再调大 |
+| `EMBEDDING_BATCH_SIZE` | `16` | 单次网关请求文本数量，当前平台上限为16 |
 | `IMPORT_MAX_ROWS` | `1000` | 单次Excel最大数据行数 |
 | `IMPORT_MAX_TOTAL_SAMPLES` | `10000` | 第一版历史样本总数上限 |
 | `SEARCH_MAX_PARAGRAPH_LENGTH` | `2000` | 规范化段落最大字符数，不等同于Token数 |
@@ -131,17 +131,18 @@ POST /service/contract-compare/compare
 POST /service/contract-compare/export
 ```
 
-导入和预测接口必须携带：
+导入、预测、合同比对和直接导出接口必须携带：
 
 ```http
 UserId: 实际操作人工号
 ```
 
-该值只透传给模型平台用于审计，不写数据库、不输出到日志。索引重载和状态查询不调用模型，
+该值只透传给模型平台，所有场景均不在日志中输出 `UserId`。索引重载和状态查询不调用模型，
 因此不要求该请求头。
 
-合同分析接口不调用模型，也不要求 `UserId`。`analysisType` 控制双版本比较或单文件变更函提取，
-未传或传 `null` 时默认使用 `DOUBLE_VERSION`。
+合同分析会在段落比对或内容提取后调用历史向量库识别业务变更类型，因此必须提供 `UserId`。
+`analysisType` 控制双版本比较或单文件变更函提取，未传或传 `null` 时默认使用
+`DOUBLE_VERSION`。
 
 双版本比较请求体传入服务器上的修改前、修改后 DOCX 路径：
 
@@ -206,8 +207,8 @@ Word自动列表和标题样式；
 每条结果固定返回条款编号、标题、父条款编号、变更类型和 `changedParagraphs`。变化段落通过
 `oldContent`、`newContent` 提供上下文，段落内的 `changeDetails` 返回具体 `INSERTED`、
 `DELETED`、`REPLACED` 文字。两种模式均不返回内部节点标识、顺序、内容类型或高亮下标；
-完整条款内容仅由 `CONTEXT` 模式的 `context` 提供。日期、百分比、千分位金额、数值区间和版本号会尽量作为完整语义片段返回。该功能不调用
-Embedding、不写数据库，也不触发原合同解析落库流程。
+完整条款内容仅由 `CONTEXT` 模式的 `context` 提供。日期、百分比、千分位金额、数值区间和版本号会尽量作为完整语义片段返回。基础解析不写数据库，也不触发原合同解析落库流程；
+解析完成后会调用历史向量识别补充业务变更类型。
 
 `CHANGE_DOCUMENT` 继续复用 `changes` 和 `changedParagraphs`。每项额外返回
 `sourceHeading`（函件中的原始变更标题）和 `targetClauseReference`（标题中提取的目标条款）：
@@ -262,7 +263,8 @@ Embedding、不写数据库，也不触发原合同解析落库流程。
 “完整变更后条款”两列。存在匹配或识别提示时额外生成“提示信息”工作表。
 
 `CHANGE_DOCUMENT` 导出文件名为 `contract-change-extract-result.xlsx`，主工作表为“提取结果”，
-按一个变更分段一行输出来源标题、目标条款、变更类型、变更前后内容和具体变化，固定为 8 列。
+按一个变更分段一行输出来源标题、目标条款、变更类型、变更前后内容、具体变化及预测字段，
+固定为 13 列。
 Controller 继续通过
 `HttpServletResponse` 直接写入 Excel，方法返回值保持 `void`。
 
@@ -287,6 +289,17 @@ Content-Type: application/json
 
 `maxSimilarity`、`changeTypes[].score`和`references[].similarity`最多保留四位小数；内部计算、
 排序和阈值判断仍使用完整精度。
+
+当集成识别状态为 `FAILED` 或 `SKIPPED_TOO_LONG` 时，`maxSimilarity` 省略，避免将无结果误解为
+相似度 `0.0`；`NO_RELIABLE_MATCH` 仍保留实际计算得到的最高相似度（如有）。
+
+合同比对集成识别采用“变化段落优先、上下文兜底”：新增和修改使用新段落，删除使用旧段落；
+只有段落返回 `NO_RELIABLE_MATCH` 时才尝试条款上下文。上下文命中的类型最高标记为
+`CANDIDATE`，向量服务失败不会丢失基础比对结果。
+
+每个变化段落通过 `businessTypePrediction` 返回识别状态、输入范围、是否使用兜底、
+匹配类型、模型版本、最高相似度、候选业务类型及参考样本。顶层
+`predictionSummary` 汇总匹配、无可靠匹配、调用失败和超长跳过数量。预测结果不会自动反哺历史库。
 
 Swagger UI：
 

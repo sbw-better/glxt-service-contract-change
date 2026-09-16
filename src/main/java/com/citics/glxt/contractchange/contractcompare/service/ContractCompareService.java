@@ -13,6 +13,8 @@ import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRespo
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangedParagraph;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseChange;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.DetailType;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.BusinessTypePrediction;
+import com.citics.glxt.contractchange.model.ChangeTypePrediction;
 import com.citics.glxt.contractchange.contractcompare.service.ClauseComparisonEngine.Analysis;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.Parsed;
 import org.apache.poi.ss.usermodel.BorderStyle;
@@ -40,34 +42,40 @@ public class ContractCompareService {
     private static final int EXCEL_CELL_TEXT_LIMIT = 32767;
     private static final String[] SIMPLE_EXPORT_HEADERS = new String[]{
             "序号", "条款编号", "条款标题", "上级条款编号", "条款变更类型",
-            "段落变更类型", "变更前内容", "变更后内容", "具体变化"
+            "段落变更类型", "变更前内容", "变更后内容", "具体变化",
+            "业务变更类型", "识别状态", "预测等级", "最高相似度", "识别输入范围"
     };
     private static final String[] CONTEXT_EXPORT_HEADERS = new String[]{
             "序号", "条款编号", "条款标题", "上级条款编号", "条款变更类型",
             "段落变更类型", "变更前内容", "变更后内容", "具体变化",
-            "完整变更前条款", "完整变更后条款"
+            "完整变更前条款", "完整变更后条款", "业务变更类型", "识别状态",
+            "预测等级", "最高相似度", "识别输入范围"
     };
     private static final String[] CHANGE_DOCUMENT_SIMPLE_HEADERS = new String[]{
             "序号", "来源标题", "目标条款", "条款变更类型",
-            "段落变更类型", "变更前内容", "变更后内容", "具体变化"
+            "段落变更类型", "变更前内容", "变更后内容", "具体变化",
+            "业务变更类型", "识别状态", "预测等级", "最高相似度", "识别输入范围"
     };
     private final SftpContractFileLoader fileLoader;
     private final AsposeCompareService asposeCompareService;
     private final ContractStructureParser structureParser;
     private final ClauseComparisonEngine comparisonEngine;
     private final ChangeDocumentExtractionService extractionService;
+    private final ContractComparePredictionService predictionService;
 
     @Autowired
     public ContractCompareService(SftpContractFileLoader fileLoader,
                                   AsposeCompareService asposeCompareService,
                                   ContractStructureParser structureParser,
                                   ClauseComparisonEngine comparisonEngine,
-                                  ChangeDocumentExtractionService extractionService) {
+                                  ChangeDocumentExtractionService extractionService,
+                                  ContractComparePredictionService predictionService) {
         this.fileLoader = fileLoader;
         this.asposeCompareService = asposeCompareService;
         this.structureParser = structureParser;
         this.comparisonEngine = comparisonEngine;
         this.extractionService = extractionService;
+        this.predictionService = predictionService;
     }
 
     /** 保留核心链路单元测试和直接调用的兼容构造方式。 */
@@ -76,11 +84,36 @@ public class ContractCompareService {
                                   ContractStructureParser structureParser,
                                   ClauseComparisonEngine comparisonEngine) {
         this(fileLoader, asposeCompareService, structureParser, comparisonEngine,
-                new ChangeDocumentExtractionService(asposeCompareService, comparisonEngine));
+                new ChangeDocumentExtractionService(asposeCompareService, comparisonEngine),
+                null);
+    }
+
+    /** 保留已有单文件提取测试使用的构造方式。 */
+    public ContractCompareService(SftpContractFileLoader fileLoader,
+                                  AsposeCompareService asposeCompareService,
+                                  ContractStructureParser structureParser,
+                                  ClauseComparisonEngine comparisonEngine,
+                                  ChangeDocumentExtractionService extractionService) {
+        this(fileLoader, asposeCompareService, structureParser, comparisonEngine,
+                extractionService, null);
     }
 
     public ContractCompareResponse compare(ContractCompareRequest request) {
-        ResultMode mode = resultMode(request);
+        ContractCompareResponse response = analyze(request);
+        trimContext(response, resultMode(request));
+        return response;
+    }
+
+    /** 生产接口使用：完成比对和业务类型识别后返回。 */
+    public ContractCompareResponse compare(ContractCompareRequest request, String userId) {
+        requireIntegratedServices();
+        ContractCompareResponse response = analyze(request);
+        predictionService.predict(response, analysisType(request), userId);
+        trimContext(response, resultMode(request));
+        return response;
+    }
+
+    private ContractCompareResponse analyze(ContractCompareRequest request) {
         if (analysisType(request) == AnalysisType.CHANGE_DOCUMENT) {
             byte[] bytes = fileLoader.load(request.getChangeFileGetPath());
             return extractionService.extract(bytes);
@@ -92,11 +125,6 @@ public class ContractCompareService {
             Parsed oldContract = structureParser.parse(compared.getOldDocument());
             Parsed newContract = structureParser.parse(compared.getNewDocument());
             Analysis analysis = comparisonEngine.analyze(oldContract, newContract, compared.getRevisions());
-            if (mode == ResultMode.SIMPLE) {
-                for (ClauseChange change : analysis.getChanges()) {
-                    change.setContext(null);
-                }
-            }
             return new ContractCompareResponse(analysis.getChanges().size(),
                     analysis.getChanges(), analysis.getWarnings());
         } catch (Exception ex) {
@@ -111,9 +139,19 @@ public class ContractCompareService {
     public byte[] exportExcel(ContractCompareRequest request) {
         ResultMode mode = resultMode(request);
         ContractCompareResponse response = compare(request);
+        return exportExcel(response, analysisType(request), mode);
+    }
+
+    /** 执行一次完整分析和业务类型识别并导出。 */
+    public byte[] exportExcel(ContractCompareRequest request, String userId) {
+        ContractCompareResponse response = compare(request, userId);
+        return exportExcel(response, analysisType(request), resultMode(request));
+    }
+
+    private byte[] exportExcel(ContractCompareResponse response, AnalysisType type, ResultMode mode) {
         try (XSSFWorkbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            if (analysisType(request) == AnalysisType.CHANGE_DOCUMENT) {
+            if (type == AnalysisType.CHANGE_DOCUMENT) {
                 writeChangeDocumentSheet(workbook, response);
             } else {
                 writeResultSheet(workbook, response, mode);
@@ -176,7 +214,7 @@ public class ContractCompareService {
         sheet.createFreezePane(0, 2);
         sheet.setAutoFilter(new CellRangeAddress(1, Math.max(1, rowNumber - 1),
                 0, headers.length - 1));
-        int[] widths = new int[]{8, 55, 45, 14, 14, 60, 60, 60};
+        int[] widths = new int[]{8, 55, 45, 14, 14, 60, 60, 60, 32, 20, 18, 16, 20};
         for (int column = 0; column < widths.length; column++) {
             sheet.setColumnWidth(column, widths[column] * 256);
         }
@@ -197,6 +235,7 @@ public class ContractCompareService {
         setCell(row, 6, paragraph == null ? null : paragraph.getNewContent(), style);
         setCell(row, 7, paragraph == null ? null
                 : detailText(paragraph.getChangeDetails()), style);
+        writePredictionCells(row, 8, paragraph, style);
         return rowNumber + 1;
     }
 
@@ -243,8 +282,8 @@ public class ContractCompareService {
         sheet.setAutoFilter(new CellRangeAddress(1, Math.max(1, rowNumber - 1),
                 0, headers.length - 1));
         int[] widths = includeContext
-                ? new int[]{8, 16, 24, 18, 14, 14, 60, 60, 60, 80, 80}
-                : new int[]{8, 16, 24, 18, 14, 14, 60, 60, 60};
+                ? new int[]{8, 16, 24, 18, 14, 14, 60, 60, 60, 80, 80, 32, 20, 18, 16, 20}
+                : new int[]{8, 16, 24, 18, 14, 14, 60, 60, 60, 32, 20, 18, 16, 20};
         for (int column = 0; column < widths.length; column++) {
             sheet.setColumnWidth(column, widths[column] * 256);
         }
@@ -272,7 +311,71 @@ public class ContractCompareService {
             setCell(row, 10, change.getContext() == null ? null
                     : change.getContext().getNewContent(), style);
         }
+        writePredictionCells(row, includeContext ? 11 : 9, paragraph, style);
         return rowNumber + 1;
+    }
+
+    private void writePredictionCells(Row row, int start, ChangedParagraph paragraph,
+                                      CellStyle style) {
+        BusinessTypePrediction prediction = paragraph == null ? null
+                : paragraph.getBusinessTypePrediction();
+        setCell(row, start, predictedTypes(prediction), style);
+        setCell(row, start + 1, prediction == null ? null : prediction.getStatus(), style);
+        setCell(row, start + 2, predictionLevels(prediction), style);
+        boolean similarityAvailable = prediction != null
+                && ("MATCHED".equals(prediction.getStatus())
+                || "NO_RELIABLE_MATCH".equals(prediction.getStatus()));
+        setCell(row, start + 3, similarityAvailable
+                ? String.format(java.util.Locale.ROOT, "%.4f", prediction.getMaxSimilarity())
+                : null, style);
+        setCell(row, start + 4, prediction == null ? null : prediction.getInputScope(), style);
+    }
+
+    private String predictedTypes(BusinessTypePrediction prediction) {
+        if (prediction == null || prediction.getChangeTypes() == null) {
+            return "";
+        }
+        List<String> codes = new java.util.ArrayList<String>();
+        for (ChangeTypePrediction type : prediction.getChangeTypes()) {
+            codes.add(type.getCode());
+        }
+        return join(codes);
+    }
+
+    private String predictionLevels(BusinessTypePrediction prediction) {
+        if (prediction == null || prediction.getChangeTypes() == null) {
+            return "";
+        }
+        List<String> values = new java.util.ArrayList<String>();
+        for (ChangeTypePrediction type : prediction.getChangeTypes()) {
+            values.add(type.getCode() + ":" + type.getLevel());
+        }
+        return join(values);
+    }
+
+    private String join(List<String> values) {
+        StringBuilder result = new StringBuilder();
+        for (String value : values) {
+            if (result.length() > 0) {
+                result.append(';');
+            }
+            result.append(value);
+        }
+        return result.toString();
+    }
+
+    private void trimContext(ContractCompareResponse response, ResultMode mode) {
+        if (mode == ResultMode.SIMPLE && response.getChanges() != null) {
+            for (ClauseChange change : response.getChanges()) {
+                change.setContext(null);
+            }
+        }
+    }
+
+    private void requireIntegratedServices() {
+        if (predictionService == null) {
+            throw new IllegalStateException("合同比对类型识别服务未配置");
+        }
     }
 
     private void writeWarningSheet(XSSFWorkbook workbook, List<String> warnings) {
