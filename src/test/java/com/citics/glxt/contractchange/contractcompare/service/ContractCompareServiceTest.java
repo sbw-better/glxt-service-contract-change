@@ -54,6 +54,36 @@ public class ContractCompareServiceTest {
     }
 
     @Test
+    public void shouldReportChangeUnderItsChinesePartHeading() throws Exception {
+        SftpContractFileLoader loader = mock(SftpContractFileLoader.class);
+        when(loader.load("/old.docx")).thenReturn(document(
+                "第一部分 总则", "本部分内容保持不变。",
+                "第二部分 投资范围", "（一）投资品种", "投资品种保持不变。",
+                "（二）比例限制", "投资比例不超过20%。"));
+        when(loader.load("/new.docx")).thenReturn(document(
+                "第一部分 总则", "本部分内容保持不变。",
+                "第二部分 投资范围", "（一）投资品种", "投资品种保持不变。",
+                "（二）比例限制", "投资比例不超过30%。"));
+        ContractCompareService service = new ContractCompareService(loader,
+                new AsposeCompareService(), new ContractStructureParser(),
+                new ClauseComparisonEngine(new ContractCompareProperties()));
+        ContractCompareRequest request = new ContractCompareRequest();
+        request.setOldFileGetPath("/old.docx");
+        request.setNewFileGetPath("/new.docx");
+
+        ContractCompareResponse response = service.compare(request);
+
+        assertEquals(1, response.getTotalChanges());
+        assertEquals("（二）", response.getChanges().get(0).getClauseNo());
+        assertEquals("比例限制", response.getChanges().get(0).getClauseTitle());
+        assertEquals("第二部分", response.getChanges().get(0).getParentClauseNo());
+        assertEquals("20%", response.getChanges().get(0).getChangedParagraphs().get(0)
+                .getChangeDetails().get(0).getOldText());
+        assertEquals("30%", response.getChanges().get(0).getChangedParagraphs().get(0)
+                .getChangeDetails().get(0).getNewText());
+    }
+
+    @Test
     public void shouldExportComparisonAsReadableExcel() throws Exception {
         SftpContractFileLoader loader = mock(SftpContractFileLoader.class);
         when(loader.load("/old.docx")).thenReturn(document(

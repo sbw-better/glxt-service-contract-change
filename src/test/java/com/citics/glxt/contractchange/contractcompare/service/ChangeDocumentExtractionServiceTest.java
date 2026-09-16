@@ -144,6 +144,45 @@ public class ChangeDocumentExtractionServiceTest {
     }
 
     @Test
+    public void shouldAcceptExecutionDateHeadingWithoutDeParticle() throws Exception {
+        ContractCompareResponse response = service.extract(document(
+                        "1、自本协议变更执行日起，在《基金合同》第一条中增加如下约定：",
+                        "“新增内容。”"));
+
+        assertEquals(1, response.getTotalChanges());
+        assertEquals(ChangeType.ADDED, response.getChanges().get(0).getChangeType());
+        assertEquals("“新增内容。”",
+                response.getChanges().get(0).getChangedParagraphs().get(0).getNewContent());
+    }
+
+    @Test
+    public void shouldKeepConsecutiveQuotedBlocksUnderOneHeading() throws Exception {
+        ContractCompareResponse response = service.extract(document(
+                        "1、在《基金合同》第一条中增加如下约定：",
+                        "“新增约定一。”",
+                        "“新增约定二。”",
+                        "本次变更的办理流程。"));
+
+        assertEquals("“新增约定一。”\n“新增约定二。”",
+                response.getChanges().get(0).getChangedParagraphs().get(0).getNewContent());
+    }
+
+    @Test
+    public void shouldWarnInsteadOfTreatingCombinedActionAsPureDeletion() throws Exception {
+        ContractCompareResponse response = service.extract(document(
+                        "1、删除《基金合同》第一条原约定并增加如下约定：",
+                        "“替代后的新约定。”"));
+
+        assertEquals(ChangeType.MODIFIED, response.getChanges().get(0).getChangeType());
+        assertNull(response.getChanges().get(0).getChangedParagraphs().get(0).getOldContent());
+        assertEquals("“替代后的新约定。”",
+                response.getChanges().get(0).getChangedParagraphs().get(0).getNewContent());
+        assertTrue(response.getChanges().get(0).getChangedParagraphs().get(0)
+                .getChangeDetails().isEmpty());
+        assertFalse(response.getWarnings().isEmpty());
+    }
+
+    @Test
     public void shouldKeepOldTextBeforeMarkerInSameParagraph() throws Exception {
         ContractCompareResponse response = service.extract(document(
                         "1、《基金合同》第二条“合同金额”约定如下：",

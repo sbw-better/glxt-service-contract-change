@@ -31,7 +31,7 @@ public class ChangeDocumentExtractionService {
                     + "(?=.*《基金合同》)(?=.*(?:约定如下|如下约定|增加|新增|删除|修改|变更)).+$",
             Pattern.DOTALL);
     private static final Pattern SPECIAL_HEADING = Pattern.compile(
-            "^\\s*(?:[0-9]+\\s*[、.．]\\s*)?自本(?:协议|函件)的变更执行日起"
+            "^\\s*(?:[0-9]+\\s*[、.．]\\s*)?自本(?:协议|函件)(?:的)?变更执行日起"
                     + "(?=.*《基金合同》)(?=.*(?:增加|新增|删除|修改|变更)).*$",
             Pattern.DOTALL);
     private static final Pattern CHANGE_MARKER = Pattern.compile(
@@ -152,7 +152,9 @@ public class ChangeDocumentExtractionService {
                                        List<String> warnings) {
         ChangeType type = changeType(heading, segment);
         ExtractedContent content;
-        if (type == ChangeType.ADDED) {
+        if (hasCombinedAction(heading)) {
+            content = combinedActionContent(heading, segment, sequence, warnings);
+        } else if (type == ChangeType.ADDED) {
             content = new ExtractedContent(null,
                     logicalContent(segment, sequence, warnings));
         } else if (type == ChangeType.DELETED) {
@@ -184,6 +186,9 @@ public class ChangeDocumentExtractionService {
     }
 
     private ChangeType changeType(String heading, List<TextBlock> segment) {
+        if (hasCombinedAction(heading)) {
+            return ChangeType.MODIFIED;
+        }
         if (heading.contains("删除")) {
             return ChangeType.DELETED;
         }
@@ -196,6 +201,28 @@ public class ChangeDocumentExtractionService {
             }
         }
         return ChangeType.MODIFIED;
+    }
+
+    private boolean hasCombinedAction(String heading) {
+        return heading.contains("删除")
+                && (heading.contains("增加") || heading.contains("新增"));
+    }
+
+    private ExtractedContent combinedActionContent(String heading, List<TextBlock> segment,
+                                                    int sequence, List<String> warnings) {
+        for (TextBlock block : segment) {
+            if (CHANGE_MARKER.matcher(block.text).find()) {
+                return modifiedContent(segment, sequence, warnings);
+            }
+        }
+        String content = logicalContent(segment, sequence, warnings);
+        warnings.add("第" + sequence
+                + "个变更标题同时包含删除和新增动作，但未找到“内容变更如下”标记，请人工复核");
+        int deletion = heading.lastIndexOf("删除");
+        int addition = Math.max(heading.lastIndexOf("增加"), heading.lastIndexOf("新增"));
+        return addition > deletion
+                ? new ExtractedContent(null, content)
+                : new ExtractedContent(content, null);
     }
 
     private ExtractedContent modifiedContent(List<TextBlock> segment, int sequence,
@@ -271,59 +298,75 @@ public class ChangeDocumentExtractionService {
         if (blocks.isEmpty()) {
             return null;
         }
-        String first = ContractCompareText.cleanDisplayText(blocks.get(0).text);
-        if (first.isEmpty()) {
-            return null;
-        }
-        char opening = first.charAt(0);
-        char closing;
-        if (opening == '“') {
-            closing = '”';
-        } else if (opening == '"' || opening == '＂') {
-            closing = opening;
-        } else {
-            return null;
-        }
-
         StringBuilder text = new StringBuilder();
-        int depth = 0;
-        boolean opened = false;
-        for (TextBlock block : blocks) {
-            String value = ContractCompareText.cleanDisplayText(block.text);
-            int closingIndex = -1;
-            for (int index = 0; index < value.length(); index++) {
-                char current = value.charAt(index);
-                if (opening == closing) {
-                    if (current == opening) {
-                        if (!opened) {
-                            opened = true;
-                            depth = 1;
-                        } else {
-                            depth = 0;
+        int blockIndex = 0;
+        boolean firstGroup = true;
+        while (blockIndex < blocks.size()) {
+            String first = ContractCompareText.cleanDisplayText(blocks.get(blockIndex).text);
+            QuotePair pair = quotePair(first);
+            if (pair == null) {
+                return firstGroup ? null : new QuotedContent(text.toString(), true);
+            }
+            firstGroup = false;
+            int depth = 0;
+            boolean opened = false;
+            boolean closed = false;
+            for (; blockIndex < blocks.size(); blockIndex++) {
+                String value = ContractCompareText.cleanDisplayText(blocks.get(blockIndex).text);
+                int closingIndex = -1;
+                for (int index = 0; index < value.length(); index++) {
+                    char current = value.charAt(index);
+                    if (pair.opening == pair.closing) {
+                        if (current == pair.opening) {
+                            if (!opened) {
+                                opened = true;
+                                depth = 1;
+                            } else {
+                                depth = 0;
+                                closingIndex = index;
+                                break;
+                            }
+                        }
+                    } else if (current == pair.opening) {
+                        opened = true;
+                        depth++;
+                    } else if (current == pair.closing && opened) {
+                        depth--;
+                        if (depth == 0) {
                             closingIndex = index;
                             break;
                         }
                     }
-                } else if (current == opening) {
-                    opened = true;
-                    depth++;
-                } else if (current == closing && opened) {
-                    depth--;
-                    if (depth == 0) {
-                        closingIndex = index;
-                        break;
-                    }
+                }
+                if (text.length() > 0) {
+                    text.append('\n');
+                }
+                text.append(closingIndex < 0 ? value : value.substring(0, closingIndex + 1));
+                if (closingIndex >= 0) {
+                    blockIndex++;
+                    closed = true;
+                    break;
                 }
             }
-            if (text.length() > 0) {
-                text.append('\n');
-            }
-            text.append(closingIndex < 0 ? value : value.substring(0, closingIndex + 1));
-            if (closingIndex >= 0) {
-                return new QuotedContent(text.toString(), true);
+            if (!closed) {
+                return new QuotedContent(text.toString(), false);
             }
         }
-        return new QuotedContent(text.toString(), false);
+        return new QuotedContent(text.toString(), true);
+    }
+
+    private QuotePair quotePair(String text) {
+        if (text.isEmpty()) {
+            return null;
+        }
+        char opening = text.charAt(0);
+        if (opening == '“') {
+            return new QuotePair(opening, '”');
+        }
+        if (opening == '"' || opening == '＂') {
+            return new QuotePair(opening, opening);
+        }
+        return null;
     }
 
     private String targetReference(String heading) {
@@ -380,6 +423,16 @@ public class ChangeDocumentExtractionService {
         private QuotedContent(String text, boolean closed) {
             this.text = text;
             this.closed = closed;
+        }
+    }
+
+    private static final class QuotePair {
+        private final char opening;
+        private final char closing;
+
+        private QuotePair(char opening, char closing) {
+            this.opening = opening;
+            this.closing = closing;
         }
     }
 }

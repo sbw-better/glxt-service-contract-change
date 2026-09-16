@@ -24,8 +24,14 @@ import java.util.regex.Pattern;
 /** 将 Word 正文和表格解析为有父子关系的合同结构节点。 */
 @Service
 public class ContractStructureParser {
+    private static final Pattern CHINESE_SECTION = Pattern.compile(
+            "^\\s*(第[一二三四五六七八九十百千万〇零两0-9]+(?:编|篇|章|部分|节))"
+                    + "(?:[\\s\\u3000、:：.．]*(.*))?$");
     private static final Pattern CHINESE_CLAUSE = Pattern.compile(
             "^\\s*(第[一二三四五六七八九十百千万〇零两0-9]+条)(?:[\\s\\u3000、:：.．]*(.*))?$");
+    private static final Pattern PARENTHESIZED_CLAUSE = Pattern.compile(
+            "^\\s*([（(][一二三四五六七八九十百千万〇零两0-9]+[）)])"
+                    + "(?:[\\s\\u3000、:：.．]*(.*))?$");
     private static final Pattern DECIMAL_CLAUSE = Pattern.compile(
             "^\\s*((?:[0-9]+\\.)+[0-9]+|[0-9]+)(?:[、.．\\s\\u3000]+(.+))?$");
     private static final Pattern SIGNATURE_START = Pattern.compile(
@@ -111,9 +117,18 @@ public class ContractStructureParser {
     }
 
     private Heading heading(Paragraph paragraph, String text) {
+        Matcher section = CHINESE_SECTION.matcher(text);
+        if (section.matches()) {
+            return new Heading(section.group(1), valueOrEmpty(section.group(2)), 1);
+        }
         Matcher chinese = CHINESE_CLAUSE.matcher(text);
         if (chinese.matches()) {
             return new Heading(chinese.group(1), valueOrEmpty(chinese.group(2)), 1);
+        }
+        Matcher parenthesized = PARENTHESIZED_CLAUSE.matcher(text);
+        if (parenthesized.matches()) {
+            return new Heading(parenthesized.group(1),
+                    titleFromRemainder(parenthesized.group(2)), 2);
         }
         Matcher decimal = DECIMAL_CLAUSE.matcher(text);
         if (decimal.matches()

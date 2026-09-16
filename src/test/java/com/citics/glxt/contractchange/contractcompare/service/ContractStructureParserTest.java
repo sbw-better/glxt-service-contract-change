@@ -71,6 +71,29 @@ public class ContractStructureParserTest {
         assertTrue(paragraph.getNewContent().contains("合同金额 | 120万元"));
     }
 
+    @Test
+    public void shouldSplitChinesePartChapterAndSectionHeadings() throws Exception {
+        Document document = new Document();
+        DocumentBuilder builder = new DocumentBuilder(document);
+        builder.writeln("第一章 总则");
+        builder.writeln("本章内容。");
+        builder.writeln("第二部分 投资范围");
+        builder.writeln("（一）证券投资");
+        builder.writeln("本条内容。");
+        builder.writeln("第三节 风险揭示");
+        builder.writeln("本节内容。");
+
+        Parsed parsed = new ContractStructureParser().parse(document);
+
+        assertEquals(4, parsed.getClauses().size());
+        assertEquals("第一章", parsed.getClauses().get(0).getClauseNo());
+        assertEquals("第二部分", parsed.getClauses().get(1).getClauseNo());
+        assertEquals("（一）", parsed.getClauses().get(2).getClauseNo());
+        assertEquals(parsed.getClauses().get(1), parsed.getClauses().get(2).getParent());
+        assertEquals("第三节", parsed.getClauses().get(3).getClauseNo());
+        assertEquals("投资范围", parsed.getClauses().get(1).getTitle());
+    }
+
     private Document tableDocument(String amount) throws Exception {
         Document document = new Document();
         DocumentBuilder builder = new DocumentBuilder(document);
