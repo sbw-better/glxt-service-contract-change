@@ -131,16 +131,18 @@ POST /service/contract-compare/compare
 POST /service/contract-compare/export
 ```
 
-导入、预测、合同比对和直接导出接口必须携带：
+导入、预测和合同比对接口必须携带：
 
 ```http
 UserId: 实际操作人工号
 ```
 
-该值只透传给模型平台，所有场景均不在日志中输出 `UserId`。索引重载和状态查询不调用模型，
-因此不要求该请求头。
+该值只透传给模型平台，所有场景均不在日志中输出 `UserId`。索引重载、状态查询和临时导出
+接口不调用模型，因此不要求该请求头。
 
-合同分析会在段落比对或内容提取后调用历史向量库识别业务变更类型，因此必须提供 `UserId`。
+`/service/contract-compare/compare` 会在段落比对或内容提取后调用历史向量库识别业务变更类型，
+因此必须提供 `UserId`。`/service/contract-compare/export` 只导出基础差异或变更内容，既不要求
+`UserId`，也不调用 Embedding 或历史向量索引。
 `analysisType` 控制双版本比较或单文件变更函提取，未传或传 `null` 时默认使用
 `DOUBLE_VERSION`。
 
@@ -260,11 +262,12 @@ Word自动列表和标题样式；
 `/service/contract-compare/export` 使用与 `/compare` 相同的 JSON 请求体，直接下载
 `contract-compare-result.xlsx`。主工作表按一个变化段落一行输出条款编号、标题、上级条款、
 条款及段落变更类型、变更前后内容和具体变化；`CONTEXT` 模式额外增加“完整变更前条款”和
-“完整变更后条款”两列。存在匹配或识别提示时额外生成“提示信息”工作表。
+“完整变更后条款”两列。SIMPLE 固定 9 列，CONTEXT 固定 11 列。存在基础解析或比对提示时
+额外生成“提示信息”工作表。该临时接口不要求 `UserId`，不执行历史向量业务类型识别，也不
+输出预测字段。
 
 `CHANGE_DOCUMENT` 导出文件名为 `contract-change-extract-result.xlsx`，主工作表为“提取结果”，
-按一个变更分段一行输出来源标题、目标条款、变更类型、变更前后内容、具体变化及预测字段，
-固定为 13 列。
+按一个变更分段一行输出来源标题、目标条款、变更类型、变更前后内容和具体变化，固定为 8 列。
 Controller 继续通过
 `HttpServletResponse` 直接写入 Excel，方法返回值保持 `void`。
 
@@ -293,13 +296,22 @@ Content-Type: application/json
 当集成识别状态为 `FAILED` 或 `SKIPPED_TOO_LONG` 时，`maxSimilarity` 省略，避免将无结果误解为
 相似度 `0.0`；`NO_RELIABLE_MATCH` 仍保留实际计算得到的最高相似度（如有）。
 
+`/compare` 的 `FAILED.message` 按现有内部错误码区分为历史向量索引不可用、Embedding 服务不可用
+或识别输入不合法。索引问题可先检查 `/service/contract-change/index/status`；Embedding 问题再检查
+网关地址、API Key、模型名称和网络。未知错误仍返回通用提示，具体异常以服务日志为准。
+
 合同比对集成识别采用“变化段落优先、上下文兜底”：新增和修改使用新段落，删除使用旧段落；
 只有段落返回 `NO_RELIABLE_MATCH` 时才尝试条款上下文。上下文命中的类型最高标记为
 `CANDIDATE`，向量服务失败不会丢失基础比对结果。
 
 每个变化段落通过 `businessTypePrediction` 返回识别状态、输入范围、是否使用兜底、
 匹配类型、模型版本、最高相似度、候选业务类型及参考样本。顶层
-`predictionSummary` 汇总匹配、无可靠匹配、调用失败和超长跳过数量。预测结果不会自动反哺历史库。
+`predictionSummary` 汇总匹配、无可靠匹配、调用失败和超长跳过数量。顶层
+`fileChangeTypeCodes` 返回整份合同最终可使用的业务变更类型编码：任一不同规范化段落的
+`HIGH` 类型直接进入，`CANDIDATE` 类型需要至少两个不同规范化段落共同支持；结果去重并按
+编码字符串升序排列。预测失败、超长和无可靠匹配的段落不贡献类型，其他成功段落仍正常汇总，
+没有满足条件的类型时固定返回 `[]`。因此存在预测失败 warning 时该集合可能不完整。预测结果
+不会自动反哺历史库。
 
 Swagger UI：
 

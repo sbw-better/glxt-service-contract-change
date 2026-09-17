@@ -11,6 +11,7 @@ import com.citics.glxt.contractchange.model.ChangeTypePrediction;
 import com.citics.glxt.contractchange.model.PredictionResponse;
 import com.citics.glxt.contractchange.service.ContractParagraphPredictionService;
 import com.citics.glxt.contractchange.service.ContractParagraphPredictionService.LenientPrediction;
+import com.citics.glxt.contractchange.service.FileChangeTypeAggregator;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -42,7 +43,8 @@ public class ContractComparePredictionServiceTest {
         ContractChangeProperties properties = new ContractChangeProperties();
         properties.getEmbedding().setModelVersion("v1");
         properties.getSearch().setMaxParagraphLength(2000);
-        service = new ContractComparePredictionService(paragraphService, properties);
+        service = new ContractComparePredictionService(paragraphService, properties,
+                new FileChangeTypeAggregator());
     }
 
     @Test
@@ -63,6 +65,7 @@ public class ContractComparePredictionServiceTest {
         assertTrue(paragraph.getBusinessTypePrediction().isFallbackUsed());
         assertEquals("CANDIDATE",
                 paragraph.getBusinessTypePrediction().getChangeTypes().get(0).getLevel());
+        assertTrue(response.getFileChangeTypeCodes().isEmpty());
         verify(paragraphService, times(2)).predictBatchLenient(anyList(), eq("u1"));
     }
 
@@ -77,7 +80,38 @@ public class ContractComparePredictionServiceTest {
 
         assertEquals("NEW_PARAGRAPH", paragraph(response).getBusinessTypePrediction().getInputScope());
         assertFalse(paragraph(response).getBusinessTypePrediction().isFallbackUsed());
+        assertTrue(response.getFileChangeTypeCodes().isEmpty());
         verify(paragraphService).predictBatchLenient(Collections.singletonList("新内容"), "u1");
+    }
+
+    @Test
+    public void shouldReturnEmptyFileTypesWhenParagraphAndContextHaveNoReliableMatch() {
+        when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
+                .thenReturn(Collections.singletonList(LenientPrediction.success(noMatch())))
+                .thenReturn(Collections.singletonList(LenientPrediction.success(noMatch())));
+        ContractCompareResponse response = response(ChangeType.MODIFIED,
+                "旧内容", "新内容", new ClauseContext("旧完整条款", "新完整条款"));
+
+        service.predict(response, AnalysisType.DOUBLE_VERSION, "u1");
+
+        assertEquals("NO_RELIABLE_MATCH",
+                paragraph(response).getBusinessTypePrediction().getStatus());
+        assertEquals(1, response.getPredictionSummary().getNoReliableMatchCount());
+        assertTrue(response.getFileChangeTypeCodes().isEmpty());
+        verify(paragraphService, times(2)).predictBatchLenient(anyList(), eq("u1"));
+    }
+
+    @Test
+    public void shouldReturnEmptyFileTypesWhenThereAreNoChanges() {
+        ContractCompareResponse response = new ContractCompareResponse(0,
+                Collections.<ClauseChange>emptyList(), Collections.<String>emptyList());
+
+        service.predict(response, AnalysisType.DOUBLE_VERSION, "u1");
+
+        assertEquals(0, response.getPredictionSummary().getMatchedCount());
+        assertEquals(0, response.getPredictionSummary().getNoReliableMatchCount());
+        assertTrue(response.getFileChangeTypeCodes().isEmpty());
+        verify(paragraphService, never()).predictBatchLenient(anyList(), eq("u1"));
     }
 
     @Test
@@ -96,6 +130,19 @@ public class ContractComparePredictionServiceTest {
     }
 
     @Test
+    public void shouldNotFallbackToOldParagraphWhenModifiedNewContentIsMissing() {
+        ContractCompareResponse response = response(ChangeType.MODIFIED,
+                "修改前内容", null, new ClauseContext("修改前完整条款", null));
+
+        service.predict(response, AnalysisType.DOUBLE_VERSION, "u1");
+
+        assertEquals("FAILED", paragraph(response).getBusinessTypePrediction().getStatus());
+        assertEquals("NEW_PARAGRAPH", paragraph(response).getBusinessTypePrediction().getInputScope());
+        assertTrue(response.getFileChangeTypeCodes().isEmpty());
+        verify(paragraphService, never()).predictBatchLenient(anyList(), eq("u1"));
+    }
+
+    @Test
     public void shouldDegradeFailedBatchAndKeepComparisonResult() {
         when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
                 .thenReturn(Collections.singletonList(LenientPrediction.failed("EMBEDDING_UNAVAILABLE")));
@@ -105,8 +152,11 @@ public class ContractComparePredictionServiceTest {
         service.predict(response, AnalysisType.DOUBLE_VERSION, "u1");
 
         assertEquals("FAILED", paragraph(response).getBusinessTypePrediction().getStatus());
+        assertTrue(paragraph(response).getBusinessTypePrediction().getMessage()
+                .contains("Embedding服务暂不可用"));
         assertNull(paragraph(response).getBusinessTypePrediction().getMaxSimilarity());
         assertEquals(1, response.getPredictionSummary().getFailedCount());
+        assertTrue(response.getFileChangeTypeCodes().isEmpty());
         assertTrue(response.getWarnings().get(0).contains("1个变化段落"));
     }
 
@@ -129,11 +179,27 @@ public class ContractComparePredictionServiceTest {
     }
 
     @Test
+    public void shouldExposeSafeIndexFailureReason() {
+        when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
+                .thenReturn(Collections.singletonList(
+                        LenientPrediction.failed("INDEX_UNAVAILABLE")));
+        ContractCompareResponse response = response(ChangeType.ADDED,
+                null, "新增内容", null);
+
+        service.predict(response, AnalysisType.DOUBLE_VERSION, "u1");
+
+        assertEquals("FAILED", paragraph(response).getBusinessTypePrediction().getStatus());
+        assertEquals("历史向量索引不可用，请检查 /service/contract-change/index/status",
+                paragraph(response).getBusinessTypePrediction().getMessage());
+    }
+
+    @Test
     public void shouldSkipOverlongBaseParagraphWithoutCallingPrediction() {
         ContractChangeProperties properties = new ContractChangeProperties();
         properties.getEmbedding().setModelVersion("v1");
         properties.getSearch().setMaxParagraphLength(4);
-        service = new ContractComparePredictionService(paragraphService, properties);
+        service = new ContractComparePredictionService(paragraphService, properties,
+                new FileChangeTypeAggregator());
         ContractCompareResponse response = response(ChangeType.ADDED,
                 null, "超过四个字符", new ClauseContext(null, "超过四个字符"));
 
@@ -164,6 +230,7 @@ public class ContractComparePredictionServiceTest {
                 .get(0).getBusinessTypePrediction().getStatus());
         assertEquals("MATCHED", response.getChanges().get(0).getChangedParagraphs()
                 .get(1).getBusinessTypePrediction().getStatus());
+        assertTrue(response.getFileChangeTypeCodes().isEmpty());
     }
 
     @Test
@@ -189,6 +256,7 @@ public class ContractComparePredictionServiceTest {
         assertNotEquals(fallbackInputs.get(0), fallbackInputs.get(1));
         assertTrue(fallbackInputs.get(0).contains("新金额"));
         assertTrue(fallbackInputs.get(1).contains("新期限"));
+        assertEquals(Collections.singletonList("25"), response.getFileChangeTypeCodes());
     }
 
     @Test
@@ -196,7 +264,8 @@ public class ContractComparePredictionServiceTest {
         ContractChangeProperties properties = new ContractChangeProperties();
         properties.getEmbedding().setModelVersion("v1");
         properties.getSearch().setMaxParagraphLength(30);
-        service = new ContractComparePredictionService(paragraphService, properties);
+        service = new ContractComparePredictionService(paragraphService, properties,
+                new FileChangeTypeAggregator());
         when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
                 .thenReturn(Collections.singletonList(LenientPrediction.success(noMatch())))
                 .thenReturn(Collections.singletonList(
@@ -240,6 +309,33 @@ public class ContractComparePredictionServiceTest {
         assertTrue(fallbackInput.contains("《基金合同》第二条"));
         assertTrue(fallbackInput.contains("新金额"));
         assertEquals("NEW_CONTEXT", changed.getBusinessTypePrediction().getInputScope());
+    }
+
+    @Test
+    public void shouldIncludeSingleHighTypeInFileSummary() {
+        when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
+                .thenReturn(Collections.singletonList(LenientPrediction.success(highMatch())));
+        ContractCompareResponse response = response(ChangeType.ADDED,
+                null, "新增高可信内容", null);
+
+        service.predict(response, AnalysisType.DOUBLE_VERSION, "u1");
+
+        assertEquals(Collections.singletonList("20"), response.getFileChangeTypeCodes());
+    }
+
+    @Test
+    public void shouldAggregateSuccessfulTypesWhenAnotherParagraphFails() {
+        when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
+                .thenReturn(Arrays.asList(LenientPrediction.success(highMatch()),
+                        LenientPrediction.failed("EMBEDDING_UNAVAILABLE")));
+        ContractCompareResponse response = responseWithParagraphs(
+                paragraph(ChangeType.ADDED, null, "成功段落"),
+                paragraph(ChangeType.ADDED, null, "失败段落"));
+
+        service.predict(response, AnalysisType.DOUBLE_VERSION, "u1");
+
+        assertEquals(Collections.singletonList("20"), response.getFileChangeTypeCodes());
+        assertEquals(1, response.getPredictionSummary().getFailedCount());
     }
 
     private ContractCompareResponse response(ChangeType type, String oldText, String newText,

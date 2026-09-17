@@ -12,6 +12,7 @@ import com.citics.glxt.contractchange.model.ChangeTypePrediction;
 import com.citics.glxt.contractchange.model.PredictionResponse;
 import com.citics.glxt.contractchange.service.ContractParagraphPredictionService;
 import com.citics.glxt.contractchange.service.ContractParagraphPredictionService.LenientPrediction;
+import com.citics.glxt.contractchange.service.FileChangeTypeAggregator;
 import com.citics.glxt.contractchange.util.ContractTextNormalizer;
 import org.springframework.stereotype.Service;
 import lombok.extern.slf4j.Slf4j;
@@ -28,11 +29,14 @@ import java.util.Map;
 public class ContractComparePredictionService {
     private final ContractParagraphPredictionService predictionService;
     private final ContractChangeProperties properties;
+    private final FileChangeTypeAggregator changeTypeAggregator;
 
     public ContractComparePredictionService(ContractParagraphPredictionService predictionService,
-                                            ContractChangeProperties properties) {
+                                            ContractChangeProperties properties,
+                                            FileChangeTypeAggregator changeTypeAggregator) {
         this.predictionService = predictionService;
         this.properties = properties;
+        this.changeTypeAggregator = changeTypeAggregator;
     }
 
     public void predict(ContractCompareResponse response, AnalysisType analysisType, String userId) {
@@ -89,6 +93,7 @@ public class ContractComparePredictionService {
         }
         response.setPredictionSummary(new PredictionSummary(
                 matched, noMatch, failed, skippedTooLong));
+        response.setFileChangeTypeCodes(aggregateFileChangeTypes(targets));
         if (failed > 0) {
             ensureWarnings(response).add("有" + failed + "个变化段落未完成业务类型识别，请人工复核");
         }
@@ -100,6 +105,27 @@ public class ContractComparePredictionService {
                 analysisType, targets.size(), matched, fallbackMatched, noMatch, failed,
                 skippedTooLong,
                 System.currentTimeMillis() - started);
+    }
+
+    private List<String> aggregateFileChangeTypes(List<Target> targets) {
+        List<String> paragraphs = new ArrayList<String>();
+        List<List<ChangeTypePrediction>> changeTypes =
+                new ArrayList<List<ChangeTypePrediction>>();
+        for (Target target : targets) {
+            String normalized = ContractTextNormalizer.normalize(target.baseText);
+            if (normalized.isEmpty()) {
+                continue;
+            }
+            paragraphs.add(normalized);
+            BusinessTypePrediction prediction = target.paragraph.getBusinessTypePrediction();
+            if (prediction != null && "MATCHED".equals(prediction.getStatus())
+                    && prediction.getChangeTypes() != null) {
+                changeTypes.add(prediction.getChangeTypes());
+            } else {
+                changeTypes.add(Collections.<ChangeTypePrediction>emptyList());
+            }
+        }
+        return changeTypeAggregator.aggregateChangeTypes(paragraphs, changeTypes);
     }
 
     private void applyPredictions(Map<String, List<Target>> groups, String userId,
@@ -115,7 +141,7 @@ public class ContractComparePredictionService {
                 if (!item.isSuccess()) {
                     target.paragraph.setBusinessTypePrediction(failed(
                             contextFallback ? target.contextScope : target.primaryScope,
-                            "历史向量类型识别服务暂不可用", "FAILED",
+                            predictionFailureMessage(item.getErrorCode()), "FAILED",
                             contextFallback));
                     continue;
                 }
@@ -126,6 +152,19 @@ public class ContractComparePredictionService {
                 target.paragraph.setBusinessTypePrediction(converted);
             }
         }
+    }
+
+    private String predictionFailureMessage(String errorCode) {
+        if ("INDEX_UNAVAILABLE".equals(errorCode)) {
+            return "历史向量索引不可用，请检查 /service/contract-change/index/status";
+        }
+        if ("EMBEDDING_UNAVAILABLE".equals(errorCode)) {
+            return "Embedding服务暂不可用，请检查网关地址、API Key、模型名称和网络";
+        }
+        if ("INVALID_INPUT".equals(errorCode)) {
+            return "类型识别输入不合法";
+        }
+        return "历史向量类型识别服务暂不可用";
     }
 
     private BusinessTypePrediction convert(PredictionResponse source, String scope,
@@ -176,8 +215,7 @@ public class ContractComparePredictionService {
                 continue;
             }
             for (ChangedParagraph paragraph : change.getChangedParagraphs()) {
-                boolean oldSide = paragraph.getParagraphChangeType() == ChangeType.DELETED
-                        || paragraph.getNewContent() == null;
+                boolean oldSide = paragraph.getParagraphChangeType() == ChangeType.DELETED;
                 String text = oldSide ? paragraph.getOldContent() : paragraph.getNewContent();
                 result.add(new Target(change, paragraph, text,
                         oldSide ? "OLD_PARAGRAPH" : "NEW_PARAGRAPH",

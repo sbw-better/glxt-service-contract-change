@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.Collections;
 import java.util.List;
 
 /** 合同双版本比较结果。 */
@@ -19,6 +20,9 @@ public class ContractCompareResponse implements Serializable {
     private List<String> warnings;
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private PredictionSummary predictionSummary;
+    /** 整份合同按文件级可信度规则汇总后的业务变更类型编码。 */
+    @JsonInclude(JsonInclude.Include.ALWAYS)
+    private List<String> fileChangeTypeCodes = Collections.emptyList();
     public ContractCompareResponse(int totalChanges, List<ClauseChange> changes,
                                    List<String> warnings) {
         this.totalChanges = totalChanges;

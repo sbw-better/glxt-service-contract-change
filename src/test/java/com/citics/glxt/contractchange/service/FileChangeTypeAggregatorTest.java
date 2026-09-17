@@ -44,6 +44,18 @@ public class FileChangeTypeAggregatorTest {
                 Arrays.asList(noMatch, prediction(type("25", "CANDIDATE")))).isEmpty());
     }
 
+    @Test
+    public void shouldMergeDifferentTypesForSameParagraphWithoutDoubleCounting() {
+        List<String> paragraphs = Arrays.asList("重复段落", "重复段落", "另一段落");
+        List<List<ChangeTypePrediction>> types = Arrays.asList(
+                Collections.singletonList(type("20", "CANDIDATE")),
+                Arrays.asList(type("20", "CANDIDATE"), type("28", "HIGH")),
+                Collections.singletonList(type("20", "CANDIDATE")));
+
+        assertEquals(Arrays.asList("20", "28"),
+                aggregator.aggregateChangeTypes(paragraphs, types));
+    }
+
     private PredictionResponse prediction(ChangeTypePrediction... types) {
         return new PredictionResponse("SEMANTIC", "test-v1", 0.9D,
                 Arrays.asList(types), Collections.emptyList());

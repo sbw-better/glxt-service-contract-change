@@ -9,7 +9,6 @@ import com.citics.glxt.contractchange.contractcompare.model.ContractCompareReque
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.AnalysisType;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.ResultMode;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;
-import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.BusinessTypePrediction;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangedParagraph;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeType;
 import org.junit.Test;
@@ -26,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 /** 验证从两份 DOCX 字节到条款级响应的完整核心链路。 */
@@ -115,11 +115,7 @@ public class ContractCompareServiceTest {
                     workbook.getSheetAt(0).getRow(2).getCell(7).getStringCellValue());
             assertEquals("替换：100 → 120",
                     workbook.getSheetAt(0).getRow(2).getCell(8).getStringCellValue());
-            assertEquals(14, workbook.getSheetAt(0).getRow(1).getLastCellNum());
-            assertEquals("业务变更类型",
-                    workbook.getSheetAt(0).getRow(1).getCell(9).getStringCellValue());
-            assertEquals("识别状态",
-                    workbook.getSheetAt(0).getRow(1).getCell(10).getStringCellValue());
+            assertEquals(9, workbook.getSheetAt(0).getRow(1).getLastCellNum());
         }
     }
 
@@ -148,7 +144,7 @@ public class ContractCompareServiceTest {
 
         byte[] excel = service.exportExcel(request);
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(excel))) {
-            assertEquals(16, workbook.getSheetAt(0).getRow(1).getLastCellNum());
+            assertEquals(11, workbook.getSheetAt(0).getRow(1).getLastCellNum());
             assertEquals("完整变更前条款",
                     workbook.getSheetAt(0).getRow(1).getCell(9).getStringCellValue());
             assertTrue(workbook.getSheetAt(0).getRow(2).getCell(9).getStringCellValue()
@@ -206,7 +202,7 @@ public class ContractCompareServiceTest {
     }
 
     @Test
-    public void shouldExportFailureStatusWithoutFakeSimilarity() throws Exception {
+    public void shouldExportWithoutInvokingBusinessTypePrediction() throws Exception {
         SftpContractFileLoader loader = mock(SftpContractFileLoader.class);
         when(loader.load("/old.docx")).thenReturn(document(
                 "第二条 合同金额", "金额为100万元。"));
@@ -217,16 +213,6 @@ public class ContractCompareServiceTest {
                 new ClauseComparisonEngine(new ContractCompareProperties());
         ContractComparePredictionService prediction =
                 mock(ContractComparePredictionService.class);
-        doAnswer(invocation -> {
-            ContractCompareResponse value = invocation.getArgument(0);
-            BusinessTypePrediction failed = new BusinessTypePrediction();
-            failed.setStatus("FAILED");
-            failed.setInputScope("NEW_PARAGRAPH");
-            value.getChanges().get(0).getChangedParagraphs().get(0)
-                    .setBusinessTypePrediction(failed);
-            return null;
-        }).when(prediction).predict(any(ContractCompareResponse.class),
-                eq(AnalysisType.DOUBLE_VERSION), eq("employee-001"));
         ContractCompareService service = new ContractCompareService(loader, aspose,
                 new ContractStructureParser(), engine,
                 new ChangeDocumentExtractionService(aspose, engine), prediction);
@@ -234,20 +220,16 @@ public class ContractCompareServiceTest {
         request.setOldFileGetPath("/old.docx");
         request.setNewFileGetPath("/new.docx");
 
-        byte[] excel = service.exportExcel(request, "employee-001");
+        byte[] excel = service.exportExcel(request);
 
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(excel))) {
-            assertEquals("FAILED",
-                    workbook.getSheetAt(0).getRow(2).getCell(10).getStringCellValue());
-            assertEquals("",
-                    workbook.getSheetAt(0).getRow(2).getCell(12).getStringCellValue());
-            assertEquals("NEW_PARAGRAPH",
-                    workbook.getSheetAt(0).getRow(2).getCell(13).getStringCellValue());
+            assertEquals(9, workbook.getSheetAt(0).getRow(1).getLastCellNum());
         }
+        verifyZeroInteractions(prediction);
     }
 
     @Test
-    public void shouldIgnoreContextModeForChangeDocumentAndExportPredictionColumns()
+    public void shouldIgnoreContextModeForChangeDocumentExport()
             throws Exception {
         SftpContractFileLoader loader = mock(SftpContractFileLoader.class);
         when(loader.load("/supplement.docx")).thenReturn(document(
@@ -273,7 +255,7 @@ public class ContractCompareServiceTest {
         byte[] excel = service.exportExcel(request);
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(excel))) {
             assertEquals("提取结果", workbook.getSheetAt(0).getSheetName());
-            assertEquals(13, workbook.getSheetAt(0).getRow(1).getLastCellNum());
+            assertEquals(8, workbook.getSheetAt(0).getRow(1).getLastCellNum());
             assertEquals("来源标题",
                     workbook.getSheetAt(0).getRow(1).getCell(1).getStringCellValue());
             assertEquals("合同金额为100万元。",
@@ -285,7 +267,7 @@ public class ContractCompareServiceTest {
         request.setResultMode(ResultMode.SIMPLE);
         byte[] simpleExcel = service.exportExcel(request);
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(simpleExcel))) {
-            assertEquals(13, workbook.getSheetAt(0).getRow(1).getLastCellNum());
+            assertEquals(8, workbook.getSheetAt(0).getRow(1).getLastCellNum());
         }
     }
 

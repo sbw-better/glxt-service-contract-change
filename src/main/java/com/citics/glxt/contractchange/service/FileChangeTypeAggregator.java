@@ -7,10 +7,8 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeSet;
 
 /** 将多个段落的预测结果汇总为文件级变更类型编码。 */
@@ -28,31 +26,71 @@ public class FileChangeTypeAggregator {
             throw new ContractChangeBusinessException("段落数量与预测结果数量不一致");
         }
 
-        Map<String, TypeEvidence> evidenceByCode = new HashMap<String, TypeEvidence>();
-        Set<String> countedParagraphs = new HashSet<String>();
+        List<List<ChangeTypePrediction>> changeTypesByParagraph =
+                new ArrayList<List<ChangeTypePrediction>>();
+        for (PredictionResponse prediction : predictions) {
+            if (prediction == null || "NO_RELIABLE_MATCH".equals(prediction.getMatchType())) {
+                changeTypesByParagraph.add(null);
+            } else {
+                changeTypesByParagraph.add(prediction.getChangeTypes());
+            }
+        }
+        return aggregateChangeTypes(normalizedParagraphs, changeTypesByParagraph);
+    }
+
+    /**
+     * 汇总已经附着在变化段落上的类型结果。
+     *
+     * <p>相同规范化段落可能因所在条款上下文不同而得到不同候选，因此先合并该段落的全部类型，
+     * 再把每个类型最多计作一次段落证据；同一段落同一类型同时出现 HIGH 和 CANDIDATE 时以
+     * HIGH 为准。</p>
+     */
+    public List<String> aggregateChangeTypes(List<String> normalizedParagraphs,
+                                             List<List<ChangeTypePrediction>> changeTypesByParagraph) {
+        if (normalizedParagraphs == null || changeTypesByParagraph == null
+                || normalizedParagraphs.size() != changeTypesByParagraph.size()) {
+            throw new ContractChangeBusinessException("段落数量与预测结果数量不一致");
+        }
+
+        Map<String, Map<String, String>> levelsByParagraph =
+                new HashMap<String, Map<String, String>>();
         for (int i = 0; i < normalizedParagraphs.size(); i++) {
             String normalized = normalizedParagraphs.get(i);
-            if (normalized == null || !countedParagraphs.add(normalized)) {
+            if (normalized == null) {
                 continue;
             }
-            PredictionResponse prediction = predictions.get(i);
-            if (prediction == null || "NO_RELIABLE_MATCH".equals(prediction.getMatchType())
-                    || prediction.getChangeTypes() == null) {
+            List<ChangeTypePrediction> types = changeTypesByParagraph.get(i);
+            if (types == null) {
                 continue;
             }
-            Set<String> countedCodes = new HashSet<String>();
-            for (ChangeTypePrediction type : prediction.getChangeTypes()) {
-                if (type == null || type.getCode() == null || !countedCodes.add(type.getCode())) {
+            Map<String, String> levelsByCode = levelsByParagraph.get(normalized);
+            if (levelsByCode == null) {
+                levelsByCode = new HashMap<String, String>();
+                levelsByParagraph.put(normalized, levelsByCode);
+            }
+            for (ChangeTypePrediction type : types) {
+                if (type == null || type.getCode() == null) {
                     continue;
                 }
-                TypeEvidence evidence = evidenceByCode.get(type.getCode());
+                String existing = levelsByCode.get(type.getCode());
+                if ("HIGH".equals(type.getLevel()) || existing == null) {
+                    levelsByCode.put(type.getCode(), type.getLevel());
+                }
+            }
+        }
+
+        Map<String, TypeEvidence> evidenceByCode = new HashMap<String, TypeEvidence>();
+        for (Map<String, String> levelsByCode : levelsByParagraph.values()) {
+            for (Map.Entry<String, String> type : levelsByCode.entrySet()) {
+                String code = type.getKey();
+                TypeEvidence evidence = evidenceByCode.get(code);
                 if (evidence == null) {
                     evidence = new TypeEvidence();
-                    evidenceByCode.put(type.getCode(), evidence);
+                    evidenceByCode.put(code, evidence);
                 }
-                if ("HIGH".equals(type.getLevel())) {
+                if ("HIGH".equals(type.getValue())) {
                     evidence.high = true;
-                } else if ("CANDIDATE".equals(type.getLevel())) {
+                } else if ("CANDIDATE".equals(type.getValue())) {
                     evidence.candidateParagraphCount++;
                 }
             }

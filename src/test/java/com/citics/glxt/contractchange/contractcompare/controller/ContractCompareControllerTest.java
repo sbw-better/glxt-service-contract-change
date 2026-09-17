@@ -55,7 +55,9 @@ public class ContractCompareControllerTest {
                 .content("{\"oldFileGetPath\":\"/old.docx\",\"newFileGetPath\":\"/new.docx\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data.totalChanges").value(0));
+                .andExpect(jsonPath("$.data.totalChanges").value(0))
+                .andExpect(jsonPath("$.data.fileChangeTypeCodes").isArray())
+                .andExpect(jsonPath("$.data.fileChangeTypeCodes").isEmpty());
 
         verify(service).compare(any(ContractCompareRequest.class), anyString());
     }
@@ -176,10 +178,9 @@ public class ContractCompareControllerTest {
     @Test
     public void shouldDownloadComparisonExcel() throws Exception {
         byte[] excel = new byte[]{0x50, 0x4B, 0x03, 0x04};
-        when(service.exportExcel(any(), anyString())).thenReturn(excel);
+        when(service.exportExcel(any())).thenReturn(excel);
 
         mockMvc.perform(post("/service/contract-compare/export")
-                .header("UserId", "employee-001")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"oldFileGetPath\":\"/old.docx\",\"newFileGetPath\":\"/new.docx\"}"))
                 .andExpect(status().isOk())
@@ -189,18 +190,7 @@ public class ContractCompareControllerTest {
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .andExpect(content().bytes(excel));
 
-        verify(service).exportExcel(any(ContractCompareRequest.class), anyString());
-    }
-
-    @Test
-    public void shouldRequireUserIdForIntegratedExport() throws Exception {
-        mockMvc.perform(post("/service/contract-compare/export")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"oldFileGetPath\":\"/old.docx\",\"newFileGetPath\":\"/new.docx\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(400));
-
-        verifyZeroInteractions(service);
+        verify(service).exportExcel(any(ContractCompareRequest.class));
     }
 
     @Test
@@ -225,6 +215,7 @@ public class ContractCompareControllerTest {
         ContractCompareResponse response = new ContractCompareResponse(
                 1, Collections.singletonList(change), Collections.emptyList());
         response.setPredictionSummary(new PredictionSummary(1, 0, 0, 0));
+        response.setFileChangeTypeCodes(Collections.singletonList("20"));
         when(service.compare(any(), anyString())).thenReturn(response);
 
         mockMvc.perform(post("/service/contract-compare/compare")
@@ -234,6 +225,7 @@ public class ContractCompareControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.predictionSummary.matchedCount").value(1))
                 .andExpect(jsonPath("$.data.predictionSummary.skippedTooLongCount").value(0))
+                .andExpect(jsonPath("$.data.fileChangeTypeCodes[0]").value("20"))
                 .andExpect(jsonPath("$.data.changes[0].changedParagraphs[0]"
                         + ".businessTypePrediction.status").value("MATCHED"))
                 .andExpect(jsonPath("$.data.changes[0].changedParagraphs[0]"
@@ -247,10 +239,9 @@ public class ContractCompareControllerTest {
     @Test
     public void shouldDownloadChangeDocumentExcelWithDedicatedFilename() throws Exception {
         byte[] excel = new byte[]{0x50, 0x4B, 0x03, 0x04};
-        when(service.exportExcel(any(), anyString())).thenReturn(excel);
+        when(service.exportExcel(any())).thenReturn(excel);
 
         mockMvc.perform(post("/service/contract-compare/export")
-                .header("UserId", "employee-001")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"analysisType\":\"CHANGE_DOCUMENT\","
                         + "\"changeFileGetPath\":\"/supplement.docx\"}"))

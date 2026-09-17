@@ -44,12 +44,11 @@ public class ContractCompareController {
 
     @PostMapping("/export")
     @ApiOperation(value = "导出合同分析结果Excel",
-            notes = "请求参数与compare接口相同；根据analysisType导出双版本比对或变更函提取结果")
+            notes = "仅导出双版本差异或单文件变更内容，不执行历史向量业务类型识别；根据analysisType选择导出内容")
     public void export(
-                       @RequestHeader("UserId") @NotBlank(message = "UserId不能为空") String userId,
                        @Valid @RequestBody ContractCompareRequest request,
                        HttpServletResponse response) throws IOException {
-        byte[] excel = compareService.exportExcel(request, userId);
+        byte[] excel = compareService.exportExcel(request);
         response.setContentType(XLSX_MEDIA_TYPE);
         response.setHeader("Content-Disposition",
                 "attachment; filename=" + exportFilename(request));
