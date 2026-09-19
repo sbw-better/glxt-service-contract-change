@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.controller;
 
-import com.citics.glxt.common.handler.GlobalExceptionHandler;
+import com.citics.glxt.contractchange.common.handler.GlobalExceptionHandler;
 import com.citics.glxt.contractchange.model.ImportErrorItem;
 import com.citics.glxt.contractchange.model.ImportResponse;
 import com.citics.glxt.contractchange.model.DocumentChangeTypeSummaryResponse;

@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.common.utils.assertUtils;
 
-import com.citics.glxt.common.exception.OpenException;
+import com.citics.glxt.contractchange.common.exception.OpenException;
 
 public class Assert {
 

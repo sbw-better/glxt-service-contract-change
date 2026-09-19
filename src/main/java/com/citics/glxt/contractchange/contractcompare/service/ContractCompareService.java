@@ -1,7 +1,7 @@
 package com.citics.glxt.contractchange.contractcompare.service;
 
-import com.citics.glxt.common.constants.CommonConstants;
-import com.citics.glxt.common.exception.ContractChangeBusinessException;
+import com.citics.glxt.contractchange.common.constants.CommonConstants;
+import com.citics.glxt.contractchange.common.exception.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.contractcompare.aspose.AsposeCompareService;
 import com.citics.glxt.contractchange.contractcompare.aspose.AsposeCompareService.ComparisonResult;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest;
@@ -126,7 +126,7 @@ public class ContractCompareService {
             if (ex instanceof RuntimeException) {
                 throw (RuntimeException) ex;
             }
-            throw new com.citics.glxt.common.exception.ContractChangeBusinessException("合同结构解析失败");
+            throw new com.citics.glxt.contractchange.common.exception.ContractChangeBusinessException("合同结构解析失败");
         }
     }
 

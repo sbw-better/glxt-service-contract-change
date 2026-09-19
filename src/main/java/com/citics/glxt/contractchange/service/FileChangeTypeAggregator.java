@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.service;
 
-import com.citics.glxt.common.exception.ContractChangeBusinessException;
+import com.citics.glxt.contractchange.common.exception.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.model.ChangeTypePrediction;
 import com.citics.glxt.contractchange.model.PredictionResponse;
 import org.springframework.stereotype.Component;

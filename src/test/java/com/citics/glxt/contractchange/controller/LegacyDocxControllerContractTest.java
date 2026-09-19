@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.controller;
 
-import com.citics.glxt.common.result.ResultModel;
+import com.citics.glxt.contractchange.common.result.ResultModel;
 import com.citics.glxt.contractchange.model.dto.DocxAnalysisDTO;
 import com.citics.glxt.contractchange.service.DocxModifyAndLandService;
 import org.junit.Test;

@@ -9,7 +9,7 @@ import com.aspose.words.NodeType;
 import com.aspose.words.Paragraph;
 import com.aspose.words.Section;
 import com.aspose.words.Table;
-import com.citics.glxt.common.exception.ContractChangeBusinessException;
+import com.citics.glxt.contractchange.common.exception.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.contractcompare.aspose.AsposeCompareService;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeType;

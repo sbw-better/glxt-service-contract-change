@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.contractcompare.controller;
 
-import com.citics.glxt.common.result.ContractChangeResult;
+import com.citics.glxt.contractchange.common.result.ContractChangeResult;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.AnalysisType;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;

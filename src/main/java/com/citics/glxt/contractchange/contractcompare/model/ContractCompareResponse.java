@@ -1,7 +1,7 @@
 package com.citics.glxt.contractchange.contractcompare.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.citics.glxt.common.serializer.FourDecimalDoubleSerializer;
+import com.citics.glxt.contractchange.common.serializer.FourDecimalDoubleSerializer;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import lombok.AllArgsConstructor;
 import lombok.Data;

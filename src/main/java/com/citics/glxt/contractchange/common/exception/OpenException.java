@@ -1,6 +1,6 @@
-package com.citics.glxt.common.exception;
+package com.citics.glxt.contractchange.common.exception;
 
-import com.citics.glxt.common.constants.ErrorCode;
+import com.citics.glxt.contractchange.common.constants.ErrorCode;
 
 public class OpenException extends RuntimeException {
 

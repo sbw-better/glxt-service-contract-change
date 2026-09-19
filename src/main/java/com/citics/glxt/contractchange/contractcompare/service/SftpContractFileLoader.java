@@ -1,7 +1,7 @@
 package com.citics.glxt.contractchange.contractcompare.service;
 
-import com.citics.glxt.common.exception.ContractChangeBusinessException;
-import com.citics.glxt.common.utils.file.SftpUtil;
+import com.citics.glxt.contractchange.common.exception.ContractChangeBusinessException;
+import com.citics.glxt.contractchange.common.utils.file.SftpUtil;
 import com.citics.glxt.contractchange.contractcompare.config.ContractCompareProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

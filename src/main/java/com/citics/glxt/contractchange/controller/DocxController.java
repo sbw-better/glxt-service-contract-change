@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.controller;
 
-import com.citics.glxt.common.result.ResultModel;
+import com.citics.glxt.contractchange.common.result.ResultModel;
 import com.citics.glxt.contractchange.model.dto.DocxAnalysisDTO;
 import com.citics.glxt.contractchange.service.DocxModifyAndLandService;
 import io.swagger.annotations.Api;
@@ -11,8 +11,8 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 
-import static com.citics.glxt.common.constants.CommonConstants.EXECUTE_EXECUTE_FAIL;
-import static com.citics.glxt.common.constants.CommonConstants.EXECUTE_EXECUTE_SUCCESS;
+import static com.citics.glxt.contractchange.common.constants.CommonConstants.EXECUTE_EXECUTE_FAIL;
+import static com.citics.glxt.contractchange.common.constants.CommonConstants.EXECUTE_EXECUTE_SUCCESS;
 
 @Api(value = "docx文件解析", tags = "docx文件解析")
 @Validated

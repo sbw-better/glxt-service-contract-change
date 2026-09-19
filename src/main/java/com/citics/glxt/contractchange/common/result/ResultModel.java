@@ -1,6 +1,6 @@
-package com.citics.glxt.common.result;
+package com.citics.glxt.contractchange.common.result;
 
-import com.citics.glxt.common.constants.CommonConstants;
+import com.citics.glxt.contractchange.common.constants.CommonConstants;
 import lombok.Data;
 import java.io.Serializable;
 

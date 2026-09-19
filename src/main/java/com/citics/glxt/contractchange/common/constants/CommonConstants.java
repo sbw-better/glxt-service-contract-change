@@ -1,4 +1,4 @@
-package com.citics.glxt.common.constants;
+package com.citics.glxt.contractchange.common.constants;
 
 /** REST 统一响应码常量。 */
 public final class CommonConstants {

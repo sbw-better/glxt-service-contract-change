@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.contractcompare.controller;
 
-import com.citics.glxt.common.handler.GlobalExceptionHandler;
+import com.citics.glxt.contractchange.common.handler.GlobalExceptionHandler;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.BusinessTypePrediction;

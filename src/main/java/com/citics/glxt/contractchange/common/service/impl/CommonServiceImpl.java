@@ -1,7 +1,7 @@
 package com.citics.glxt.contractchange.common.service.impl;
 
-import com.citics.glxt.common.service.CommonService;
-import com.citics.glxt.common.utils.file.SftpUtil;
+import com.citics.glxt.contractchange.common.service.CommonService;
+import com.citics.glxt.contractchange.common.utils.file.SftpUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.springframework.beans.factory.annotation.Value;

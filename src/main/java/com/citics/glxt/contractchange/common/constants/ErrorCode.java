@@ -1,4 +1,4 @@
-package com.citics.glxt.common.constants;
+package com.citics.glxt.contractchange.common.constants;
 
 public enum ErrorCode {
     /**

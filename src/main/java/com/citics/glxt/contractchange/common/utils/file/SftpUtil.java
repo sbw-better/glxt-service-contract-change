@@ -1,8 +1,7 @@
-package com.citics.glxt.common.utils.file;
+package com.citics.glxt.contractchange.common.utils.file;
 
 import com.jcraft.jsch.*;
 import lombok.extern.slf4j.Slf4j;
-import org.omg.CORBA.SystemException;
 
 import java.io.InputStream;
 import java.lang.reflect.Field;
@@ -134,7 +133,7 @@ public class SftpUtil {
     /**
      * 创建目录
      **/
-    public void createDir(String createpath) throws SystemException {
+    public void createDir(String createpath) {
         try {
             String pathArry[] = createpath.split("/");
             StringBuffer filePath = new StringBuffer("/");
@@ -156,7 +155,6 @@ public class SftpUtil {
             }
             sftp.cd(createpath);
         } catch (SftpException e) {
-            //throw new SystemException("创建路径错误：" + createpath);
         }
     }
 

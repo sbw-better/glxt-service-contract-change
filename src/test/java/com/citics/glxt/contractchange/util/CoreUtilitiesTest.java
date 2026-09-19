@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.util;
 
-import com.citics.glxt.common.exception.ContractChangeBusinessException;
+import com.citics.glxt.contractchange.common.exception.ContractChangeBusinessException;
 import org.junit.Test;
 
 import java.util.Arrays;

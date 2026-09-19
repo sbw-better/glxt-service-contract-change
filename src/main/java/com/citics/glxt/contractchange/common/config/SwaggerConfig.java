@@ -1,4 +1,4 @@
-package com.citics.glxt.common.config;
+package com.citics.glxt.contractchange.common.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

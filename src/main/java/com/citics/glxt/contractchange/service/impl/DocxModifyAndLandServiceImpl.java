@@ -24,8 +24,8 @@ import java.util.concurrent.CompletableFuture;
 import lombok.extern.slf4j.Slf4j;
 
 import static com.baomidou.mybatisplus.core.toolkit.Assert.isFalse;
-import static com.citics.glxt.common.constants.CommonConstants.CONSTANTS_NO;
-import static com.citics.glxt.common.constants.CommonConstants.CONSTANTS_YES;
+import static com.citics.glxt.contractchange.common.constants.CommonConstants.CONSTANTS_NO;
+import static com.citics.glxt.contractchange.common.constants.CommonConstants.CONSTANTS_YES;
 import static com.citics.glxt.contractchange.constants.Constants.*;
 
 @Slf4j

@@ -1,6 +1,6 @@
 package com.citics.glxt.contractchange.service.impl;
 
-import com.citics.glxt.common.service.CommonService;
+import com.citics.glxt.contractchange.common.service.CommonService;
 import com.citics.glxt.contractchange.service.DocxCommonService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
