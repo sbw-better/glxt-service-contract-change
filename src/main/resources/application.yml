@@ -8,9 +8,10 @@ spring:
   # Oracle 连接池配置。生产环境必须通过环境变量提供真实账号密码。
   datasource:
     driver-class-name: oracle.jdbc.OracleDriver
-    url: ${ORACLE_URL:jdbc:oracle:thin:@127.0.0.1:1521:ORCL}
-    username: ${ORACLE_USERNAME:glxt}
-    password: ${ORACLE_PASSWORD:change-me}
+    url: ${ORACLE_URL:jdbc:oracle:thin:@//127.0.0.1:1521/FREEPDB1}
+    username: ${ORACLE_USERNAME:system}
+    password: ${ORACLE_PASSWORD:Test123456}
+
     hikari:
       maximum-pool-size: ${DB_POOL_MAX:10}
       minimum-idle: ${DB_POOL_MIN:1}
@@ -77,10 +78,6 @@ logging:
     com.citics.glxt.contractchange.mapper: info
     # RestTemplate 的 DEBUG 日志可能打印网关请求信息，因此显式锁定为 INFO。
     org.springframework.web.client.RestTemplate: info
-
-commom:
-  glxt:
-    url: www.baidu.com
 
 # 本地启动默认值；部署环境通过环境变量覆盖。
 common:

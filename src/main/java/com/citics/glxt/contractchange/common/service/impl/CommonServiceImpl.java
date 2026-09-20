@@ -21,7 +21,7 @@ import static com.citics.glxt.contractchange.common.utils.assertUtils.Assert.isF
 @Service
 public class CommonServiceImpl implements CommonService {
 
-    @Value("${common.file.product.ftp}")
+    @Value("${common.file.project.ftp}")
     private String ftpPath;
     @Value("${common.glxt.word2pdf_url}")
     private String word2pdfUrl;
