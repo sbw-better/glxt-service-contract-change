@@ -9,8 +9,8 @@ spring:
   datasource:
     driver-class-name: oracle.jdbc.OracleDriver
     url: ${ORACLE_URL:jdbc:oracle:thin:@//127.0.0.1:1521/FREEPDB1}
-    username: ${ORACLE_USERNAME:system}
-    password: ${ORACLE_PASSWORD:Test123456}
+    username: ${ORACLE_USERNAME:GLXT}
+    password: ${ORACLE_PASSWORD:Glxt123456}
 
     hikari:
       maximum-pool-size: ${DB_POOL_MAX:10}
