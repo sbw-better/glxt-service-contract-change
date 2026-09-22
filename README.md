@@ -9,7 +9,8 @@ Embedding 网关，实现“历史段落导入—语义检索—多标签变更�
 - 多个编码以英文分号保存，例如 `TYPE01;TYPE02;TYPE03`。
 - Oracle负责持久化，JVM内存负责1万条以内向量的精确检索。
 - 单次Excel最多1000条；导入同步执行，默认逐条调用模型网关。
-- 合同比对预测结果只随响应返回，不会自动写入历史向量库；历史样本继续通过 Excel 导入维护。
+- `/compare` 仅返回分析标识、文件级类型编码和状态；完整比对及预测结果保存到分析日志表。
+- 预测结果不会自动写入历史向量库；历史样本继续通过 Excel 导入维护。
 - 段落默认最多2000字符，超过上限明确拒绝，不做自动截断。
 - 第一版Java服务按单实例部署，保证导入后JVM内存索引立即一致。
 - 变更类型只作为历史段落标签参与投票，不与新段落进行向量比较。
@@ -22,9 +23,12 @@ Embedding 网关，实现“历史段落导入—语义检索—多标签变更�
 
 ```text
 database/oracle/01_schema.sql
+database/oracle/02_analysis_log.sql
 ```
 
-`01_schema.sql`创建历史段落向量库。
+`01_schema.sql`创建历史段落向量库；`02_analysis_log.sql`是存量环境可独立执行的增量脚本，
+创建 `/compare` 分析主记录、变化段落和 Top-K 匹配证据表。分析日志表使用逻辑关联，不建立
+物理外键；最终明细在同一事务内写入，并通过唯一约束和写入行数校验保证一致性。
 `99_rollback.sql`会删除本版表及序列，表内数据不可恢复，生产环境谨慎执行。
 
 接入统一模型网关不需要修改表结构。`MODEL_VERSION`与`VECTOR_DIM`用于隔离不同模型产生的向量。
@@ -131,25 +135,28 @@ POST /service/contract-compare/compare
 POST /service/contract-compare/export
 ```
 
-导入、预测和合同比对接口必须携带：
+历史样本导入和独立段落预测接口必须携带：
 
 ```http
 UserId: 实际操作人工号
 ```
 
-该值只透传给模型平台，所有场景均不在日志中输出 `UserId`。索引重载、状态查询和临时导出
+该值只透传给模型平台，所有场景均不在日志中输出请求头 `UserId`。索引重载、状态查询和临时导出
 接口不调用模型，因此不要求该请求头。
 
 `/service/contract-compare/compare` 会在段落比对或内容提取后调用历史向量库识别业务变更类型，
-因此必须提供 `UserId`。`/service/contract-compare/export` 只导出基础差异或变更内容，既不要求
-`UserId`，也不调用 Embedding 或历史向量索引。
-`analysisType` 控制双版本比较或单文件变更函提取，未传或传 `null` 时默认使用
-`DOUBLE_VERSION`。
+其 `userId` 和 `instId` 均在请求体中必填。`userId` 透传给 Embedding 网关并与分析记录关联，
+`instId` 仅用于流程关联和入库。`/service/contract-compare/export` 只导出基础差异或变更内容，
+不要求这两个字段，也不调用 Embedding 或历史向量索引。
+`analysisType` 控制双版本比较或单文件变更函提取，在 `/compare` 请求中必须明确传入。
+临时 `/export` 为兼容原调用，未传时仍按 `DOUBLE_VERSION` 处理。
 
 双版本比较请求体传入服务器上的修改前、修改后 DOCX 路径：
 
 ```json
 {
+  "instId": 10001,
+  "userId": "employee-001",
   "analysisType": "DOUBLE_VERSION",
   "oldFileGetPath": "/合同目录/修改前.docx",
   "newFileGetPath": "/合同目录/修改后.docx",
@@ -161,6 +168,8 @@ UserId: 实际操作人工号
 
 ```json
 {
+  "instId": 10001,
+  "userId": "employee-001",
   "analysisType": "CHANGE_DOCUMENT",
   "changeFileGetPath": "/合同目录/补充协议.docx"
 }
@@ -170,8 +179,9 @@ UserId: 实际操作人工号
 `changeFileGetPath`。非当前模式字段即使存在也不参与处理。非法枚举或缺少当前模式必填字段时
 返回业务码 400。
 
-双版本模式的 `resultMode` 可选值为 `SIMPLE`、`CONTEXT`，未传或传 `null` 时默认使用 `SIMPLE`。
-`SIMPLE` 保持精简响应，只返回变化段落；`CONTEXT` 在每条变更中额外返回
+`/compare` 固定保存未裁剪的完整条款上下文，`resultMode` 不影响精简响应。该参数只控制
+`/export` 的双版本导出：可选值为 `SIMPLE`、`CONTEXT`，未传或传 `null` 时默认使用 `SIMPLE`。
+`SIMPLE` 只导出变化段落；`CONTEXT` 在每条变更中额外保留
 `context.oldContent/context.newContent` 完整条款内容。修改条款的上下文不重复包含子条款，
 整条新增或删除时上下文包含被折叠输出的完整子树。两种模式使用相同的条款匹配和差异结果。
 单文件变更函已经在 `changedParagraphs.oldContent/newContent` 返回完整变更约定，因此忽略
@@ -198,8 +208,7 @@ UserId: 实际操作人工号
 }
 ```
 
-上例中的 `context` 仅在 `CONTEXT` 模式出现；`SIMPLE` 模式的条款对象在
-`changedParagraphs` 后结束。
+上例是数据库 `RESULT_JSON` 中详细结果的条款片段；`/compare` 不直接返回该对象。
 
 服务从主备 SFTP 读取原始文件，使用 Aspose.Words 19.9 忽略格式、目录、页眉页脚和批注差异，
 返回按合同条款聚合的 `ADDED`、`DELETED`、`MODIFIED`。只有编号或位置变化时不返回变更。
@@ -209,10 +218,11 @@ Word自动列表和标题样式；
 每条结果固定返回条款编号、标题、父条款编号、变更类型和 `changedParagraphs`。变化段落通过
 `oldContent`、`newContent` 提供上下文，段落内的 `changeDetails` 返回具体 `INSERTED`、
 `DELETED`、`REPLACED` 文字。两种模式均不返回内部节点标识、顺序、内容类型或高亮下标；
-完整条款内容仅由 `CONTEXT` 模式的 `context` 提供。日期、百分比、千分位金额、数值区间和版本号会尽量作为完整语义片段返回。基础解析不写数据库，也不触发原合同解析落库流程；
-解析完成后会调用历史向量识别补充业务变更类型。
+完整条款内容由详细结果的 `context` 提供。日期、百分比、千分位金额、数值区间和版本号会尽量
+作为完整语义片段返回。`/compare` 解析完成后调用历史向量识别，并保存分析主记录、完整 JSON、
+变化段落和 Top-K 证据；`/export` 只做基础解析和文件输出，不写分析日志。
 
-`CHANGE_DOCUMENT` 继续复用 `changes` 和 `changedParagraphs`。每项额外返回
+`CHANGE_DOCUMENT` 的完整结果继续复用 `changes` 和 `changedParagraphs`。每项额外保存
 `sourceHeading`（函件中的原始变更标题）和 `targetClauseReference`（标题中提取的目标条款）：
 
 ```json
@@ -259,11 +269,12 @@ Word自动列表和标题样式；
 - 标题已识别但内容不完整时仍返回该项，并在 `warnings` 中提示人工复核；没有可解析正文或
   没有识别到任何变更标题时返回业务码 400。
 
-`/service/contract-compare/export` 使用与 `/compare` 相同的 JSON 请求体，直接下载
+`/service/contract-compare/export` 使用相同的文件路径、分析类型和结果模式字段，直接下载
 `contract-compare-result.xlsx`。主工作表按一个变化段落一行输出条款编号、标题、上级条款、
 条款及段落变更类型、变更前后内容和具体变化；`CONTEXT` 模式额外增加“完整变更前条款”和
 “完整变更后条款”两列。SIMPLE 固定 9 列，CONTEXT 固定 11 列。存在基础解析或比对提示时
-额外生成“提示信息”工作表。该临时接口不要求 `UserId`，不执行历史向量业务类型识别，也不
+额外生成“提示信息”工作表。该临时接口不要求请求头 `UserId`，也不要求请求体的 `userId`、
+`instId`，不执行历史向量业务类型识别，也不
 输出预测字段。
 
 `CHANGE_DOCUMENT` 导出文件名为 `contract-change-extract-result.xlsx`，主工作表为“提取结果”，
@@ -296,7 +307,7 @@ Content-Type: application/json
 当集成识别状态为 `FAILED` 或 `SKIPPED_TOO_LONG` 时，`maxSimilarity` 省略，避免将无结果误解为
 相似度 `0.0`；`NO_RELIABLE_MATCH` 仍保留实际计算得到的最高相似度（如有）。
 
-`/compare` 的 `FAILED.message` 按现有内部错误码区分为历史向量索引不可用、Embedding 服务不可用
+完整快照中的 `FAILED.message` 按现有内部错误码区分为历史向量索引不可用、Embedding 服务不可用
 或识别输入不合法。索引问题可先检查 `/service/contract-change/index/status`；Embedding 问题再检查
 网关地址、API Key、模型名称和网络。未知错误仍返回通用提示，具体异常以服务日志为准。
 
@@ -304,14 +315,29 @@ Content-Type: application/json
 只有段落返回 `NO_RELIABLE_MATCH` 时才尝试条款上下文。上下文命中的类型最高标记为
 `CANDIDATE`，向量服务失败不会丢失基础比对结果。
 
-每个变化段落通过 `businessTypePrediction` 返回识别状态、输入范围、是否使用兜底、
-匹配类型、模型版本、最高相似度、候选业务类型及参考样本。顶层
-`predictionSummary` 汇总匹配、无可靠匹配、调用失败和超长跳过数量。顶层
-`fileChangeTypeCodes` 返回整份合同最终可使用的业务变更类型编码：任一不同规范化段落的
+数据库完整快照中，每个变化段落的 `businessTypePrediction` 保存识别状态、输入范围、是否使用
+兜底、匹配类型、模型版本、最高相似度、候选业务类型及参考样本；`predictionSummary` 汇总匹配、
+无可靠匹配、调用失败和超长跳过数量。`fileChangeTypeCodes` 是整份合同最终可使用的业务变更类型
+编码：任一不同规范化段落的
 `HIGH` 类型直接进入，`CANDIDATE` 类型需要至少两个不同规范化段落共同支持；结果去重并按
 编码字符串升序排列。预测失败、超长和无可靠匹配的段落不贡献类型，其他成功段落仍正常汇总，
 没有满足条件的类型时固定返回 `[]`。因此存在预测失败 warning 时该集合可能不完整。预测结果
 不会自动反哺历史库。
+
+`/compare` 成功响应固定为：
+
+```json
+{
+  "analysisId": "4bb11fc4b6b945efaf992fc5eb32fd71",
+  "fileChangeTypeCodes": ["04", "19"],
+  "analysisStatus": "SUCCESS"
+}
+```
+
+`SUCCESS` 表示没有预测失败或超长跳过；正常无变化或全部 `NO_RELIABLE_MATCH` 仍是 `SUCCESS`，
+并返回空数组。存在 `FAILED` 或 `SKIPPED_TOO_LONG` 时返回 `PARTIAL_SUCCESS`，成功段落仍参与聚合。
+主记录先以 `PROCESSING` 创建，完整快照、段落和匹配证据随后在一个事务中落库；任一最终写入失败
+都会回滚明细并把主记录标记为 `FAILED`，接口不会返回一个缺少完整记录的成功 `analysisId`。
 
 Swagger UI：
 

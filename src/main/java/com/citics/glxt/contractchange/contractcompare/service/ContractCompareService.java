@@ -2,8 +2,6 @@ package com.citics.glxt.contractchange.contractcompare.service;
 
 import com.citics.glxt.contractchange.common.constants.CommonConstants;
 import com.citics.glxt.contractchange.common.exception.ContractChangeBusinessException;
-import com.citics.glxt.contractchange.contractcompare.aspose.AsposeCompareService;
-import com.citics.glxt.contractchange.contractcompare.aspose.AsposeCompareService.ComparisonResult;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.AnalysisType;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest.ResultMode;
@@ -13,8 +11,8 @@ import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRespo
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangedParagraph;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseChange;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.DetailType;
-import com.citics.glxt.contractchange.contractcompare.service.ClauseComparisonEngine.Analysis;
-import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.Parsed;
+import com.citics.glxt.contractchange.contractcompare.service.extractor.ContractChangeExtractorRegistry;
+import com.citics.glxt.contractchange.contractcompare.service.extractor.ContractChangeExtractor;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
@@ -27,14 +25,13 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.VerticalAlignment;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.List;
 
-/** 合同双版本比较应用服务。 */
+/** 合同详细比较与 Excel 导出服务。/compare 已切换到 ContractChangeAnalysisService。 */
 @Service
 public class ContractCompareService {
     private static final int EXCEL_CELL_TEXT_LIMIT = 32767;
@@ -51,83 +48,19 @@ public class ContractCompareService {
             "序号", "来源标题", "目标条款", "条款变更类型",
             "段落变更类型", "变更前内容", "变更后内容", "具体变化"
     };
-    private final SftpContractFileLoader fileLoader;
-    private final AsposeCompareService asposeCompareService;
-    private final ContractStructureParser structureParser;
-    private final ClauseComparisonEngine comparisonEngine;
-    private final ChangeDocumentExtractionService extractionService;
-    private final ContractComparePredictionService predictionService;
+    private final ContractChangeExtractorRegistry extractorRegistry;
 
-    @Autowired
-    public ContractCompareService(SftpContractFileLoader fileLoader,
-                                  AsposeCompareService asposeCompareService,
-                                  ContractStructureParser structureParser,
-                                  ClauseComparisonEngine comparisonEngine,
-                                  ChangeDocumentExtractionService extractionService,
-                                  ContractComparePredictionService predictionService) {
-        this.fileLoader = fileLoader;
-        this.asposeCompareService = asposeCompareService;
-        this.structureParser = structureParser;
-        this.comparisonEngine = comparisonEngine;
-        this.extractionService = extractionService;
-        this.predictionService = predictionService;
-    }
-
-    /** 保留核心链路单元测试和直接调用的兼容构造方式。 */
-    public ContractCompareService(SftpContractFileLoader fileLoader,
-                                  AsposeCompareService asposeCompareService,
-                                  ContractStructureParser structureParser,
-                                  ClauseComparisonEngine comparisonEngine) {
-        this(fileLoader, asposeCompareService, structureParser, comparisonEngine,
-                new ChangeDocumentExtractionService(asposeCompareService, comparisonEngine),
-                null);
-    }
-
-    /** 保留已有单文件提取测试使用的构造方式。 */
-    public ContractCompareService(SftpContractFileLoader fileLoader,
-                                  AsposeCompareService asposeCompareService,
-                                  ContractStructureParser structureParser,
-                                  ClauseComparisonEngine comparisonEngine,
-                                  ChangeDocumentExtractionService extractionService) {
-        this(fileLoader, asposeCompareService, structureParser, comparisonEngine,
-                extractionService, null);
+    public ContractCompareService(ContractChangeExtractorRegistry extractorRegistry) {
+        this.extractorRegistry = extractorRegistry;
     }
 
     public ContractCompareResponse compare(ContractCompareRequest request) {
-        ContractCompareResponse response = analyze(request);
+        AnalysisType analysisType = analysisType(request);
+        ContractChangeExtractor extractor = extractorRegistry.get(analysisType);
+        extractor.validateRequest(request);
+        ContractCompareResponse response = extractor.extract(request);
         trimContext(response, resultMode(request));
         return response;
-    }
-
-    /** 生产接口使用：完成比对和业务类型识别后返回。 */
-    public ContractCompareResponse compare(ContractCompareRequest request, String userId) {
-        requireIntegratedServices();
-        ContractCompareResponse response = analyze(request);
-        predictionService.predict(response, analysisType(request), userId);
-        trimContext(response, resultMode(request));
-        return response;
-    }
-
-    private ContractCompareResponse analyze(ContractCompareRequest request) {
-        if (analysisType(request) == AnalysisType.CHANGE_DOCUMENT) {
-            byte[] bytes = fileLoader.load(request.getChangeFileGetPath());
-            return extractionService.extract(bytes);
-        }
-        byte[] oldBytes = fileLoader.load(request.getOldFileGetPath());
-        byte[] newBytes = fileLoader.load(request.getNewFileGetPath());
-        ComparisonResult compared = asposeCompareService.compare(oldBytes, newBytes);
-        try {
-            Parsed oldContract = structureParser.parse(compared.getOldDocument());
-            Parsed newContract = structureParser.parse(compared.getNewDocument());
-            Analysis analysis = comparisonEngine.analyze(oldContract, newContract, compared.getRevisions());
-            return new ContractCompareResponse(analysis.getChanges().size(),
-                    analysis.getChanges(), analysis.getWarnings());
-        } catch (Exception ex) {
-            if (ex instanceof RuntimeException) {
-                throw (RuntimeException) ex;
-            }
-            throw new com.citics.glxt.contractchange.common.exception.ContractChangeBusinessException("合同结构解析失败");
-        }
     }
 
     /** 比较两份合同并生成供业务核对的Excel。 */
@@ -307,12 +240,6 @@ public class ContractCompareService {
             for (ClauseChange change : response.getChanges()) {
                 change.setContext(null);
             }
-        }
-    }
-
-    private void requireIntegratedServices() {
-        if (predictionService == null) {
-            throw new IllegalStateException("合同比对类型识别服务未配置");
         }
     }
 

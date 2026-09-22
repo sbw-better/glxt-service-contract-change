@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.citics.glxt.contractchange.mapper.AnalysisLogMapper">
+    <insert id="insertLog" parameterType="com.citics.glxt.contractchange.contractcompare.model.AnalysisLogDO">
+        <selectKey resultType="Long" keyProperty="id" order="BEFORE">
+            SELECT SEQ_HT_ANALYSIS_LOG.NEXTVAL FROM DUAL
+        </selectKey>
+        INSERT INTO HT_ANALYSIS_LOG (
+            ID, ANALYSIS_ID, INST_ID, USER_ID, ANALYSIS_TYPE,
+            OLD_FILE_GET_PATH, NEW_FILE_GET_PATH, CHANGE_FILE_GET_PATH, STATUS,
+            CHANGED_PARAGRAPH_COUNT, CHANGE_TYPE_CODES, EMBEDDING_MODEL, MODEL_VERSION,
+            TOTAL_COST_MS, COMPARE_COST_MS, PREDICT_COST_MS, ERROR_MESSAGE,
+            RESULT_JSON, CREATE_TIME, FINISH_TIME
+        ) VALUES (
+            #{id}, #{analysisId}, #{instId}, #{userId}, #{analysisType},
+            #{oldFileGetPath}, #{newFileGetPath}, #{changeFileGetPath}, #{status},
+            #{changedParagraphCount}, #{changeTypeCodes}, #{embeddingModel}, #{modelVersion},
+            #{totalCostMs}, #{compareCostMs}, #{predictCostMs}, #{errorMessage,jdbcType=CLOB},
+            #{resultJson,jdbcType=CLOB},
+            NVL(#{createTime,jdbcType=DATE}, SYSDATE), #{finishTime,jdbcType=DATE}
+        )
+    </insert>
+
+    <update id="updateLog" parameterType="com.citics.glxt.contractchange.contractcompare.model.AnalysisLogDO">
+        UPDATE HT_ANALYSIS_LOG
+        <set>
+            <if test="instId != null">INST_ID = #{instId},</if>
+            <if test="userId != null">USER_ID = #{userId},</if>
+            <if test="analysisType != null">ANALYSIS_TYPE = #{analysisType},</if>
+            <if test="oldFileGetPath != null">OLD_FILE_GET_PATH = #{oldFileGetPath},</if>
+            <if test="newFileGetPath != null">NEW_FILE_GET_PATH = #{newFileGetPath},</if>
+            <if test="changeFileGetPath != null">CHANGE_FILE_GET_PATH = #{changeFileGetPath},</if>
+            <if test="status != null">STATUS = #{status},</if>
+            <if test="changedParagraphCount != null">CHANGED_PARAGRAPH_COUNT = #{changedParagraphCount},</if>
+            <if test="changeTypeCodes != null">CHANGE_TYPE_CODES = #{changeTypeCodes},</if>
+            <if test="embeddingModel != null">EMBEDDING_MODEL = #{embeddingModel},</if>
+            <if test="modelVersion != null">MODEL_VERSION = #{modelVersion},</if>
+            <if test="totalCostMs != null">TOTAL_COST_MS = #{totalCostMs},</if>
+            <if test="compareCostMs != null">COMPARE_COST_MS = #{compareCostMs},</if>
+            <if test="predictCostMs != null">PREDICT_COST_MS = #{predictCostMs},</if>
+            <if test="errorMessage != null">ERROR_MESSAGE = #{errorMessage,jdbcType=CLOB},</if>
+            <if test="resultJson != null">RESULT_JSON = #{resultJson,jdbcType=CLOB},</if>
+            <if test="finishTime != null">FINISH_TIME = #{finishTime},</if>
+        </set>
+        WHERE ANALYSIS_ID = #{analysisId}
+    </update>
+
+</mapper>

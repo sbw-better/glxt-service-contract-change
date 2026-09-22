@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.citics.glxt.contractchange.mapper.AnalysisParagraphLogMapper">
+    <insert id="insertLog" parameterType="com.citics.glxt.contractchange.contractcompare.model.AnalysisParagraphLogDO">
+        <selectKey resultType="Long" keyProperty="id" order="BEFORE">
+            SELECT SEQ_HT_ANALYSIS_PARA_LOG.NEXTVAL FROM DUAL
+        </selectKey>
+        INSERT INTO HT_ANALYSIS_PARA_LOG (
+            ID, ANALYSIS_ID, PARAGRAPH_ID, CLAUSE_NO, CLAUSE_TITLE, PARENT_CLAUSE_NO,
+            SOURCE_HEADING, TARGET_CLAUSE_REFERENCE, CHANGE_TYPE,
+            OLD_CONTENT, NEW_CONTENT, PREDICTION_TEXT, PREDICTION_STATUS, INPUT_SCOPE,
+            CHANGE_TYPE_CODES, MAX_SIMILARITY, MATCH_TYPE, FALLBACK_USED, CREATE_TIME
+        ) VALUES (
+            #{id}, #{analysisId}, #{paragraphId}, #{clauseNo}, #{clauseTitle}, #{parentClauseNo},
+            #{sourceHeading}, #{targetClauseReference}, #{changeType},
+            #{oldContent,jdbcType=CLOB}, #{newContent,jdbcType=CLOB},
+            #{predictionText,jdbcType=CLOB}, #{predictionStatus}, #{inputScope}, #{changeTypeCodes},
+            #{maxSimilarity}, #{matchType}, #{fallbackUsed},
+            NVL(#{createTime,jdbcType=DATE}, SYSDATE)
+        )
+    </insert>
+
+</mapper>

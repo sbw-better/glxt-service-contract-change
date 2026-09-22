@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.citics.glxt.contractchange.mapper.AnalysisMatchLogMapper">
+    <insert id="insertLog" parameterType="com.citics.glxt.contractchange.contractcompare.model.AnalysisMatchLogDO">
+        <selectKey resultType="Long" keyProperty="id" order="BEFORE">
+            SELECT SEQ_HT_ANALYSIS_MATCH_LOG.NEXTVAL FROM DUAL
+        </selectKey>
+        INSERT INTO HT_ANALYSIS_MATCH_LOG (
+            ID, ANALYSIS_ID, PARAGRAPH_LOG_ID, HISTORICAL_SAMPLE_ID,
+            SIMILARITY, CHANGE_TYPE_CODES, RANK_NO, CREATE_TIME
+        ) VALUES (
+            #{id}, #{analysisId}, #{paragraphLogId}, #{historicalSampleId},
+            #{similarity}, #{changeTypeCodes}, #{rankNo},
+            NVL(#{createTime,jdbcType=DATE}, SYSDATE)
+        )
+    </insert>
+
+</mapper>
