@@ -28,7 +28,7 @@ mybatis-plus:
   type-aliases-package: com.citics.glxt.contractchange.domain
   configuration:
     map-underscore-to-camel-case: true
-    jdbc-type-for-null: NULL
+    jdbc-type-for-null: 'NULL'
 
 # 本次合同段落识别需求的全部可调业务参数。
 contract-change:

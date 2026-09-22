@@ -13,10 +13,16 @@
             TOTAL_COST_MS, COMPARE_COST_MS, PREDICT_COST_MS, ERROR_MESSAGE,
             RESULT_JSON, CREATE_TIME, FINISH_TIME
         ) VALUES (
-            #{id}, #{analysisId}, #{instId}, #{userId}, #{analysisType},
-            #{oldFileGetPath}, #{newFileGetPath}, #{changeFileGetPath}, #{status},
-            #{changedParagraphCount}, #{changeTypeCodes}, #{embeddingModel}, #{modelVersion},
-            #{totalCostMs}, #{compareCostMs}, #{predictCostMs}, #{errorMessage,jdbcType=CLOB},
+            #{id,jdbcType=NUMERIC}, #{analysisId,jdbcType=VARCHAR},
+            #{instId,jdbcType=NUMERIC}, #{userId,jdbcType=VARCHAR},
+            #{analysisType,jdbcType=VARCHAR},
+            #{oldFileGetPath,jdbcType=VARCHAR}, #{newFileGetPath,jdbcType=VARCHAR},
+            #{changeFileGetPath,jdbcType=VARCHAR}, #{status,jdbcType=VARCHAR},
+            #{changedParagraphCount,jdbcType=NUMERIC},
+            #{changeTypeCodes,jdbcType=VARCHAR}, #{embeddingModel,jdbcType=VARCHAR},
+            #{modelVersion,jdbcType=VARCHAR},
+            #{totalCostMs,jdbcType=NUMERIC}, #{compareCostMs,jdbcType=NUMERIC},
+            #{predictCostMs,jdbcType=NUMERIC}, #{errorMessage,jdbcType=CLOB},
             #{resultJson,jdbcType=CLOB},
             NVL(#{createTime,jdbcType=DATE}, SYSDATE), #{finishTime,jdbcType=DATE}
         )
@@ -25,25 +31,25 @@
     <update id="updateLog" parameterType="com.citics.glxt.contractchange.contractcompare.model.AnalysisLogDO">
         UPDATE HT_ANALYSIS_LOG
         <set>
-            <if test="instId != null">INST_ID = #{instId},</if>
-            <if test="userId != null">USER_ID = #{userId},</if>
-            <if test="analysisType != null">ANALYSIS_TYPE = #{analysisType},</if>
-            <if test="oldFileGetPath != null">OLD_FILE_GET_PATH = #{oldFileGetPath},</if>
-            <if test="newFileGetPath != null">NEW_FILE_GET_PATH = #{newFileGetPath},</if>
-            <if test="changeFileGetPath != null">CHANGE_FILE_GET_PATH = #{changeFileGetPath},</if>
-            <if test="status != null">STATUS = #{status},</if>
-            <if test="changedParagraphCount != null">CHANGED_PARAGRAPH_COUNT = #{changedParagraphCount},</if>
-            <if test="changeTypeCodes != null">CHANGE_TYPE_CODES = #{changeTypeCodes},</if>
-            <if test="embeddingModel != null">EMBEDDING_MODEL = #{embeddingModel},</if>
-            <if test="modelVersion != null">MODEL_VERSION = #{modelVersion},</if>
-            <if test="totalCostMs != null">TOTAL_COST_MS = #{totalCostMs},</if>
-            <if test="compareCostMs != null">COMPARE_COST_MS = #{compareCostMs},</if>
-            <if test="predictCostMs != null">PREDICT_COST_MS = #{predictCostMs},</if>
+            <if test="instId != null">INST_ID = #{instId,jdbcType=NUMERIC},</if>
+            <if test="userId != null">USER_ID = #{userId,jdbcType=VARCHAR},</if>
+            <if test="analysisType != null">ANALYSIS_TYPE = #{analysisType,jdbcType=VARCHAR},</if>
+            <if test="oldFileGetPath != null">OLD_FILE_GET_PATH = #{oldFileGetPath,jdbcType=VARCHAR},</if>
+            <if test="newFileGetPath != null">NEW_FILE_GET_PATH = #{newFileGetPath,jdbcType=VARCHAR},</if>
+            <if test="changeFileGetPath != null">CHANGE_FILE_GET_PATH = #{changeFileGetPath,jdbcType=VARCHAR},</if>
+            <if test="status != null">STATUS = #{status,jdbcType=VARCHAR},</if>
+            <if test="changedParagraphCount != null">CHANGED_PARAGRAPH_COUNT = #{changedParagraphCount,jdbcType=NUMERIC},</if>
+            <if test="changeTypeCodes != null">CHANGE_TYPE_CODES = #{changeTypeCodes,jdbcType=VARCHAR},</if>
+            <if test="embeddingModel != null">EMBEDDING_MODEL = #{embeddingModel,jdbcType=VARCHAR},</if>
+            <if test="modelVersion != null">MODEL_VERSION = #{modelVersion,jdbcType=VARCHAR},</if>
+            <if test="totalCostMs != null">TOTAL_COST_MS = #{totalCostMs,jdbcType=NUMERIC},</if>
+            <if test="compareCostMs != null">COMPARE_COST_MS = #{compareCostMs,jdbcType=NUMERIC},</if>
+            <if test="predictCostMs != null">PREDICT_COST_MS = #{predictCostMs,jdbcType=NUMERIC},</if>
             <if test="errorMessage != null">ERROR_MESSAGE = #{errorMessage,jdbcType=CLOB},</if>
             <if test="resultJson != null">RESULT_JSON = #{resultJson,jdbcType=CLOB},</if>
-            <if test="finishTime != null">FINISH_TIME = #{finishTime},</if>
+            <if test="finishTime != null">FINISH_TIME = #{finishTime,jdbcType=DATE},</if>
         </set>
-        WHERE ANALYSIS_ID = #{analysisId}
+        WHERE ANALYSIS_ID = #{analysisId,jdbcType=VARCHAR}
     </update>
 
 </mapper>

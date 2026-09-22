@@ -12,11 +12,16 @@
             OLD_CONTENT, NEW_CONTENT, PREDICTION_TEXT, PREDICTION_STATUS, INPUT_SCOPE,
             CHANGE_TYPE_CODES, MAX_SIMILARITY, MATCH_TYPE, FALLBACK_USED, CREATE_TIME
         ) VALUES (
-            #{id}, #{analysisId}, #{paragraphId}, #{clauseNo}, #{clauseTitle}, #{parentClauseNo},
-            #{sourceHeading}, #{targetClauseReference}, #{changeType},
+            #{id,jdbcType=NUMERIC}, #{analysisId,jdbcType=VARCHAR},
+            #{paragraphId,jdbcType=VARCHAR}, #{clauseNo,jdbcType=VARCHAR},
+            #{clauseTitle,jdbcType=VARCHAR}, #{parentClauseNo,jdbcType=VARCHAR},
+            #{sourceHeading,jdbcType=VARCHAR}, #{targetClauseReference,jdbcType=VARCHAR},
+            #{changeType,jdbcType=VARCHAR},
             #{oldContent,jdbcType=CLOB}, #{newContent,jdbcType=CLOB},
-            #{predictionText,jdbcType=CLOB}, #{predictionStatus}, #{inputScope}, #{changeTypeCodes},
-            #{maxSimilarity}, #{matchType}, #{fallbackUsed},
+            #{predictionText,jdbcType=CLOB}, #{predictionStatus,jdbcType=VARCHAR},
+            #{inputScope,jdbcType=VARCHAR}, #{changeTypeCodes,jdbcType=VARCHAR},
+            #{maxSimilarity,jdbcType=NUMERIC}, #{matchType,jdbcType=VARCHAR},
+            #{fallbackUsed,jdbcType=NUMERIC},
             NVL(#{createTime,jdbcType=DATE}, SYSDATE)
         )
     </insert>

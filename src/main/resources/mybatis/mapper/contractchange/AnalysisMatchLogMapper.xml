@@ -10,8 +10,10 @@
             ID, ANALYSIS_ID, PARAGRAPH_LOG_ID, HISTORICAL_SAMPLE_ID,
             SIMILARITY, CHANGE_TYPE_CODES, RANK_NO, CREATE_TIME
         ) VALUES (
-            #{id}, #{analysisId}, #{paragraphLogId}, #{historicalSampleId},
-            #{similarity}, #{changeTypeCodes}, #{rankNo},
+            #{id,jdbcType=NUMERIC}, #{analysisId,jdbcType=VARCHAR},
+            #{paragraphLogId,jdbcType=NUMERIC}, #{historicalSampleId,jdbcType=NUMERIC},
+            #{similarity,jdbcType=NUMERIC}, #{changeTypeCodes,jdbcType=VARCHAR},
+            #{rankNo,jdbcType=NUMERIC},
             NVL(#{createTime,jdbcType=DATE}, SYSDATE)
         )
     </insert>
