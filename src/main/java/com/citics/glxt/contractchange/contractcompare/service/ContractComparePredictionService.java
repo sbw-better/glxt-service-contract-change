@@ -47,10 +47,10 @@ public class ContractComparePredictionService {
             String base = ContractTextNormalizer.normalize(target.baseText);
             if (base.isEmpty()) {
                 target.paragraph.setBusinessTypePrediction(failed(target.primaryScope,
-                        "没有可用于类型识别的段落内容", "FAILED", false));
+                        "没有可用于类型识别的段落内容", "FAILED", false, base));
             } else if (base.length() > maxLength()) {
                 target.paragraph.setBusinessTypePrediction(failed(target.primaryScope,
-                        "段落超过类型识别字符上限", "SKIPPED_TOO_LONG", false));
+                        "段落超过类型识别字符上限", "SKIPPED_TOO_LONG", false, base));
             } else {
                 addGroup(primaryGroups, base, target);
             }
@@ -142,13 +142,13 @@ public class ContractComparePredictionService {
                     target.paragraph.setBusinessTypePrediction(failed(
                             contextFallback ? target.contextScope : target.primaryScope,
                             predictionFailureMessage(item.getErrorCode()), "FAILED",
-                            contextFallback));
+                            contextFallback, texts.get(index)));
                     continue;
                 }
                 PredictionResponse prediction = item.getPrediction();
                 BusinessTypePrediction converted = convert(prediction,
                         contextFallback ? target.contextScope : target.primaryScope,
-                        contextFallback);
+                        contextFallback, texts.get(index));
                 target.paragraph.setBusinessTypePrediction(converted);
             }
         }
@@ -168,13 +168,14 @@ public class ContractComparePredictionService {
     }
 
     private BusinessTypePrediction convert(PredictionResponse source, String scope,
-                                             boolean contextFallback) {
+                                             boolean contextFallback, String predictionText) {
         BusinessTypePrediction result = new BusinessTypePrediction();
         boolean matched = source.getChangeTypes() != null && !source.getChangeTypes().isEmpty()
                 && !"NO_RELIABLE_MATCH".equals(source.getMatchType());
         result.setStatus(matched ? "MATCHED" : "NO_RELIABLE_MATCH");
         result.setInputScope(scope);
         result.setFallbackUsed(contextFallback);
+        result.setPredictionText(predictionText);
         result.setMatchType(source.getMatchType());
         result.setModelVersion(source.getModelVersion());
         result.setMaxSimilarity(source.getMaxSimilarity());
@@ -193,11 +194,12 @@ public class ContractComparePredictionService {
     }
 
     private BusinessTypePrediction failed(String scope, String message, String status,
-                                          boolean fallbackUsed) {
+                                           boolean fallbackUsed, String predictionText) {
         BusinessTypePrediction result = new BusinessTypePrediction();
         result.setStatus(status);
         result.setInputScope(scope);
         result.setFallbackUsed(fallbackUsed);
+        result.setPredictionText(predictionText);
         result.setModelVersion(properties.getEmbedding().getModelVersion());
         result.setChangeTypes(Collections.<ChangeTypePrediction>emptyList());
         result.setReferences(Collections.emptyList());

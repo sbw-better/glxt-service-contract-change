@@ -96,9 +96,11 @@ public class AnalysisResultPersistenceService {
                 ? null : paragraph.getParagraphChangeType().name());
         log.setOldContent(paragraph.getOldContent());
         log.setNewContent(paragraph.getNewContent());
-        log.setPredictionText(paragraph.getParagraphChangeType() == ChangeType.DELETED
-                ? paragraph.getOldContent() : paragraph.getNewContent());
         BusinessTypePrediction prediction = paragraph.getBusinessTypePrediction();
+        String basePredictionText = paragraph.getParagraphChangeType() == ChangeType.DELETED
+                ? paragraph.getOldContent() : paragraph.getNewContent();
+        log.setPredictionText(prediction != null && prediction.getPredictionText() != null
+                ? prediction.getPredictionText() : basePredictionText);
         if (prediction != null) {
             log.setPredictionStatus(prediction.getStatus());
             log.setInputScope(prediction.getInputScope());

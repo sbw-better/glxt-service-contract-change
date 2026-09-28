@@ -65,6 +65,24 @@ public class ContractCompareControllerTest {
     }
 
     @Test
+    public void shouldDescribePartialSuccessWithoutChangingSuccessfulEnvelope() throws Exception {
+        when(analysisService.analyze(any(ContractCompareRequest.class))).thenReturn(
+                new ContractChangeAnalysisResponse("analysis-2", Arrays.asList("04"),
+                        AnalysisLogStatus.PARTIAL_SUCCESS));
+
+        mockMvc.perform(post("/service/contract-compare/compare")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"instId\":10001,\"userId\":\"employee-001\"," +
+                        "\"analysisType\":\"DOUBLE_VERSION\"," +
+                        "\"oldFileGetPath\":\"/old.docx\",\"newFileGetPath\":\"/new.docx\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.message").value(
+                        "合同基础比对已完成，部分业务类型未识别"))
+                .andExpect(jsonPath("$.data.analysisStatus").value("PARTIAL_SUCCESS"));
+    }
+
+    @Test
     public void shouldRequireUserIdInBody() throws Exception {
         when(analysisService.analyze(any(ContractCompareRequest.class)))
                 .thenThrow(new ContractChangeBusinessException("userId不能为空"));

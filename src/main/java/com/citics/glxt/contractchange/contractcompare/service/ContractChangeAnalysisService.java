@@ -28,6 +28,8 @@ import java.util.UUID;
 @Service
 public class ContractChangeAnalysisService {
     private static final Logger log = LoggerFactory.getLogger(ContractChangeAnalysisService.class);
+    private static final int MAX_USER_ID_LENGTH = 100;
+    private static final int MAX_FILE_PATH_LENGTH = 1000;
 
     private final ContractChangeExtractorRegistry extractorRegistry;
     private final ContractComparePredictionService predictionService;
@@ -48,16 +50,17 @@ public class ContractChangeAnalysisService {
     }
 
     public ContractChangeAnalysisResponse analyze(ContractCompareRequest request) {
+        long totalStart = System.nanoTime();
         requireCompareMetadata(request);
         AnalysisType analysisType = request.getAnalysisType();
         String userId = request.getUserId().trim();
         ContractChangeExtractor extractor = extractorRegistry.get(analysisType);
         extractor.validateRequest(request);
+        validateActiveFilePaths(request, analysisType);
         String analysisId = newAnalysisId();
         persistenceService.createProcessing(processingLog(
                 analysisId, request, analysisType, userId));
 
-        long totalStart = System.nanoTime();
         try {
             long compareStart = System.nanoTime();
             ContractCompareResponse detail = extractor.extract(request);
@@ -162,11 +165,32 @@ public class ContractChangeAnalysisService {
         if (!StringUtils.hasText(request.getUserId())) {
             throw new ContractChangeBusinessException("userId不能为空");
         }
+        if (request.getUserId().trim().length() > MAX_USER_ID_LENGTH) {
+            throw new ContractChangeBusinessException("userId不能超过100个字符");
+        }
         if (request.getInstId() == null) {
             throw new ContractChangeBusinessException("instId不能为空");
         }
+        if (request.getInstId() <= 0) {
+            throw new ContractChangeBusinessException("instId必须大于0");
+        }
         if (request.getAnalysisType() == null) {
             throw new ContractChangeBusinessException("analysisType不能为空");
+        }
+    }
+
+    private void validateActiveFilePaths(ContractCompareRequest request, AnalysisType analysisType) {
+        if (analysisType == AnalysisType.DOUBLE_VERSION) {
+            requirePathLength(request.getOldFileGetPath(), "oldFileGetPath");
+            requirePathLength(request.getNewFileGetPath(), "newFileGetPath");
+        } else if (analysisType == AnalysisType.CHANGE_DOCUMENT) {
+            requirePathLength(request.getChangeFileGetPath(), "changeFileGetPath");
+        }
+    }
+
+    private void requirePathLength(String path, String fieldName) {
+        if (path != null && path.length() > MAX_FILE_PATH_LENGTH) {
+            throw new ContractChangeBusinessException(fieldName + "不能超过1000个字符");
         }
     }
 

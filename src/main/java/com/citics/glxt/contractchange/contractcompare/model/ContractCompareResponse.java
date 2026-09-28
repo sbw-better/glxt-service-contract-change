@@ -90,6 +90,9 @@ public class ContractCompareResponse implements Serializable {
         private String status;
         private String inputScope;
         private boolean fallbackUsed;
+        /** 经过规范化和长度控制后实际提交给类型识别服务的文本。 */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private String predictionText;
         private String matchType;
         private String modelVersion;
         @JsonInclude(JsonInclude.Include.NON_NULL)

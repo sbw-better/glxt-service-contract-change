@@ -117,7 +117,7 @@ public class ContractParagraphPredictionService {
                 } else {
                     results.set(index, LenientPrediction.success(exact(exactSample)));
                 }
-            } catch (RuntimeException ex) {
+            } catch (ContractChangeBusinessException ex) {
                 normalized.add(ContractTextNormalizer.normalize(paragraphs.get(index)));
                 results.set(index, LenientPrediction.failed("INVALID_INPUT"));
             }
@@ -161,12 +161,14 @@ public class ContractParagraphPredictionService {
                     results.set(resultIndex, LenientPrediction.success(
                             predictFromVector(embedded.getVectors().get(cursor - start))));
                 }
-            } catch (RuntimeException ex) {
+            } catch (ContractChangeBusinessException ex) {
                 log.warn("合同比对类型识别批次失败, batchSize={}, exception={}",
                         texts.size(), ex.getClass().getSimpleName());
+                String errorCode = ex.getCode() == CommonConstants.SERVICE_UNAVAILABLE
+                        ? "EMBEDDING_UNAVAILABLE" : "INVALID_INPUT";
                 for (int cursor = start; cursor < end; cursor++) {
                     results.set(semanticIndexes.get(cursor),
-                            LenientPrediction.failed("EMBEDDING_UNAVAILABLE"));
+                            LenientPrediction.failed(errorCode));
                 }
             }
         }

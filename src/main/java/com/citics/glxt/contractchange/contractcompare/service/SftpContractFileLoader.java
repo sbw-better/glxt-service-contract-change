@@ -48,7 +48,9 @@ public class SftpContractFileLoader {
             validateDocxHeader(bytes);
             return bytes;
         } catch (ContractChangeBusinessException ex) {
-            throw ex;
+            primaryFailure = ex;
+            log.warn("主SFTP合同文件校验失败，尝试备用SFTP, exception={}",
+                    ex.getClass().getSimpleName());
         } catch (Exception ex) {
             primaryFailure = ex;
             log.warn("主SFTP读取合同失败, exception={}", ex.getClass().getSimpleName());

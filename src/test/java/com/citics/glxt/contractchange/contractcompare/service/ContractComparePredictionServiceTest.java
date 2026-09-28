@@ -63,6 +63,8 @@ public class ContractComparePredictionServiceTest {
         assertEquals("MATCHED", paragraph.getBusinessTypePrediction().getStatus());
         assertEquals("NEW_CONTEXT", paragraph.getBusinessTypePrediction().getInputScope());
         assertTrue(paragraph.getBusinessTypePrediction().isFallbackUsed());
+        assertTrue(paragraph.getBusinessTypePrediction().getPredictionText().contains("金额为120万元。"));
+        assertTrue(paragraph.getBusinessTypePrediction().getPredictionText().contains("其他新约定。"));
         assertEquals("CANDIDATE",
                 paragraph.getBusinessTypePrediction().getChangeTypes().get(0).getLevel());
         assertTrue(response.getFileChangeTypeCodes().isEmpty());
@@ -79,6 +81,7 @@ public class ContractComparePredictionServiceTest {
         service.predict(response, AnalysisType.DOUBLE_VERSION, "u1");
 
         assertEquals("NEW_PARAGRAPH", paragraph(response).getBusinessTypePrediction().getInputScope());
+        assertEquals("新内容", paragraph(response).getBusinessTypePrediction().getPredictionText());
         assertFalse(paragraph(response).getBusinessTypePrediction().isFallbackUsed());
         assertTrue(response.getFileChangeTypeCodes().isEmpty());
         verify(paragraphService).predictBatchLenient(Collections.singletonList("新内容"), "u1");

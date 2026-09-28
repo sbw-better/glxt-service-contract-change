@@ -1,5 +1,7 @@
 package com.citics.glxt.contractchange.service;
 
+import com.citics.glxt.contractchange.common.constants.CommonConstants;
+import com.citics.glxt.contractchange.common.exception.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.config.ContractChangeProperties;
 import com.citics.glxt.contractchange.domain.ContractParagraphDO;
 import com.citics.glxt.contractchange.embedding.EmbeddingClient;
@@ -18,6 +20,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -88,7 +91,8 @@ public class BatchPredictionServiceTest {
         properties.getEmbedding().setBatchSize(1);
         EmbeddingClient client = mock(EmbeddingClient.class);
         when(client.embed(anyList(), eq("employee-001")))
-                .thenThrow(new RuntimeException("gateway unavailable"))
+                .thenThrow(new ContractChangeBusinessException(
+                        CommonConstants.SERVICE_UNAVAILABLE, "gateway unavailable"))
                 .thenReturn(vectors(1));
         ContractParagraphPredictionService service =
                 new ContractParagraphPredictionService(indexService, client, properties);
@@ -98,6 +102,22 @@ public class BatchPredictionServiceTest {
 
         assertEquals("EMBEDDING_UNAVAILABLE", responses.get(0).getErrorCode());
         assertEquals("SEMANTIC", responses.get(1).getPrediction().getMatchType());
+    }
+
+    @Test
+    public void shouldNotHideUnexpectedProgrammingFailureAsExternalDegradation() {
+        EmbeddingClient client = mock(EmbeddingClient.class);
+        when(client.embed(anyList(), eq("employee-001")))
+                .thenThrow(new IllegalStateException("unexpected bug"));
+        ContractParagraphPredictionService service =
+                new ContractParagraphPredictionService(indexService, client, properties);
+
+        try {
+            service.predictBatchLenient(Collections.singletonList("新段落"), "employee-001");
+            fail("unexpected runtime exception should propagate");
+        } catch (IllegalStateException expected) {
+            assertEquals("unexpected bug", expected.getMessage());
+        }
     }
 
     private void assertBatchSizes(int paragraphCount, List<Integer> expectedSizes) {

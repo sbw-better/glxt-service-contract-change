@@ -11,6 +11,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 
 public class OracleAnalysisLogSchemaTest {
     private static final Pattern COLUMN_PATTERN = Pattern.compile(
@@ -39,5 +40,16 @@ public class OracleAnalysisLogSchemaTest {
             }
             assertTrue("no columns found in table definition: " + table, columnCount > 0);
         }
+    }
+
+    @Test
+    public void analysisRollbackShouldNotDeleteHistoricalVectorLibrary() throws Exception {
+        String sql = new String(Files.readAllBytes(
+                Paths.get("database", "oracle", "99_rollback.sql")),
+                StandardCharsets.UTF_8);
+
+        assertTrue(sql.contains("DROP TABLE HT_ANALYSIS_LOG PURGE"));
+        assertFalse(sql.contains("TPIF_HTDLYB"));
+        assertFalse(sql.contains("SEQ_TPIF_HTDLYB"));
     }
 }

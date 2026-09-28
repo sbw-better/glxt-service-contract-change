@@ -22,6 +22,11 @@ public class ContractChangeResult<T> implements Serializable {
         return of(CommonConstants.SUCCESS, "操作成功", data);
     }
 
+    /** 创建带有明确处理结果说明的成功响应。 */
+    public static <T> ContractChangeResult<T> success(String message, T data) {
+        return of(CommonConstants.SUCCESS, message, data);
+    }
+
     /** 创建默认 500 失败响应。 */
     public static <T> ContractChangeResult<T> error(String message) {
         return of(CommonConstants.FAIL, message, null);

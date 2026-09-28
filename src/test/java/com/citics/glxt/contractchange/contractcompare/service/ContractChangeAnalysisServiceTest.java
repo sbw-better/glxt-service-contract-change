@@ -184,6 +184,45 @@ public class ContractChangeAnalysisServiceTest {
     }
 
     @Test
+    public void shouldRejectNonPositiveInstIdBeforeCreatingRecord() {
+        ContractCompareRequest request = request();
+        request.setInstId(0L);
+
+        try {
+            service.analyze(request);
+            fail("positive instId should be required");
+        } catch (RuntimeException expected) {
+            assertTrue(expected.getMessage().contains("大于0"));
+        }
+
+        verify(persistenceService, never()).createProcessing(any(AnalysisLogDO.class));
+    }
+
+    @Test
+    public void shouldRejectValuesThatCannotFitAnalysisLogColumns() {
+        ContractCompareRequest request = request();
+        request.setUserId(repeat('u', 101));
+
+        try {
+            service.analyze(request);
+            fail("overlong userId should be rejected");
+        } catch (RuntimeException expected) {
+            assertTrue(expected.getMessage().contains("100"));
+        }
+
+        request = request();
+        request.setOldFileGetPath(repeat('p', 1001));
+        try {
+            service.analyze(request);
+            fail("overlong path should be rejected");
+        } catch (RuntimeException expected) {
+            assertTrue(expected.getMessage().contains("oldFileGetPath"));
+        }
+
+        verify(persistenceService, never()).createProcessing(any(AnalysisLogDO.class));
+    }
+
+    @Test
     public void shouldValidateStrategyRequestBeforeCreatingRecord() {
         doThrow(new RuntimeException("修改前合同文件路径不能为空"))
                 .when(extractor).validateRequest(any(ContractCompareRequest.class));
@@ -235,5 +274,13 @@ public class ContractChangeAnalysisServiceTest {
         change.setChangedParagraphs(Collections.emptyList());
         return new ContractCompareResponse(1, Collections.singletonList(change),
                 Collections.<String>emptyList());
+    }
+
+    private String repeat(char value, int count) {
+        StringBuilder result = new StringBuilder(count);
+        for (int index = 0; index < count; index++) {
+            result.append(value);
+        }
+        return result.toString();
     }
 }

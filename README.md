@@ -24,12 +24,19 @@ Embedding 网关，实现“历史段落导入—语义检索—多标签变更�
 ```text
 database/oracle/01_schema.sql
 database/oracle/02_analysis_log.sql
+database/oracle/03_compare_request_function.sql
 ```
 
 `01_schema.sql`创建历史段落向量库；`02_analysis_log.sql`是存量环境可独立执行的增量脚本，
 创建 `/compare` 分析主记录、变化段落和 Top-K 匹配证据表。分析日志表使用逻辑关联，不建立
 物理外键；最终明细在同一事务内写入，并通过唯一约束和写入行数校验保证一致性。
-`99_rollback.sql`会删除本版表及序列，表内数据不可恢复，生产环境谨慎执行。
+`99_rollback.sql`只删除本版三张分析日志表及其序列，不会删除历史向量基础表
+`TPIF_HTDLYB`；分析日志表内数据不可恢复，生产环境谨慎执行。
+
+`03_compare_request_function.sql`提供Oracle 11g可用的`FN_CONTRACT_COMPARE_REQUEST`函数，
+只负责校验LiveBOS参数并生成`/service/contract-compare/compare`所需的JSON请求体，不发起HTTP
+请求。LiveBOS 3.9.2继续通过现有`com.https.HttpsHelp.httspost`调用Java服务，因此不需要为
+Oracle配置网络ACL或Wallet；调用脚本仍须检查响应JSON中的业务`code`和`analysisStatus`。
 
 接入统一模型网关不需要修改表结构。`MODEL_VERSION`与`VECTOR_DIM`用于隔离不同模型产生的向量。
 
@@ -177,7 +184,8 @@ UserId: 实际操作人工号
 
 `DOUBLE_VERSION` 必须提供 `oldFileGetPath`、`newFileGetPath`；`CHANGE_DOCUMENT` 必须提供
 `changeFileGetPath`。非当前模式字段即使存在也不参与处理。非法枚举或缺少当前模式必填字段时
-返回业务码 400。
+返回业务码 400。`instId` 必须大于 0，`userId` 最长 100 个字符，当前模式使用的文件路径最长
+1000 个字符，超过数据库字段边界时在创建分析记录前直接拒绝。
 
 `/compare` 固定保存未裁剪的完整条款上下文，`resultMode` 不影响精简响应。该参数只控制
 `/export` 的双版本导出：可选值为 `SIMPLE`、`CONTEXT`，未传或传 `null` 时默认使用 `SIMPLE`。
@@ -316,7 +324,7 @@ Content-Type: application/json
 `CANDIDATE`，向量服务失败不会丢失基础比对结果。
 
 数据库完整快照中，每个变化段落的 `businessTypePrediction` 保存识别状态、输入范围、是否使用
-兜底、匹配类型、模型版本、最高相似度、候选业务类型及参考样本；`predictionSummary` 汇总匹配、
+兜底、实际提交给识别服务的规范化文本、匹配类型、模型版本、最高相似度、候选业务类型及参考样本；`predictionSummary` 汇总匹配、
 无可靠匹配、调用失败和超长跳过数量。`fileChangeTypeCodes` 是整份合同最终可使用的业务变更类型
 编码：任一不同规范化段落的
 `HIGH` 类型直接进入，`CANDIDATE` 类型需要至少两个不同规范化段落共同支持；结果去重并按
@@ -336,6 +344,8 @@ Content-Type: application/json
 
 `SUCCESS` 表示没有预测失败或超长跳过；正常无变化或全部 `NO_RELIABLE_MATCH` 仍是 `SUCCESS`，
 并返回空数组。存在 `FAILED` 或 `SKIPPED_TOO_LONG` 时返回 `PARTIAL_SUCCESS`，成功段落仍参与聚合。
+此时外层业务码仍为成功，但 `message` 明确提示“部分业务类型未识别”；调用方必须以
+`analysisStatus` 判断分析是否完整，不能只判断外层业务码。
 主记录先以 `PROCESSING` 创建，完整快照、段落和匹配证据随后在一个事务中落库；任一最终写入失败
 都会回滚明细并把主记录标记为 `FAILED`，接口不会返回一个缺少完整记录的成功 `analysisId`。
 

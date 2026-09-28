@@ -67,6 +67,7 @@ public class AnalysisResultPersistenceServiceTest {
         prediction.setStatus("MATCHED");
         prediction.setInputScope("OLD_CONTEXT");
         prediction.setFallbackUsed(true);
+        prediction.setPredictionText("第二条 金额 删除前内容 相邻约定");
         prediction.setMatchType("SEMANTIC");
         prediction.setMaxSimilarity(0.91D);
         prediction.setChangeTypes(Collections.singletonList(
@@ -89,7 +90,8 @@ public class AnalysisResultPersistenceServiceTest {
         ArgumentCaptor<AnalysisParagraphLogDO> paragraphLog =
                 ArgumentCaptor.forClass(AnalysisParagraphLogDO.class);
         verify(paragraphMapper).insertLog(paragraphLog.capture());
-        assertEquals("删除前内容", paragraphLog.getValue().getPredictionText());
+        assertEquals("第二条 金额 删除前内容 相邻约定",
+                paragraphLog.getValue().getPredictionText());
         assertEquals("OLD_CONTEXT", paragraphLog.getValue().getInputScope());
         assertEquals("第二部分", paragraphLog.getValue().getParentClauseNo());
         assertEquals("来源标题", paragraphLog.getValue().getSourceHeading());
