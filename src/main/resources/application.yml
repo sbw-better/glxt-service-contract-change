@@ -55,7 +55,7 @@ contract-change:
     vote-top-k: ${SEARCH_VOTE_TOP_K:10}
     evidence-top-k: ${SEARCH_EVIDENCE_TOP_K:5}
     # 当前仅作为业务字符上限，不等同于新模型Token上限；服务拒绝超长文本且不自动截断。
-    max-paragraph-length: ${SEARCH_MAX_PARAGRAPH_LENGTH:2000}
+    max-paragraph-length: ${SEARCH_MAX_PARAGRAPH_LENGTH:5000}
     min-similarity: ${SEARCH_MIN_SIMILARITY:0.60}
     high-threshold: ${SEARCH_HIGH_THRESHOLD:0.80}
     candidate-threshold: ${SEARCH_CANDIDATE_THRESHOLD:0.55}
