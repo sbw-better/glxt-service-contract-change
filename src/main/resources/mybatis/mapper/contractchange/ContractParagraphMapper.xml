@@ -3,7 +3,7 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.citics.glxt.contractchange.mapper.ContractParagraphMapper">
 
-    <!-- Oracle 字段与 Java 数据对象的完整映射，CLOB/BLOB 显式指定 JDBC 类型。 -->
+    <!-- Oracle 字段与 Java 数据对象的完整映射，向量JSON使用CLOB字符流读写。 -->
     <resultMap id="ContractParagraphResultMap"
                type="com.citics.glxt.contractchange.domain.ContractParagraphDO">
         <id column="ID" property="id"/>
@@ -11,7 +11,8 @@
         <result column="GFBW" property="normalizedText" jdbcType="CLOB"/>
         <result column="TEXT_HASH" property="textHash"/>
         <result column="BGLX_CODES" property="changeTypeCodes"/>
-        <result column="VECTOR_DATA" property="vectorData" jdbcType="BLOB"/>
+        <result column="VECTOR_DATA" property="vectorData" jdbcType="CLOB"
+                typeHandler="org.apache.ibatis.type.ClobTypeHandler"/>
         <result column="VECTOR_DIM" property="vectorDim"/>
         <result column="MODEL_VERSION" property="modelVersion"/>
         <result column="SOURCE_FILE" property="sourceFile"/>
@@ -36,7 +37,7 @@
             MODEL_VERSION, SOURCE_FILE, SFSX, CREATE_TIME
         ) VALUES (
             #{id}, #{originalText,jdbcType=CLOB}, #{normalizedText,jdbcType=CLOB},
-            #{textHash}, #{changeTypeCodes}, #{vectorData,jdbcType=BLOB}, #{vectorDim},
+            #{textHash}, #{changeTypeCodes}, #{vectorData,jdbcType=CLOB,typeHandler=org.apache.ibatis.type.ClobTypeHandler}, #{vectorDim},
             #{modelVersion}, #{sourceFile}, #{enabled}, SYSDATE
         )
     </insert>
@@ -58,7 +59,7 @@
         SET YWBW = #{originalText,jdbcType=CLOB},
             GFBW = #{normalizedText,jdbcType=CLOB},
             BGLX_CODES = #{changeTypeCodes},
-            VECTOR_DATA = #{vectorData,jdbcType=BLOB},
+            VECTOR_DATA = #{vectorData,jdbcType=CLOB,typeHandler=org.apache.ibatis.type.ClobTypeHandler},
             VECTOR_DIM = #{vectorDim},
             MODEL_VERSION = #{modelVersion},
             SOURCE_FILE = #{sourceFile},

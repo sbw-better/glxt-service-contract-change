@@ -108,8 +108,24 @@ Java会校验返回数量、批量响应`index`、实际维度、非法浮点数
 即使平台模型别名不变，只要底层模型发生变化，也必须使用新的版本标识并重新生成历史向量。
 
 Qwen3-Embedding-8B不传`dimensions`时默认返回4096维，但本项目固定显式请求1024维。对第一版最多
-1万条CPU精确检索而言，1024维可将网络响应、Oracle BLOB、JVM向量内存和点积计算量降为
-4096维的四分之一。切换维度时必须同步更改`EMBEDDING_MODEL_VERSION`并重新生成全部历史向量。
+1万条CPU精确检索而言，1024维可将JVM向量内存和点积计算量降为4096维的四分之一；
+网络响应和Oracle JSON文本大小也随分量数量减少，但不是固定字节比例。
+切换维度时必须同步更改`EMBEDDING_MODEL_VERSION`并重新生成全部历史向量。
+
+历史向量的`VECTOR_DATA`使用`CLOB NOT NULL`，内容是标准JSON数字数组，如`[0.6,0.8,0.0]`。
+Java对象用`String`承载持久化内容，Mapper查询、新增、更新显式使用`ClobTypeHandler`，支持超过
+4000字符的JSON。计算和索引仍使用`float[]`，余弦相似度、Top K、投票及合同级汇总规则不变。
+`VectorCodec`使用独立Jackson配置，不受HTTP返回的小数格式化影响，不固定小数位，保持Float32精度。
+加载时严格校验单个数字数组、维度、有限值和float溢出，拒绝字符串/null元素和尾随内容；
+全零向量由归一化校验拒绝，坏记录继续跳过并标记索引降级。
+`DBMS_LOB.GETLENGTH(VECTOR_DATA)`返回字符数，不能用于推断维度或按`VECTOR_DIM * 4`校验。
+初始化脚本仅适用于新建环境，本次不提供旧格式兼容、数据迁移或现有表字段变更。
+
+可选真实Oracle隔离测试：设置`ORACLE_VECTOR_TEST_URL`、`ORACLE_VECTOR_TEST_USERNAME`和
+`ORACLE_VECTOR_TEST_PASSWORD`后运行`mvn -Dtest=OracleVectorClobIntegrationTest test`。
+也支持通过`-Doracle.vector.test.config=<本地JSON配置路径>`读取`url`、`schema`、`password`，
+不应提交凭据文件。测试只创建随机命名的临时测试表和序列，验证实际Mapper的大CLOB读写与事务回滚，
+结束后删除这些测试对象，不访问或修改现有业务表；未配置连接时明确跳过，不算数据库联调通过。
 
 ## Excel格式与导入流程
 
@@ -400,4 +416,4 @@ java -jar target/glxt-service-contract-change-1.0.0.jar
 - 记录导入、事务、索引、模型调用和预测的数量、状态及耗时。
 - 合同段落只记录规范化文本SHA-256，不记录完整正文。
 - 不记录API Key、`UserId`、请求体、模型响应体或向量。
-- 不建议开启Mapper或RestTemplate DEBUG，避免输出CLOB、BLOB或模型请求信息。
+- 不建议开启Mapper或RestTemplate DEBUG，避免输出合同CLOB、向量JSON或模型请求信息。

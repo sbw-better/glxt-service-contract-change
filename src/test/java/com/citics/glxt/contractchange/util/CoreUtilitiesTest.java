@@ -30,14 +30,14 @@ public class CoreUtilitiesTest {
     }
 
     @Test
-    public void shouldRoundTripLittleEndianVectorAndNormalize() {
+    public void shouldRoundTripJsonVectorAndNormalize() {
         float[] vector = new float[]{3F, 4F, 0F};
         VectorUtils.normalize(vector);
         assertEquals(0.6D, vector[0], 0.000001D);
         assertEquals(0.8D, vector[1], 0.000001D);
-        byte[] bytes = VectorCodec.encode(vector);
-        assertEquals(12, bytes.length);
-        assertArrayEquals(vector, VectorCodec.decode(bytes, 3), 0.000001F);
+        String json = VectorCodec.encode(vector);
+        assertEquals("[0.6,0.8,0.0]", json);
+        assertArrayEquals(vector, VectorCodec.decode(json, 3), 0.000001F);
         assertEquals(1D, VectorUtils.dot(vector, vector), 0.000001D);
     }
 }

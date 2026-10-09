@@ -11,7 +11,7 @@ FROM TPIF_HTDLYB
 GROUP BY MODEL_VERSION, VECTOR_DIM, SFSX
 ORDER BY MODEL_VERSION, VECTOR_DIM, SFSX;
 
--- 2. 最近导入样本核验：Hash、类型、维度、模型版本、BLOB 字节数
+-- 2. 最近导入样本核验：Hash、类型、维度、模型版本、CLOB JSON 字符数
 SELECT *
 FROM (
     SELECT
@@ -20,7 +20,7 @@ FROM (
         BGLX_CODES,
         VECTOR_DIM,
         MODEL_VERSION,
-        DBMS_LOB.GETLENGTH(VECTOR_DATA) AS VECTOR_BYTES,
+        DBMS_LOB.GETLENGTH(VECTOR_DATA) AS VECTOR_CHARS,
         SFSX,
         CREATE_TIME
     FROM TPIF_HTDLYB
@@ -28,17 +28,20 @@ FROM (
 )
 WHERE ROWNUM <= 10;
 
--- 3. 1024 维 Float32 小端序向量应为 4096 字节；此查询用于发现异常记录
+-- 3. 只检查空CLOB和无效维度；JSON字符数不固定，不能据长度判断向量正确性。
+-- JSON格式、数字元素、实际维度和有限值由应用VectorCodec及归一化校验。
+-- Oracle 11g不依赖数据库JSON函数；重载后关注/index/status的errorCount和DEGRADED。
 SELECT
     ID,
     TEXT_HASH,
     VECTOR_DIM,
-    DBMS_LOB.GETLENGTH(VECTOR_DATA) AS VECTOR_BYTES,
+    DBMS_LOB.GETLENGTH(VECTOR_DATA) AS VECTOR_CHARS,
     MODEL_VERSION
 FROM TPIF_HTDLYB
-WHERE DBMS_LOB.GETLENGTH(VECTOR_DATA) <> VECTOR_DIM * 4;
+WHERE VECTOR_DATA IS NULL OR DBMS_LOB.GETLENGTH(VECTOR_DATA) = 0
+   OR VECTOR_DIM IS NULL OR VECTOR_DIM <= 0;
 
--- 4. 当前模型版本、当前维度、生效样本数；应与 /index/status 的 sampleCount 对齐
+-- 4. 当前模型版本、当前维度、生效样本数；无坏记录时与/index/status的sampleCount对齐
 SELECT COUNT(1) AS ACTIVE_INDEX_SAMPLE_COUNT
 FROM TPIF_HTDLYB
 WHERE MODEL_VERSION = 'gen-studio-Qwen3-Embedding-8B-1024-v1'

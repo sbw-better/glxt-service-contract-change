@@ -74,7 +74,7 @@ public class ContractParagraphImportServiceTest {
         verify(persistenceService).saveAll(captor.capture());
         ContractParagraphDO saved = captor.getValue().get(0);
         assertEquals("TYPE01;TYPE02", saved.getChangeTypeCodes());
-        assertEquals(12, saved.getVectorData().length);
+        assertEquals("[1.0,0.0,0.0]", saved.getVectorData());
     }
 
     /** 停用记录使用Excel重新导入时更新原行并重新启用，不触发唯一Hash冲突。 */
@@ -163,6 +163,75 @@ public class ContractParagraphImportServiceTest {
             workbook.write(output);
             return new MockMultipartFile("file", "samples.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", output.toByteArray());
+        }
+    }
+
+    @Test
+    public void shouldSkipCurrentDatabaseAndFileDuplicatesWithoutEmbeddingOrWriting() throws Exception {
+        ContractParagraphDO existing = new ContractParagraphDO();
+        existing.setTextHash(HashUtils.sha256("历史段落A"));
+        existing.setChangeTypeCodes("TYPE01");
+        existing.setEnabled(1);
+        existing.setVectorDim(3);
+        existing.setModelVersion("test-v1");
+        when(mapper.selectByTextHashes(anyList())).thenReturn(Collections.singletonList(existing));
+        ImportResponse response = service.importExcel(excel(new String[][]{
+                {"历史段落A", "TYPE01"}, {"历史段落A", "TYPE01"}}), "test-user");
+        assertTrue(response.isSuccess());
+        assertEquals(2, response.getSkipped());
+        verify(embeddingClient, never()).embed(anyList(), anyString());
+        verify(persistenceService, never()).saveAll(anyList());
+    }
+
+    @Test
+    public void shouldNotReloadIndexWhenPersistenceFails() throws Exception {
+        when(mapper.selectByTextHashes(anyList())).thenReturn(Collections.emptyList());
+        when(embeddingClient.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(3,
+                Collections.singletonList(new float[]{1F, 0F, 0F})));
+        org.mockito.Mockito.doThrow(new IllegalStateException("test rollback"))
+                .when(persistenceService).saveAll(anyList());
+        try {
+            service.importExcel(excel(new String[][]{{"历史段落A", "TYPE01"}}), "test-user");
+            org.junit.Assert.fail("Expected persistence failure");
+        } catch (IllegalStateException expected) {
+            verify(indexService, never()).reload();
+        }
+    }
+
+    @Test
+    public void shouldRejectInvalidVectorBeforeAnyWrite() throws Exception {
+        when(mapper.selectByTextHashes(anyList())).thenReturn(Collections.emptyList());
+        when(embeddingClient.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(3,
+                Collections.singletonList(new float[]{Float.NaN, 0F, 0F})));
+        try {
+            service.importExcel(excel(new String[][]{{"历史段落A", "TYPE01"}}), "test-user");
+            org.junit.Assert.fail("Expected vector validation failure");
+        } catch (RuntimeException expected) {
+            verify(persistenceService, never()).saveAll(anyList());
+            verify(indexService, never()).reload();
+        }
+    }
+
+    @Test
+    public void shouldStore1024DimensionEmbeddingAsLargeJsonWithoutPrecisionLoss() throws Exception {
+        properties.getEmbedding().setDimension(1024);
+        float[] vector = new float[1024];
+        java.util.Arrays.fill(vector, 0.012345678F);
+        com.citics.glxt.contractchange.util.VectorUtils.normalize(vector);
+        when(mapper.selectByTextHashes(anyList())).thenReturn(Collections.emptyList());
+        when(embeddingClient.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(1024,
+                Collections.singletonList(vector)));
+        assertTrue(service.importExcel(excel(new String[][]{{"历史段落A", "49"}}), "test-user").isSuccess());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ContractParagraphDO>> captor =
+                (ArgumentCaptor<List<ContractParagraphDO>>) (ArgumentCaptor<?>) ArgumentCaptor.forClass(List.class);
+        verify(persistenceService).saveAll(captor.capture());
+        ContractParagraphDO saved = captor.getValue().get(0);
+        assertEquals(Integer.valueOf(1024), saved.getVectorDim());
+        assertTrue(saved.getVectorData().length() > 4000);
+        float[] decoded = com.citics.glxt.contractchange.util.VectorCodec.decode(saved.getVectorData(), 1024);
+        for (int i = 0; i < vector.length; i++) {
+            assertEquals(Float.floatToRawIntBits(vector[i]), Float.floatToRawIntBits(decoded[i]));
         }
     }
 }

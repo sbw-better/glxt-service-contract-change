@@ -213,7 +213,7 @@ public class PredictionAndIndexServiceTest {
     public void shouldMarkIndexDegradedWhenAllDatabaseVectorsAreInvalid() {
         ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
         ContractParagraphDO broken = paragraph(30L, "损坏段落", "TYPE_BROKEN", new float[]{1F, 0F, 0F});
-        broken.setVectorData(new byte[]{1, 2, 3});
+        broken.setVectorData("[1,2]");
         when(mapper.selectActiveParagraphs("test-v1", 3)).thenReturn(Collections.singletonList(broken));
         ParagraphVectorIndexService brokenIndex = new ParagraphVectorIndexService(mapper, properties);
 
@@ -225,6 +225,74 @@ public class PredictionAndIndexServiceTest {
     /** 构造与查询向量 {@code [1, 0, 0]} 具有指定余弦相似度的单位向量。 */
     private float[] vectorWithSimilarity(double similarity) {
         return new float[]{(float) similarity, (float) Math.sqrt(1D - similarity * similarity), 0F};
+    }
+
+    @Test
+    public void shouldSkipInvalidJsonAndKeepOldSnapshotWhenQueryFails() {
+        ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
+        ContractParagraphDO good = paragraph(40L, "有效样本", "49", new float[]{1F, 0F, 0F});
+        ContractParagraphDO broken = paragraph(41L, "坏样本", "71", new float[]{1F, 0F, 0F});
+        broken.setVectorData("[0,0,0]");
+        when(mapper.selectActiveParagraphs("test-v1", 3)).thenReturn(Arrays.asList(good, broken));
+        ParagraphVectorIndexService index = new ParagraphVectorIndexService(mapper, properties);
+        assertEquals("DEGRADED", index.reload().getStatus());
+        assertEquals(1, index.status().getSampleCount());
+        assertEquals(1, index.status().getErrorCount());
+        assertEquals(40L, index.exact(good.getTextHash()).getSampleId());
+        when(mapper.selectActiveParagraphs("test-v1", 3)).thenThrow(new IllegalStateException("test query failure"));
+        try { index.reload(); org.junit.Assert.fail("Expected failure"); }
+        catch (IllegalStateException expected) {
+            assertEquals(1, index.status().getSampleCount());
+            assertEquals(40L, index.exact(good.getTextHash()).getSampleId());
+        }
+        org.mockito.Mockito.doReturn(Collections.emptyList()).when(mapper).selectActiveParagraphs("test-v1", 3);
+        assertEquals("EMPTY", index.reload().getStatus());
+        org.junit.Assert.assertNull(index.exact(good.getTextHash()));
+    }
+
+    @Test
+    public void shouldKeepSimilarityTopKVoteAndFinalTypesIdenticalAfterJsonRoundTrip() {
+        // Baseline uses the original float[] directly, bypassing persistence and the codec.
+        java.util.List<com.citics.glxt.contractchange.vector.ParagraphSearchResult> baseline = new java.util.ArrayList<>();
+        java.util.List<ContractParagraphDO> rows = new java.util.ArrayList<>();
+        float[] query = {1F, 0F, 0F};
+        double[] similarities = {0.855138D, 0.750550D, 0.669767D, 0.668707D, 0.666498D};
+        String[] codes = {"49", "49", "71", "49", "71"};
+        for (int i = 0; i < similarities.length; i++) {
+            float[] vector = vectorWithSimilarity(similarities[i]);
+            com.citics.glxt.contractchange.util.VectorUtils.normalize(vector);
+            ContractParagraphDO row = paragraph(100L + i, "历史样本" + i, codes[i], vector);
+            rows.add(row);
+            com.citics.glxt.contractchange.vector.ParagraphVectorSample sample =
+                    new com.citics.glxt.contractchange.vector.ParagraphVectorSample(row.getId(), row.getOriginalText(),
+                            row.getTextHash(), Collections.singletonList(codes[i]), vector);
+            baseline.add(new com.citics.glxt.contractchange.vector.ParagraphSearchResult(sample,
+                    com.citics.glxt.contractchange.util.VectorUtils.dot(query, vector)));
+        }
+        ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
+        when(mapper.selectActiveParagraphs("test-v1", 3)).thenReturn(rows);
+        ParagraphVectorIndexService restored = new ParagraphVectorIndexService(mapper, properties);
+        restored.reload();
+        java.util.List<com.citics.glxt.contractchange.vector.ParagraphSearchResult> actual = restored.search(query, 5);
+        for (int i = 0; i < actual.size(); i++) {
+            assertEquals(baseline.get(i).getSample().getSampleId(), actual.get(i).getSample().getSampleId());
+            assertEquals(baseline.get(i).getSimilarity(), actual.get(i).getSimilarity(), 0D);
+        }
+        ParagraphVectorIndexService direct = mock(ParagraphVectorIndexService.class);
+        when(direct.status()).thenReturn(restored.status());
+        when(direct.search(org.mockito.ArgumentMatchers.any(float[].class), org.mockito.ArgumentMatchers.anyInt()))
+                .thenReturn(baseline);
+        EmbeddingClient client = mock(EmbeddingClient.class);
+        when(client.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(3, Collections.singletonList(query)));
+        PredictionResponse before = new ContractParagraphPredictionService(direct, client, properties).predict("新段落", "test");
+        PredictionResponse after = new ContractParagraphPredictionService(restored, client, properties).predict("新段落", "test");
+        assertEquals(before.getMatchType(), after.getMatchType());
+        assertEquals(before.getMaxSimilarity(), after.getMaxSimilarity(), 0D);
+        assertEquals(before.getChangeTypes(), after.getChangeTypes());
+        assertEquals(before.getReferences(), after.getReferences());
+        FileChangeTypeAggregator aggregator = new FileChangeTypeAggregator();
+        assertEquals(aggregator.aggregate(Collections.singletonList("新段落"), Collections.singletonList(before)),
+                aggregator.aggregate(Collections.singletonList("新段落"), Collections.singletonList(after)));
     }
 
     private ContractParagraphDO paragraph(long id, String text, String codes, float[] vector) {

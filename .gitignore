@@ -50,3 +50,11 @@ __pycache__/
 /docs/demo-materials/contract-sample-tests/build/contract_test_dataset.json
 *.preview.png
 *.inspect.ndjson
+
+# 本次向量存储改造的一次性本地文档修订与排版检查工具
+/docs/demo-materials/build/update_vector_storage_docs.py
+/docs/demo-materials/build/verify_vector_storage_docs.py
+
+# 本地改造验证的日志、文档备份和渲染结果（正式文档与测试代码仍提交）
+/vector-clob-doc-qa/
+/vector-clob-document-backups/

@@ -17,8 +17,8 @@ public class ContractParagraphDO {
     private String textHash;
     /** 排序去重后的英文分号分隔变更类型编码。 */
     private String changeTypeCodes;
-    /** Float32 小端序编码的归一化向量。 */
-    private byte[] vectorData;
+    /** CLOB中的归一化向量JSON数字数组，保留完整Float32精度。 */
+    private String vectorData;
     /** 向量维度，由当前模型版本和应用配置共同确定。 */
     private Integer vectorDim;
     /** 生成该向量的模型版本。 */

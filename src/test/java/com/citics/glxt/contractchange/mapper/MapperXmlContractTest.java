@@ -20,6 +20,31 @@ import static org.junit.Assert.assertTrue;
 
 public class MapperXmlContractTest {
     @Test
+    public void shouldResolveClobHandlerForVectorReadInsertAndUpdate() throws Exception {
+        org.apache.ibatis.session.Configuration configuration = new org.apache.ibatis.session.Configuration();
+        String xml = resourceText("ContractParagraphMapper.xml");
+        new org.apache.ibatis.builder.xml.XMLMapperBuilder(new java.io.StringReader(xml),
+                configuration, "vector-mapper", configuration.getSqlFragments()).parse();
+        String namespace = ContractParagraphMapper.class.getName() + ".";
+        org.apache.ibatis.mapping.ResultMapping vector = configuration
+                .getResultMap(namespace + "ContractParagraphResultMap").getResultMappings().stream()
+                .filter(mapping -> "vectorData".equals(mapping.getProperty())).findFirst().get();
+        assertEquals(String.class, vector.getJavaType());
+        assertEquals(org.apache.ibatis.type.JdbcType.CLOB, vector.getJdbcType());
+        assertTrue(vector.getTypeHandler() instanceof org.apache.ibatis.type.ClobTypeHandler);
+        for (String statement : new String[]{"insertParagraph", "updateParagraph"}) {
+            org.apache.ibatis.mapping.ParameterMapping parameter = configuration
+                    .getMappedStatement(namespace + statement)
+                    .getBoundSql(new com.citics.glxt.contractchange.domain.ContractParagraphDO())
+                    .getParameterMappings().stream()
+                    .filter(mapping -> "vectorData".equals(mapping.getProperty())).findFirst().get();
+            assertEquals(String.class, parameter.getJavaType());
+            assertEquals(org.apache.ibatis.type.JdbcType.CLOB, parameter.getJdbcType());
+            assertTrue(parameter.getTypeHandler() instanceof org.apache.ibatis.type.ClobTypeHandler);
+        }
+    }
+
+    @Test
     public void shouldKeepAllSqlInXml() {
         assertXmlMapper(ContractParagraphMapper.class, "ContractParagraphMapper.xml");
         assertXmlMapper(AnalysisLogMapper.class, "AnalysisLogMapper.xml");

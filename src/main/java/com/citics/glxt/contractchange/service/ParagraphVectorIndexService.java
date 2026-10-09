@@ -60,7 +60,7 @@ public class ParagraphVectorIndexService {
     /**
      * 从Oracle重新构建当前模型版本的内存索引。
      *
-     * <p>只读取“当前模型版本、当前维度并且已经生效”的记录。每条数据库BLOB先还原成float数组，
+     * <p>只读取“当前模型版本、当前维度并且已经生效”的记录。每条数据库CLOB JSON先还原成float数组，
      * 然后分别放入“语义比较列表”和“文本Hash快速查找表”。</p>
      *
      * @return 新索引状态

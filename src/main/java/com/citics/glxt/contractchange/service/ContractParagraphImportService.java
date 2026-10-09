@@ -229,7 +229,7 @@ public class ContractParagraphImportService {
         }
     }
 
-    /** 将校验完成的临时行转换为可持久化对象，并把 Float32 向量编码为 BLOB。 */
+    /** 将校验完成的临时行转换为可持久化对象，并把向量编码为CLOB JSON数字数组。 */
     private ContractParagraphDO toDO(PreparedRow row, String sourceFile) {
         ContractParagraphDO value = new ContractParagraphDO();
         value.setId(row.existingId);

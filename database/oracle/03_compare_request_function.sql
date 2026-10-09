@@ -4,14 +4,22 @@
 -- 不发起 HTTP 请求。LiveBOS 继续通过 com.https.HttpsHelp.httspost 调用 Java 服务。
 
 CREATE OR REPLACE FUNCTION FN_CONTRACT_COMPARE_REQUEST(
-    I_INSTID               IN NUMBER,
-    I_USERID               IN VARCHAR2,
-    I_ANALYSIS_TYPE        IN VARCHAR2,
-    I_OLD_FILE_GET_PATH    IN VARCHAR2 DEFAULT NULL,
-    I_NEW_FILE_GET_PATH    IN VARCHAR2 DEFAULT NULL,
-    I_CHANGE_FILE_GET_PATH IN VARCHAR2 DEFAULT NULL
+    I_INSTID               IN NUMBER,                 -- 流程id
+    I_USERID               IN VARCHAR2,               -- 用户标识
+    I_ANALYSIS_TYPE        IN VARCHAR2,               -- 文档类型
+    I_OLD_FILE_GET_PATH    IN VARCHAR2 DEFAULT NULL,  -- 双版本变更前文档路径
+    I_NEW_FILE_GET_PATH    IN VARCHAR2 DEFAULT NULL,  -- 双版本变更后文档路径
+    I_CHANGE_FILE_GET_PATH IN VARCHAR2 DEFAULT NULL   -- 单文档变更函文档路径
 ) RETURN CLOB
 AS
+ /************************************************************
+       概要说明：
+       修订日期        版本号        修订人         修改内容简要说明
+       20261008        1.0        佀秉威               新增
+       文档类型：
+       1| 双版本比对合同（变更前后文档）DOUBLE_VERSION
+       2| 单文档变更函 CHANGE_DOCUMENT
+  *************************************************************/
     V_JSON          CLOB;
     V_ANALYSIS_TYPE VARCHAR2(30);
 

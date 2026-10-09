@@ -212,7 +212,7 @@ s = deck.slides.add();
 addTitle(s, "技术选型服务于第一版目标：简单、可控、能解释");
 addColumns(s, [
   { head: "不用向量数据库", body: "第一版最多 1 万条历史样本，Java 内存精确点积足够；少引入一个组件，部署和排障更简单。" },
-  { head: "固定 1024 维", body: "相对默认 4096 维，网络响应、Oracle BLOB、JVM 内存和计算量约降为四分之一。" },
+  { head: "固定 1024 维", body: "相对默认 4096 维，JVM 向量内存和计算量降为四分之一；响应及 CLOB JSON 大小随分量数减少。" },
   { head: "Oracle + JVM 索引", body: "Oracle 负责持久化和审计字段，AtomicReference 切换只读索引快照，适配当前单实例部署。" },
 ], 230);
 addFooter(s, 8);
@@ -245,7 +245,7 @@ addTitle(s, "现场演示按“可用性 -> 证据 -> 边界”推进");
 addBullets(s, [
   "1. index/status：确认索引状态、样本数、模型版本和维度",
   "2. 导入匿名小 Excel：展示同步导入、幂等跳过和错误提示",
-  "3. Oracle 只读查询：核验 Hash、类型、1024 维和 BLOB 长度",
+  "3. Oracle 只读查询：核验 Hash、类型、1024 维和 CLOB JSON 字符数",
   "4. EXACT / HIGH / CANDIDATE 预测：解释参考段落和分数",
   "5. NO_RELIABLE_MATCH 与 index/reload：展示边界和运维动作",
 ], 96, 218, 1040, 54, 21);

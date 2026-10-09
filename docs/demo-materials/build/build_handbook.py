@@ -110,7 +110,7 @@ steps = [
     ("准备窗口", "打开 PPT、Swagger 或 Postman、Oracle 查询窗口、服务日志窗口。确认不要展示 API Key、真实合同正文和真实 UserId。"),
     ("index/status", "调用 GET /glxt-service-contract-change/service/contract-change/index/status。说明 status、sampleCount、modelVersion、vectorDimension、loadedAt、errorCount。"),
     ("导入匿名小 Excel", "调用 POST /samples/import，文件使用正常样本 Excel，Header 带 UserId。观察 totalRows、inserted、updated、skipped、indexReloaded。"),
-    ("Oracle 只读查询", "查询 TEXT_HASH、BGLX_CODES、VECTOR_DIM、MODEL_VERSION、DBMS_LOB.GETLENGTH(VECTOR_DATA)。说明 1024 维 Float32 小端序应约 4096 字节。"),
+    ("Oracle 只读查询", "查询 TEXT_HASH、BGLX_CODES、VECTOR_DIM、MODEL_VERSION、DBMS_LOB.GETLENGTH(VECTOR_DATA)。向量保存为 CLOB JSON 数字数组，长度为字符数、不固定；JSON与维度正确性由应用解析校验。"),
     ("EXACT 预测", "用已导入段落原文预测。预期 matchType=EXACT，score=1，similarity=1，不调用模型。"),
     ("HIGH 语义预测", "用语义相近但文字不同的段落预测。解释相似历史段落、supportCount 和 HIGH 条件。"),
     ("CANDIDATE/兜底", "用强相似但标签分散的段落预测。解释第一名 similarity 足够高时触发候选兜底，score 仍是真实投票占比。"),
