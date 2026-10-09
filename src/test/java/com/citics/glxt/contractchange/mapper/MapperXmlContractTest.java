@@ -20,6 +20,20 @@ import static org.junit.Assert.assertTrue;
 
 public class MapperXmlContractTest {
     @Test
+    public void shouldNotDependOnImportSourceFilename() throws Exception {
+        String xml = resourceText("ContractParagraphMapper.xml");
+        assertFalse(xml.contains("SOURCE_FILE"));
+        assertFalse(xml.contains("sourceFile"));
+        for (java.lang.reflect.Field field :
+                com.citics.glxt.contractchange.domain.ContractParagraphDO.class.getDeclaredFields()) {
+            assertFalse("sourceFile".equals(field.getName()));
+        }
+        String schema = new String(java.nio.file.Files.readAllBytes(
+                java.nio.file.Paths.get("database/oracle/01_schema.sql")), StandardCharsets.UTF_8);
+        assertFalse(schema.contains("SOURCE_FILE"));
+    }
+
+    @Test
     public void shouldResolveClobHandlerForVectorReadInsertAndUpdate() throws Exception {
         org.apache.ibatis.session.Configuration configuration = new org.apache.ibatis.session.Configuration();
         String xml = resourceText("ContractParagraphMapper.xml");

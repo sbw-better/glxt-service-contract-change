@@ -15,7 +15,6 @@
                 typeHandler="org.apache.ibatis.type.ClobTypeHandler"/>
         <result column="VECTOR_DIM" property="vectorDim"/>
         <result column="MODEL_VERSION" property="modelVersion"/>
-        <result column="SOURCE_FILE" property="sourceFile"/>
         <result column="SFSX" property="enabled"/>
         <result column="CREATE_TIME" property="createTime"/>
     </resultMap>
@@ -23,7 +22,7 @@
     <!-- 所有查询共用字段清单，避免新增字段时出现不同查询映射不一致。 -->
     <sql id="AllColumns">
         ID, YWBW, GFBW, TEXT_HASH, BGLX_CODES, VECTOR_DATA, VECTOR_DIM,
-        MODEL_VERSION, SOURCE_FILE, SFSX, CREATE_TIME
+        MODEL_VERSION, SFSX, CREATE_TIME
     </sql>
 
     <!-- 先读取 Sequence 并回填实体主键，再插入一条已经完成向量化的历史样本。 -->
@@ -34,11 +33,11 @@
         </selectKey>
         INSERT INTO TPIF_HTDLYB (
             ID, YWBW, GFBW, TEXT_HASH, BGLX_CODES, VECTOR_DATA, VECTOR_DIM,
-            MODEL_VERSION, SOURCE_FILE, SFSX, CREATE_TIME
+            MODEL_VERSION, SFSX, CREATE_TIME
         ) VALUES (
             #{id}, #{originalText,jdbcType=CLOB}, #{normalizedText,jdbcType=CLOB},
             #{textHash}, #{changeTypeCodes}, #{vectorData,jdbcType=CLOB,typeHandler=org.apache.ibatis.type.ClobTypeHandler}, #{vectorDim},
-            #{modelVersion}, #{sourceFile}, #{enabled}, SYSDATE
+            #{modelVersion}, #{enabled}, SYSDATE
         )
     </insert>
 
@@ -62,7 +61,6 @@
             VECTOR_DATA = #{vectorData,jdbcType=CLOB,typeHandler=org.apache.ibatis.type.ClobTypeHandler},
             VECTOR_DIM = #{vectorDim},
             MODEL_VERSION = #{modelVersion},
-            SOURCE_FILE = #{sourceFile},
             SFSX = 1
         WHERE ID = #{id}
     </update>

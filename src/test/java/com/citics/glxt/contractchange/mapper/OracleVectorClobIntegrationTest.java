@@ -59,7 +59,7 @@ public class OracleVectorClobIntegrationTest {
             try {
                 ddl.execute("CREATE TABLE " + table + " (ID NUMBER PRIMARY KEY, YWBW CLOB, GFBW CLOB, "
                         + "TEXT_HASH VARCHAR2(64) UNIQUE, BGLX_CODES VARCHAR2(1000), VECTOR_DATA CLOB NOT NULL, "
-                        + "VECTOR_DIM NUMBER, MODEL_VERSION VARCHAR2(100), SOURCE_FILE VARCHAR2(255), "
+                        + "VECTOR_DIM NUMBER, MODEL_VERSION VARCHAR2(100), "
                         + "SFSX NUMBER, CREATE_TIME DATE)");
                 tableCreated = true;
                 ddl.execute("CREATE SEQUENCE " + sequence);
@@ -154,7 +154,6 @@ public class OracleVectorClobIntegrationTest {
         row.setVectorData(VectorCodec.encode(vector));
         row.setVectorDim(1024);
         row.setModelVersion("test-clob");
-        row.setSourceFile("isolated-test.xlsx");
         row.setEnabled(1);
         return row;
     }

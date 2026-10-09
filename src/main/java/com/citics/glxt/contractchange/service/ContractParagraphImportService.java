@@ -122,7 +122,7 @@ public class ContractParagraphImportService {
         embed(changedRows, userId);
         List<ContractParagraphDO> paragraphs = new ArrayList<ContractParagraphDO>(changedRows.size());
         for (PreparedRow row : changedRows) {
-            paragraphs.add(toDO(row, file.getOriginalFilename()));
+            paragraphs.add(toDO(row));
         }
         // saveAll使用一个完整事务；方法正常返回，说明本批数据库操作已经全部提交。
         if (!paragraphs.isEmpty()) {
@@ -230,7 +230,7 @@ public class ContractParagraphImportService {
     }
 
     /** 将校验完成的临时行转换为可持久化对象，并把向量编码为CLOB JSON数字数组。 */
-    private ContractParagraphDO toDO(PreparedRow row, String sourceFile) {
+    private ContractParagraphDO toDO(PreparedRow row) {
         ContractParagraphDO value = new ContractParagraphDO();
         value.setId(row.existingId);
         value.setOriginalText(row.originalText);
@@ -240,8 +240,6 @@ public class ContractParagraphImportService {
         value.setVectorData(VectorCodec.encode(row.vector));
         value.setVectorDim(properties.getEmbedding().getDimension());
         value.setModelVersion(properties.getEmbedding().getModelVersion());
-        value.setSourceFile(sourceFile != null && sourceFile.length() > 500
-                ? sourceFile.substring(0, 500) : sourceFile);
         value.setEnabled(1);
         return value;
     }

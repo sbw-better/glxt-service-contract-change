@@ -23,8 +23,6 @@ public class ContractParagraphDO {
     private Integer vectorDim;
     /** 生成该向量的模型版本。 */
     private String modelVersion;
-    /** 导入来源文件名，仅用于数据追溯。 */
-    private String sourceFile;
     /** 是否参与检索：1 启用，0 停用。 */
     private Integer enabled;
     /** 创建时间。 */
