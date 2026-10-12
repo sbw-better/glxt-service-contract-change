@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.citics.glxt.contractchange.mapper.SampleLibraryMapper">
+    <resultMap id="Control" type="com.citics.glxt.contractchange.domain.SampleLibraryControlDO">
+        <result column="MODEL_NAME" property="modelName"/>
+        <result column="MODEL_VERSION" property="modelVersion"/>
+        <result column="VECTOR_DIM" property="vectorDim"/>
+        <result column="REVISION" property="revision"/>
+        <result column="OPERATION_ID" property="operationId"/>
+        <result column="OPERATION_STATUS" property="operationStatus"/>
+        <result column="EXPECTED_SAMPLES" property="expectedSamples"/>
+    </resultMap>
+    <select id="control" resultMap="Control">SELECT * FROM HT_SAMPLE_LIBRARY WHERE ID=1</select>
+    <select id="lockControl" resultMap="Control">SELECT * FROM HT_SAMPLE_LIBRARY WHERE ID=1 FOR UPDATE</select>
+    <update id="claim">
+        UPDATE HT_SAMPLE_LIBRARY SET OPERATION_ID=#{operationId},OPERATION_STATUS='RUNNING'
+        WHERE ID=1 AND OPERATION_ID IS NULL AND OPERATION_STATUS='IDLE'
+    </update>
+    <update id="release">
+        UPDATE HT_SAMPLE_LIBRARY SET OPERATION_ID=NULL,OPERATION_STATUS='IDLE',EXPECTED_SAMPLES=NULL
+        WHERE ID=1 AND OPERATION_ID=#{operationId} AND OPERATION_STATUS='RUNNING'
+    </update>
+    <update id="switchVersion">
+        UPDATE HT_SAMPLE_LIBRARY SET MODEL_NAME=#{control.modelName}, MODEL_VERSION=#{control.modelVersion},
+            VECTOR_DIM=#{control.vectorDim}, REVISION=REVISION+1
+        WHERE ID=1 AND OPERATION_ID=#{control.operationId} AND REVISION=#{control.revision}
+            AND OPERATION_STATUS='RUNNING'
+    </update>
+    <select id="usedVersion" resultType="int">
+        SELECT COUNT(*) FROM TPIF_HTDLYB WHERE MODEL_VERSION=#{version}
+    </select>
+    <update id="committed">
+        UPDATE HT_SAMPLE_LIBRARY SET OPERATION_STATUS='DB_COMMITTED',EXPECTED_SAMPLES=#{expectedSamples}
+        WHERE ID=1 AND OPERATION_ID=#{operationId} AND OPERATION_STATUS='RUNNING'
+    </update>
+    <update id="complete">
+        UPDATE HT_SAMPLE_LIBRARY SET OPERATION_ID=NULL,OPERATION_STATUS='IDLE',EXPECTED_SAMPLES=NULL
+        WHERE ID=1 AND OPERATION_ID=#{operationId} AND OPERATION_STATUS='DB_COMMITTED'
+    </update>
+</mapper>

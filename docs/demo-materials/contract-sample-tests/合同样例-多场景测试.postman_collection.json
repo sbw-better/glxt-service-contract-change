@@ -2,7 +2,7 @@
   "info": {
     "name": "合同段落变更类型识别服务-合同样例多场景测试",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "基于合同样例生成的导入与预测测试集合。预测场景使用41条专用受控历史样本，并配置Postman自动断言。导入和预测必须携带UserId；baseUrl建议设置为http://localhost:8080/glxt-service-contract-change。"
+    "description": "基于合同样例生成的导入与预测测试集合。预测场景使用41条专用受控历史样本，并配置Postman自动断言。导入JSON传入userId，预测携带UserId请求头；baseUrl建议设置为http://localhost:8080/glxt-service-contract-change。"
   },
   "item": [
     {
@@ -52,19 +52,18 @@
             "method": "POST",
             "header": [
               {
-                "key": "UserId",
-                "value": "{{userId}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-正常-920行.xlsx"
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"fileGetPath\": \"{{sampleServerDir}}/合同样例-测试导入样本-正常-920行.xlsx\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/service/contract-change/samples/import",
@@ -78,7 +77,7 @@
                 "import"
               ]
             },
-            "description": "中等批量成功导入；用于验证同步Embedding、Oracle落库和索引刷新，不用于准确率判断。"
+            "description": "中等批量成功导入；用于验证同步Embedding、Oracle落库和索引刷新，不用于准确率判断。 请先将Excel放到SFTP服务器sampleServerDir目录；JSON传入fileGetPath及userId。"
           },
           "event": [
             {
@@ -101,19 +100,18 @@
             "method": "POST",
             "header": [
               {
-                "key": "UserId",
-                "value": "{{userId}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-正常-990行.xlsx"
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"fileGetPath\": \"{{sampleServerDir}}/合同样例-测试导入样本-正常-990行.xlsx\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/service/contract-change/samples/import",
@@ -127,7 +125,7 @@
                 "import"
               ]
             },
-            "description": "接近1000行上限的成功导入；990条段落已保证唯一，无文件内标签冲突。"
+            "description": "接近1000行上限的成功导入；990条段落已保证唯一，无文件内标签冲突。 请先将Excel放到SFTP服务器sampleServerDir目录；JSON传入fileGetPath及userId。"
           },
           "event": [
             {
@@ -150,19 +148,18 @@
             "method": "POST",
             "header": [
               {
-                "key": "UserId",
-                "value": "{{userId}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-重复.xlsx"
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"fileGetPath\": \"{{sampleServerDir}}/合同样例-测试导入样本-重复.xlsx\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/service/contract-change/samples/import",
@@ -176,7 +173,7 @@
                 "import"
               ]
             },
-            "description": "验证相同Hash和相同编码的幂等跳过。"
+            "description": "验证相同Hash和相同编码的幂等跳过。 请先将Excel放到SFTP服务器sampleServerDir目录；JSON传入fileGetPath及userId。"
           },
           "event": [
             {
@@ -200,19 +197,18 @@
             "method": "POST",
             "header": [
               {
-                "key": "UserId",
-                "value": "{{userId}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-冲突.xlsx"
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"fileGetPath\": \"{{sampleServerDir}}/合同样例-测试导入样本-冲突.xlsx\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/service/contract-change/samples/import",
@@ -226,7 +222,7 @@
                 "import"
               ]
             },
-            "description": "验证标签冲突时整批拒绝，避免覆盖历史知识。"
+            "description": "验证标签冲突时整批拒绝，避免覆盖历史知识。 请先将Excel放到SFTP服务器sampleServerDir目录；JSON传入fileGetPath及userId。"
           },
           "event": [
             {
@@ -248,19 +244,18 @@
             "method": "POST",
             "header": [
               {
-                "key": "UserId",
-                "value": "{{userId}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-分隔符与去重.xlsx"
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"fileGetPath\": \"{{sampleServerDir}}/合同样例-测试导入样本-分隔符与去重.xlsx\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/service/contract-change/samples/import",
@@ -274,7 +269,7 @@
                 "import"
               ]
             },
-            "description": "验证中文分号、中文逗号和重复编码会被规范化。"
+            "description": "验证中文分号、中文逗号和重复编码会被规范化。 请先将Excel放到SFTP服务器sampleServerDir目录；JSON传入fileGetPath及userId。"
           },
           "event": [
             {
@@ -297,19 +292,18 @@
             "method": "POST",
             "header": [
               {
-                "key": "UserId",
-                "value": "{{userId}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-错误表头.xlsx"
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"fileGetPath\": \"{{sampleServerDir}}/合同样例-测试导入样本-错误表头.xlsx\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/service/contract-change/samples/import",
@@ -323,7 +317,7 @@
                 "import"
               ]
             },
-            "description": "验证第一张Sheet前两列表头必须完全匹配。"
+            "description": "验证第一张Sheet前两列表头必须完全匹配。 请先将Excel放到SFTP服务器sampleServerDir目录；JSON传入fileGetPath及userId。"
           },
           "event": [
             {
@@ -345,19 +339,18 @@
             "method": "POST",
             "header": [
               {
-                "key": "UserId",
-                "value": "{{userId}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-空值与非法编码.xlsx"
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"fileGetPath\": \"{{sampleServerDir}}/合同样例-测试导入样本-空值与非法编码.xlsx\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/service/contract-change/samples/import",
@@ -371,7 +364,7 @@
                 "import"
               ]
             },
-            "description": "验证逐行校验错误返回。"
+            "description": "验证逐行校验错误返回。 请先将Excel放到SFTP服务器sampleServerDir目录；JSON传入fileGetPath及userId。"
           },
           "event": [
             {
@@ -393,19 +386,18 @@
             "method": "POST",
             "header": [
               {
-                "key": "UserId",
-                "value": "{{userId}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-超长段落.xlsx"
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"fileGetPath\": \"{{sampleServerDir}}/合同样例-测试导入样本-超长段落.xlsx\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/service/contract-change/samples/import",
@@ -419,7 +411,7 @@
                 "import"
               ]
             },
-            "description": "验证超过2000字符明确拒绝。"
+            "description": "验证超过2000字符明确拒绝。 请先将Excel放到SFTP服务器sampleServerDir目录；JSON传入fileGetPath及userId。"
           },
           "event": [
             {
@@ -441,19 +433,18 @@
             "method": "POST",
             "header": [
               {
-                "key": "UserId",
-                "value": "{{userId}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-超过1000行.xlsx"
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"fileGetPath\": \"{{sampleServerDir}}/合同样例-测试导入样本-超过1000行.xlsx\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/service/contract-change/samples/import",
@@ -467,7 +458,7 @@
                 "import"
               ]
             },
-            "description": "验证单Excel最多1000行；第1001条触发最大行数限制。"
+            "description": "验证单Excel最多1000行；第1001条触发最大行数限制。 请先将Excel放到SFTP服务器sampleServerDir目录；JSON传入fileGetPath及userId。"
           },
           "event": [
             {
@@ -484,19 +475,23 @@
           ]
         },
         {
-          "name": "缺少UserId导入",
+          "name": "缺少JSON userId导入",
           "request": {
             "method": "POST",
-            "header": [],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-测试导入样本-重复.xlsx"
+              "mode": "raw",
+              "raw": "{\n  \"fileGetPath\": \"{{sampleServerDir}}/合同样例-测试导入样本-重复.xlsx\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/service/contract-change/samples/import",
@@ -510,7 +505,7 @@
                 "import"
               ]
             },
-            "description": "验证UserId请求头不能为空。"
+            "description": "请求体缺少userId，预期业务code=400；不下载文件、不调用模型。"
           },
           "event": [
             {
@@ -537,19 +532,18 @@
             "method": "POST",
             "header": [
               {
-                "key": "UserId",
-                "value": "{{userId}}"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "D:/projects/glxt-service-contract-change/docs/demo-materials/contract-sample-tests/合同样例-预测验证知识库.xlsx"
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"fileGetPath\": \"{{sampleServerDir}}/合同样例-预测验证知识库.xlsx\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/service/contract-change/samples/import",
@@ -563,7 +557,7 @@
                 "import"
               ]
             },
-            "description": "预测请求执行前先导入。包含4组受控语义簇，用于稳定触发HIGH、CANDIDATE和强相似兜底。"
+            "description": "预测请求执行前先导入。包含4组受控语义簇，用于稳定触发HIGH、CANDIDATE和强相似兜底。 请先将Excel放到SFTP服务器sampleServerDir目录；JSON传入fileGetPath及userId。"
           },
           "event": [
             {
@@ -1161,6 +1155,12 @@
           ]
         }
       ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "sampleServerDir",
+      "value": "/data/contract-samples"
     }
   ]
 }

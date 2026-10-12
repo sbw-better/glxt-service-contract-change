@@ -13,6 +13,10 @@ import com.citics.glxt.contractchange.vector.ParagraphVectorSample;
 import com.citics.glxt.contractchange.vector.VectorIndexSnapshot;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+import com.citics.glxt.contractchange.domain.SampleLibraryControlDO;
+import java.util.Objects;
+import java.util.UUID;
 
 import javax.annotation.PostConstruct;
 import java.util.ArrayList;
@@ -28,7 +32,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * JVM 内存向量索引服务。
  *
- * <p>它把Oracle中的历史段落和向量加载到Java内存，预测时直接在内存中比较，不需要每次查询数据库。</p>
+ * <p>历史向量在内存比较；每次预测先读取持久化控制身份，再固定一份完整快照。</p>
  *
  * <p>重新加载时先在临时变量中把新索引完整建好，加载期间预测仍使用旧索引；全部完成后再一次性
  * 切换到新索引，因此预测请求不会读到只加载了一部分的数据。</p>
@@ -38,6 +42,11 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ParagraphVectorIndexService {
     private final ContractParagraphMapper mapper;
     private final ContractChangeProperties properties;
+    private SampleLibraryStore store;
+    private final ThreadLocal<VectorIndexSnapshot> predictionSnapshot = new ThreadLocal<>();
+
+    @Autowired
+    public void setStore(SampleLibraryStore store) { this.store=store; }
     private final AtomicReference<VectorIndexSnapshot> current =
             new AtomicReference<VectorIndexSnapshot>(VectorIndexSnapshot.notReady());
 
@@ -51,6 +60,7 @@ public class ParagraphVectorIndexService {
     @PostConstruct
     public void initialize() {
         try {
+            if (store != null) store.recoverInterrupted();
             reload();
         } catch (RuntimeException ex) {
             log.error("应用启动时加载历史段落向量失败，索引状态已标记为LOAD_FAILED", ex);
@@ -66,16 +76,39 @@ public class ParagraphVectorIndexService {
      * @return 新索引状态
      */
     public synchronized IndexStatusResponse reload() {
+        if (store == null) return reloadForOperation(null,null);
+        SampleLibraryControlDO control=store.control();
+        if (control!=null && control.getOperationId()!=null) {
+            if (!"DB_COMMITTED".equals(control.getOperationStatus()))
+                throw new ContractChangeBusinessException(409,"重建期间禁止重载，operationId="+control.getOperationId());
+            return reloadForOperation(control.getOperationId(),control.getExpectedSamples());
+        }
+        String operationId=UUID.randomUUID().toString();
+        store.claim(operationId,properties.getEmbedding());
+        try { return reloadForOperation(operationId,null); }
+        finally { store.release(operationId); }
+    }
+
+    synchronized IndexStatusResponse reloadForOperation(String operationId,Integer expectedSize) {
         long started = System.currentTimeMillis();
         int dimension = properties.getEmbedding().getDimension();
         String modelVersion = properties.getEmbedding().getModelVersion();
+        String modelName=properties.getEmbedding().getModelName();
+        long revision=0;
+        SampleLibraryControlDO control=store==null ? null : store.control();
+        if (store!=null && (control==null || !Objects.equals(operationId,control.getOperationId())))
+            throw new ContractChangeBusinessException(409,"索引重载未持有写入占用");
+        if (control!=null && control.getModelVersion()!=null) {
+            dimension=control.getVectorDim(); modelVersion=control.getModelVersion();
+            modelName=control.getModelName(); revision=control.getRevision();
+        }
         log.info("历史段落向量索引加载开始, modelVersion={}, dimension={}", modelVersion, dimension);
         List<ContractParagraphDO> rows;
         try {
             rows = mapper.selectActiveParagraphs(modelVersion, dimension);
         } catch (RuntimeException ex) {
             // 首次加载失败不能伪装成正常空库；已有可用快照时仍继续保留旧快照。
-            if (current.get().getSamples().isEmpty()) {
+            if (current.get().getSamples().isEmpty() || !snapshotCompatible(current.get())) {
                 current.set(VectorIndexSnapshot.loadFailed());
             }
             log.error("历史段落向量索引查询失败, modelVersion={}, dimension={}, elapsedMs={}",
@@ -97,7 +130,7 @@ public class ParagraphVectorIndexService {
                 hashIndex.put(sample.getTextHash(), sample);
             } catch (RuntimeException ex) {
                 errors++;
-                log.error("历史段落向量加载失败, sampleId={}", row.getId(), ex);
+                log.error("历史段落向量加载失败, sampleId={}, errorType={}", row.getId(), ex.getClass().getSimpleName());
             }
         }
         String status;
@@ -109,11 +142,14 @@ public class ParagraphVectorIndexService {
         } else {
             status = "READY";
         }
+        if (expectedSize!=null && (errors!=0 || samples.size()!=expectedSize || hashIndex.size()!=expectedSize))
+            throw new ContractChangeBusinessException(503,"新版本索引不完整，等待重载恢复");
         VectorIndexSnapshot replacement = new VectorIndexSnapshot(
                 Collections.unmodifiableList(samples),
-                Collections.unmodifiableMap(hashIndex), status, errors, new Date());
+                Collections.unmodifiableMap(hashIndex), status, errors, new Date(),modelName,modelVersion,dimension,revision);
         // 新索引完整建好后再整体替换，切换动作很短，不会影响正在执行的预测。
         current.set(replacement);
+        if (expectedSize!=null && store!=null) store.complete(operationId);
         log.info("历史段落向量索引加载完成, status={}, dbRowCount={}, sampleCount={}, errorCount={}, elapsedMs={}",
                 status, rows.size(), samples.size(), errors, System.currentTimeMillis() - started);
         return status(replacement);
@@ -121,7 +157,7 @@ public class ParagraphVectorIndexService {
 
     /** 根据整理后段落的Hash直接查找；相同段落不需要再调用模型。 */
     public ParagraphVectorSample exact(String textHash) {
-        return current.get().getHashIndex().get(textHash);
+        return boundSnapshot().getHashIndex().get(textHash);
     }
 
     /**
@@ -132,7 +168,8 @@ public class ParagraphVectorIndexService {
      */
     public List<ParagraphSearchResult> search(float[] query, int topK) {
         long started = System.currentTimeMillis();
-        if (query == null || query.length != properties.getEmbedding().getDimension()) {
+        VectorIndexSnapshot snapshot=boundSnapshot();
+        if (query == null || query.length != snapshot.getVectorDimension()) {
             throw new ContractChangeBusinessException("查询向量维度不正确");
         }
         if (topK <= 0) {
@@ -140,7 +177,7 @@ public class ParagraphVectorIndexService {
         }
         PriorityQueue<ParagraphSearchResult> heap = new PriorityQueue<ParagraphSearchResult>(topK,
                 Comparator.comparingDouble(ParagraphSearchResult::getSimilarity));
-        for (ParagraphVectorSample sample : current.get().getSamples()) {
+        for (ParagraphVectorSample sample : snapshot.getSamples()) {
             double similarity = VectorUtils.dot(query, sample.getVector());
             ParagraphSearchResult result = new ParagraphSearchResult(sample, similarity);
             if (heap.size() < topK) {
@@ -153,20 +190,62 @@ public class ParagraphVectorIndexService {
         List<ParagraphSearchResult> results = new ArrayList<ParagraphSearchResult>(heap);
         results.sort(Comparator.comparingDouble(ParagraphSearchResult::getSimilarity).reversed());
         log.debug("内存向量检索完成, sampleCount={}, topK={}, resultCount={}, elapsedMs={}",
-                current.get().getSamples().size(), topK, results.size(),
+                snapshot.getSamples().size(), topK, results.size(),
                 System.currentTimeMillis() - started);
         return results;
     }
 
     /** 返回当前正在提供查询服务的快照状态。 */
     public IndexStatusResponse status() {
-        return status(current.get());
+        return status(boundSnapshot());
     }
 
     /** 将内部不可变快照转换为不暴露向量和正文的运维响应。 */
     private IndexStatusResponse status(VectorIndexSnapshot snapshot) {
-        return new IndexStatusResponse(snapshot.getStatus(), snapshot.getSamples().size(),
-                properties.getEmbedding().getModelVersion(), properties.getEmbedding().getDimension(),
+        IndexStatusResponse response=new IndexStatusResponse(snapshot.getStatus(), snapshot.getSamples().size(),
+                snapshot.getModelVersion(), snapshot.getVectorDimension(),
                 snapshot.getLoadedAt(), snapshot.getErrorCount());
+        response.setConfiguredModelVersion(properties.getEmbedding().getModelVersion());
+        try {
+            SampleLibraryControlDO control=store==null ? null : store.control();
+            response.setActiveModelVersion(control==null ? snapshot.getModelVersion() : control.getModelVersion());
+            response.setOperationId(control==null ? null : control.getOperationId());
+            response.setOperationStatus(control==null ? null : control.getOperationStatus());
+            response.setRecognitionAvailable(available(snapshot,control));
+        } catch (RuntimeException ex) { response.setRecognitionAvailable(false); }
+        return response;
+    }
+
+    /** 每次批量预测固定完整快照，精确命中也必须先通过版本检查。 */
+    public void beginPrediction() {
+        VectorIndexSnapshot snapshot=current.get();
+        try {
+            if (!available(snapshot,store==null ? null : store.control()))
+                throw new ContractChangeBusinessException(503,"模型配置与有效样本库或索引不兼容，识别暂不可用");
+            predictionSnapshot.set(snapshot);
+        } catch (ContractChangeBusinessException ex) { throw ex; }
+        catch (RuntimeException ex) { throw new ContractChangeBusinessException(503,"样本库版本控制不可用"); }
+    }
+    public void endPrediction() { predictionSnapshot.remove(); }
+    private VectorIndexSnapshot boundSnapshot() {
+        VectorIndexSnapshot snapshot=predictionSnapshot.get();
+        return snapshot==null ? current.get() : snapshot;
+    }
+    private boolean snapshotCompatible(VectorIndexSnapshot snapshot) {
+        return Objects.equals(snapshot.getModelVersion(),properties.getEmbedding().getModelVersion())
+            && Objects.equals(snapshot.getModelName(),properties.getEmbedding().getModelName())
+            && snapshot.getVectorDimension()==properties.getEmbedding().getDimension();
+    }
+    private boolean available(VectorIndexSnapshot snapshot,SampleLibraryControlDO control) {
+        if (!snapshotCompatible(snapshot) || "NOT_READY".equals(snapshot.getStatus())
+                || "LOAD_FAILED".equals(snapshot.getStatus()) || ("DEGRADED".equals(snapshot.getStatus())
+                    && snapshot.getSamples().isEmpty())) return false;
+        if (store==null) return true;
+        if (control==null) return false;
+        if (control.getModelVersion()==null) return "EMPTY".equals(snapshot.getStatus()) && mapper.countAllParagraphs()==0;
+        if (!SampleLibraryStore.compatible(control,properties.getEmbedding())
+                || !Objects.equals(control.getModelVersion(),snapshot.getModelVersion())) return false;
+        if ("DB_COMMITTED".equals(control.getOperationStatus())) return false;
+        return true;
     }
 }

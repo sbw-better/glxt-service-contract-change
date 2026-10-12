@@ -52,8 +52,8 @@ public class ContractParagraphImportServiceTest {
 
     @Test
     public void shouldImportValidExcelAndCanonicalizeCodes() throws Exception {
-        when(mapper.selectByTextHashes(anyList())).thenReturn(Collections.emptyList());
-        when(mapper.countAllParagraphs()).thenReturn(0);
+        when(mapper.selectByTextHashes(anyList(), anyString())).thenReturn(Collections.emptyList());
+        when(mapper.countActiveParagraphs(anyString())).thenReturn(0);
         when(embeddingClient.embed(anyList(), anyString())).thenAnswer(invocation -> {
             List<String> texts = invocation.getArgument(0);
             List<float[]> vectors = new ArrayList<float[]>();
@@ -85,9 +85,9 @@ public class ContractParagraphImportServiceTest {
         existing.setTextHash(HashUtils.sha256("历史段落A"));
         existing.setChangeTypeCodes("TYPE01;TYPE02");
         existing.setEnabled(0);
-        existing.setModelVersion("old-v1");
+        existing.setModelVersion("test-v1");
         existing.setVectorDim(3);
-        when(mapper.selectByTextHashes(anyList())).thenReturn(Collections.singletonList(existing));
+        when(mapper.selectByTextHashes(anyList(), anyString())).thenReturn(Collections.singletonList(existing));
         when(embeddingClient.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(3,
                 Collections.singletonList(new float[]{1F, 0F, 0F})));
 
@@ -126,9 +126,9 @@ public class ContractParagraphImportServiceTest {
         existing.setTextHash(HashUtils.sha256("历史段落A"));
         existing.setChangeTypeCodes("TYPE01");
         existing.setEnabled(0);
-        existing.setModelVersion("old-v1");
+        existing.setModelVersion("test-v1");
         existing.setVectorDim(3);
-        when(mapper.selectByTextHashes(anyList())).thenReturn(Collections.singletonList(existing));
+        when(mapper.selectByTextHashes(anyList(), anyString())).thenReturn(Collections.singletonList(existing));
 
         ImportResponse response = service.importExcel(
                 excel(new String[][]{{"历史段落A", "TYPE02"}}), "test-user");
@@ -174,7 +174,7 @@ public class ContractParagraphImportServiceTest {
         existing.setEnabled(1);
         existing.setVectorDim(3);
         existing.setModelVersion("test-v1");
-        when(mapper.selectByTextHashes(anyList())).thenReturn(Collections.singletonList(existing));
+        when(mapper.selectByTextHashes(anyList(), anyString())).thenReturn(Collections.singletonList(existing));
         ImportResponse response = service.importExcel(excel(new String[][]{
                 {"历史段落A", "TYPE01"}, {"历史段落A", "TYPE01"}}), "test-user");
         assertTrue(response.isSuccess());
@@ -185,7 +185,7 @@ public class ContractParagraphImportServiceTest {
 
     @Test
     public void shouldNotReloadIndexWhenPersistenceFails() throws Exception {
-        when(mapper.selectByTextHashes(anyList())).thenReturn(Collections.emptyList());
+        when(mapper.selectByTextHashes(anyList(), anyString())).thenReturn(Collections.emptyList());
         when(embeddingClient.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(3,
                 Collections.singletonList(new float[]{1F, 0F, 0F})));
         org.mockito.Mockito.doThrow(new IllegalStateException("test rollback"))
@@ -200,7 +200,7 @@ public class ContractParagraphImportServiceTest {
 
     @Test
     public void shouldRejectInvalidVectorBeforeAnyWrite() throws Exception {
-        when(mapper.selectByTextHashes(anyList())).thenReturn(Collections.emptyList());
+        when(mapper.selectByTextHashes(anyList(), anyString())).thenReturn(Collections.emptyList());
         when(embeddingClient.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(3,
                 Collections.singletonList(new float[]{Float.NaN, 0F, 0F})));
         try {
@@ -218,7 +218,7 @@ public class ContractParagraphImportServiceTest {
         float[] vector = new float[1024];
         java.util.Arrays.fill(vector, 0.012345678F);
         com.citics.glxt.contractchange.util.VectorUtils.normalize(vector);
-        when(mapper.selectByTextHashes(anyList())).thenReturn(Collections.emptyList());
+        when(mapper.selectByTextHashes(anyList(), anyString())).thenReturn(Collections.emptyList());
         when(embeddingClient.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(1024,
                 Collections.singletonList(vector)));
         assertTrue(service.importExcel(excel(new String[][]{{"历史段落A", "49"}}), "test-user").isSuccess());
@@ -232,6 +232,20 @@ public class ContractParagraphImportServiceTest {
         float[] decoded = com.citics.glxt.contractchange.util.VectorCodec.decode(saved.getVectorData(), 1024);
         for (int i = 0; i < vector.length; i++) {
             assertEquals(Float.floatToRawIntBits(vector[i]), Float.floatToRawIntBits(decoded[i]));
+        }
+    }
+
+    @Test public void disabledReactivationMustCountTowardsActiveCapacity() throws Exception {
+        properties.getImportConfig().setMaxTotalSamples(1);
+        ContractParagraphDO disabled=new ContractParagraphDO(); disabled.setId(10L);
+        disabled.setTextHash(HashUtils.sha256("历史段落A")); disabled.setChangeTypeCodes("49");
+        disabled.setEnabled(0); disabled.setModelVersion("test-v1"); disabled.setVectorDim(3);
+        when(mapper.selectByTextHashes(anyList(),anyString())).thenReturn(Collections.singletonList(disabled));
+        when(mapper.countActiveParagraphs("test-v1")).thenReturn(1);
+        try { service.importExcel(excel(new String[][]{{"历史段落A","49"}}),"u"); org.junit.Assert.fail(); }
+        catch(com.citics.glxt.contractchange.common.exception.ContractChangeBusinessException expected) {
+            verify(embeddingClient,never()).embed(anyList(),anyString());
+            verify(persistenceService,never()).saveAll(anyList());
         }
     }
 }

@@ -58,9 +58,9 @@ public class OracleVectorClobIntegrationTest {
         try (Connection connection = dataSource.getConnection(); Statement ddl = connection.createStatement()) {
             try {
                 ddl.execute("CREATE TABLE " + table + " (ID NUMBER PRIMARY KEY, YWBW CLOB, GFBW CLOB, "
-                        + "TEXT_HASH VARCHAR2(64) UNIQUE, BGLX_CODES VARCHAR2(1000), VECTOR_DATA CLOB NOT NULL, "
+                        + "TEXT_HASH VARCHAR2(64), BGLX_CODES VARCHAR2(1000), VECTOR_DATA CLOB NOT NULL, "
                         + "VECTOR_DIM NUMBER, MODEL_VERSION VARCHAR2(100), "
-                        + "SFSX NUMBER, CREATE_TIME DATE)");
+                        + "SFSX NUMBER, CREATE_TIME DATE, UNIQUE (MODEL_VERSION,TEXT_HASH))");
                 tableCreated = true;
                 ddl.execute("CREATE SEQUENCE " + sequence);
                 sequenceCreated = true;
@@ -122,7 +122,7 @@ public class OracleVectorClobIntegrationTest {
                                 .predict("未入库的新测试段落", "test");
                 assertEquals("SEMANTIC", prediction.getMatchType());
                 assertEquals("49", prediction.getChangeTypes().get(0).getCode());
-                assertEquals(1, mapper.selectByTextHashes(Collections.singletonList("first")).size());
+                assertEquals(1, mapper.selectByTextHashes(Collections.singletonList("first"), "test-clob").size());
                 try {
                     // The first insert and update must both roll back after the duplicate insert fails.
                     row.setVectorData(row("unused", 1F).getVectorData());

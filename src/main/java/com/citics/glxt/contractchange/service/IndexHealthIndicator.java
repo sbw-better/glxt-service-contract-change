@@ -22,7 +22,7 @@ public class IndexHealthIndicator implements HealthIndicator {
     @Override
     public Health health() {
         IndexStatusResponse status = indexService.status();
-        boolean unavailable = "NOT_READY".equals(status.getStatus())
+        boolean unavailable = !status.isRecognitionAvailable() || "NOT_READY".equals(status.getStatus())
                 || "LOAD_FAILED".equals(status.getStatus())
                 || ("DEGRADED".equals(status.getStatus()) && status.getSampleCount() == 0);
         Health.Builder builder = unavailable ? Health.down() : Health.up();
@@ -30,6 +30,7 @@ public class IndexHealthIndicator implements HealthIndicator {
                 .withDetail("sampleCount", status.getSampleCount())
                 .withDetail("errorCount", status.getErrorCount())
                 .withDetail("modelVersion", status.getModelVersion())
+                .withDetail("recognitionAvailable",status.isRecognitionAvailable())
                 .build();
     }
 }

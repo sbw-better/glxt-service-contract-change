@@ -1,13 +1,11 @@
 package com.citics.glxt.contractchange.model;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
 
 import java.util.Date;
 
 /** 当前 JVM 内存索引的可观测状态。 */
 @Data
-@AllArgsConstructor
 public class IndexStatusResponse {
     /** NOT_READY、READY、EMPTY、DEGRADED 或 LOAD_FAILED。 */
     private String status;
@@ -21,4 +19,17 @@ public class IndexStatusResponse {
     private Date loadedAt;
     /** 重载时跳过的损坏记录数。 */
     private int errorCount;
+    private String activeModelVersion;
+    private String configuredModelVersion;
+    private String operationId;
+    private String operationStatus;
+    private boolean recognitionAvailable;
+
+    public IndexStatusResponse(String status,int sampleCount,String modelVersion,int vectorDimension,
+            Date loadedAt,int errorCount) {
+        this.status=status; this.sampleCount=sampleCount; this.modelVersion=modelVersion;
+        this.vectorDimension=vectorDimension; this.loadedAt=loadedAt; this.errorCount=errorCount;
+        this.recognitionAvailable="READY".equals(status) || "EMPTY".equals(status)
+                || ("DEGRADED".equals(status) && sampleCount>0);
+    }
 }

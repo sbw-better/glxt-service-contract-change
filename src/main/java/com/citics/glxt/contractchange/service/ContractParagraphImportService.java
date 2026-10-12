@@ -73,11 +73,31 @@ public class ContractParagraphImportService {
      * @param userId 当前实际操作人的用户标识，只透传给模型网关
      * @return 导入统计和逐行校验错误
      */
-    public synchronized ImportResponse importExcel(MultipartFile file, String userId) {
-        long started = System.currentTimeMillis();
-        log.info("历史样本导入开始, fileSizeBytes={}", file == null ? 0L : file.getSize());
+    // 仅供同包基础流程测试；生产入口统一使用SampleLibraryImportService的数据库互斥。
+    ImportResponse importExcel(MultipartFile file, String userId) {
+        return importPrepared(readExcel(file), userId, null, null);
+    }
+
+    ParsedExcel readExcel(MultipartFile file) {
         validateFile(file);
-        ParsedExcel parsed = parse(file);
+        try {
+            return parse(file.getBytes());
+        } catch (IOException ex) {
+            throw new ContractChangeBusinessException("Excel读取失败，请确认文件未损坏且格式为xlsx");
+        }
+    }
+
+    ParsedExcel readExcel(byte[] bytes) {
+        if (bytes == null || bytes.length == 0)
+            throw new ContractChangeBusinessException("Excel文件不能为空");
+        if (bytes.length > 20 * 1024 * 1024)
+            throw new ContractChangeBusinessException("Excel文件不能超过20MB");
+        return parse(bytes);
+    }
+
+    ImportResponse importPrepared(ParsedExcel parsed, String userId,
+            com.citics.glxt.contractchange.domain.SampleLibraryControlDO source, SampleLibraryStore store) {
+        long started = System.currentTimeMillis();
         if (!parsed.errors.isEmpty()) {
             log.warn("历史样本导入校验失败, totalRows={}, skipped={}, errorCount={}, elapsedMs={}",
                     parsed.totalRows, parsed.skipped, parsed.errors.size(), System.currentTimeMillis() - started);
@@ -87,6 +107,7 @@ public class ContractParagraphImportService {
         List<PreparedRow> newRows = new ArrayList<PreparedRow>();
         List<PreparedRow> updateRows = new ArrayList<PreparedRow>();
         int skipped = parsed.skipped;
+        int reactivated = 0;
         Map<String, ContractParagraphDO> existingByHash = loadExisting(parsed.rows);
         for (PreparedRow row : parsed.rows.values()) {
             ContractParagraphDO existing = existingByHash.get(row.textHash);
@@ -95,9 +116,10 @@ public class ContractParagraphImportService {
             } else if (isCurrentActiveRecord(existing, row.changeTypeCodes)) {
                 skipped++;
             } else if (existing.getChangeTypeCodes().equals(row.changeTypeCodes)) {
-                // 类型必须保持一致：停用记录重新启用，旧模型记录重新生成当前模型向量。
+                // 查重已限定同版本；这里只重新启用同标签停用记录。
                 row.existingId = existing.getId();
                 updateRows.add(row);
+                if (!Integer.valueOf(1).equals(existing.getEnabled())) reactivated++;
             } else {
                 // 只记录 Hash，不在日志中暴露合同正文。
                 log.warn("历史样本导入发现数据库标签冲突, row={}, textHash={}",
@@ -112,7 +134,7 @@ public class ContractParagraphImportService {
             return new ImportResponse(false, parsed.totalRows, 0, 0, skipped, false, parsed.errors);
         }
 
-        enforceTotalSampleLimit(newRows.size());
+        enforceTotalSampleLimit(newRows.size() + reactivated);
         List<PreparedRow> changedRows = new ArrayList<PreparedRow>(newRows.size() + updateRows.size());
         changedRows.addAll(newRows);
         changedRows.addAll(updateRows);
@@ -125,14 +147,17 @@ public class ContractParagraphImportService {
             paragraphs.add(toDO(row));
         }
         // saveAll使用一个完整事务；方法正常返回，说明本批数据库操作已经全部提交。
-        if (!paragraphs.isEmpty()) {
+        if (store != null) {
+            store.commitIncremental(paragraphs, source, properties.getEmbedding());
+        } else if (!paragraphs.isEmpty()) {
             persistenceService.saveAll(paragraphs);
         }
 
         boolean indexReloaded = true;
         try {
             // 数据提交后重新读取Oracle，让刚导入的样本可以立即参与后续预测。
-            indexService.reload();
+            if (source == null) indexService.reload();
+            else indexService.reloadForOperation(source.getOperationId(), null);
         } catch (RuntimeException ex) {
             indexReloaded = false;
             log.error("历史样本已入库，但内存索引刷新失败", ex);
@@ -148,10 +173,10 @@ public class ContractParagraphImportService {
      * 解析并校验 Excel，同时完成段落规范化、Hash 计算和文件内冲突检查。
      * 此阶段不调用模型、不写数据库。
      */
-    private ParsedExcel parse(MultipartFile file) {
+    private ParsedExcel parse(byte[] bytes) {
         ParsedExcel result = new ParsedExcel();
         DataFormatter formatter = new DataFormatter();
-        try (InputStream input = file.getInputStream(); XSSFWorkbook workbook = new XSSFWorkbook(input)) {
+        try (InputStream input = new java.io.ByteArrayInputStream(bytes); XSSFWorkbook workbook = new XSSFWorkbook(input)) {
             if (workbook.getNumberOfSheets() == 0) {
                 throw new ContractChangeBusinessException("Excel中没有工作表");
             }
@@ -199,7 +224,7 @@ public class ContractParagraphImportService {
             }
         } catch (IOException | POIXMLException ex) {
             log.warn("Excel读取失败, fileSizeBytes={}, exception={}",
-                    file.getSize(), ex.getClass().getSimpleName());
+                    bytes.length, ex.getClass().getSimpleName());
             throw new ContractChangeBusinessException("Excel读取失败，请确认文件未损坏且格式为xlsx");
         }
         if (result.totalRows == 0 && result.errors.isEmpty()) {
@@ -209,7 +234,7 @@ public class ContractParagraphImportService {
     }
 
     /** 按配置的批量大小生成全部待新增样本向量，任一批次失败即终止导入。 */
-    private void embed(List<PreparedRow> rows, String userId) {
+    void embed(List<PreparedRow> rows, String userId) {
         int batchSize = Math.max(1, properties.getEmbedding().getBatchSize());
         for (int start = 0; start < rows.size(); start += batchSize) {
             int end = Math.min(start + batchSize, rows.size());
@@ -219,18 +244,24 @@ public class ContractParagraphImportService {
                 texts.add(rows.get(i).normalizedText);
             }
             EmbeddingBatchResult result = embeddingClient.embed(texts, userId);
-            if (result.getDimension() != properties.getEmbedding().getDimension()
+            if (result == null || result.getVectors() == null || result.getDimension() != properties.getEmbedding().getDimension()
                     || result.getVectors().size() != texts.size()) {
                 throw new ContractChangeBusinessException("Embedding批量结果不完整");
             }
             for (int i = start; i < end; i++) {
-                rows.get(i).vector = result.getVectors().get(i - start);
+                float[] vector = result.getVectors().get(i - start);
+                if (vector == null || vector.length != properties.getEmbedding().getDimension())
+                    throw new ContractChangeBusinessException("Embedding向量维度不正确");
+                VectorCodec.encode(vector); // 在归一化前检查所有数字有限。
+                vector = vector.clone();
+                com.citics.glxt.contractchange.util.VectorUtils.normalize(vector);
+                rows.get(i).vector = vector;
             }
         }
     }
 
     /** 将校验完成的临时行转换为可持久化对象，并把向量编码为CLOB JSON数字数组。 */
-    private ContractParagraphDO toDO(PreparedRow row) {
+    ContractParagraphDO toDO(PreparedRow row) {
         ContractParagraphDO value = new ContractParagraphDO();
         value.setId(row.existingId);
         value.setOriginalText(row.originalText);
@@ -244,7 +275,7 @@ public class ContractParagraphImportService {
         return value;
     }
 
-    /** 校验上传文件存在且扩展名为 xlsx；文件大小由 Spring Multipart 配置统一限制。 */
+    /** 同包测试输入校验；生产导入由主备SFTP加载，并独立校验20MB上限。 */
     private void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new ContractChangeBusinessException("Excel文件不能为空");
@@ -256,7 +287,7 @@ public class ContractParagraphImportService {
     }
 
     /** 校验规范化后的段落长度，确保导入与预测使用同一业务上限。 */
-    private void validateParagraph(String paragraph) {
+    void validateParagraph(String paragraph) {
         if (paragraph.isEmpty()) {
             throw new ContractChangeBusinessException("合同段落不能为空");
         }
@@ -272,7 +303,7 @@ public class ContractParagraphImportService {
     }
 
     /** 构造未发生数据库写入的导入失败响应。 */
-    private ImportResponse failed(ParsedExcel parsed) {
+    ImportResponse failed(ParsedExcel parsed) {
         return new ImportResponse(false, parsed.totalRows, 0, 0, parsed.skipped, false, parsed.errors);
     }
 
@@ -283,7 +314,8 @@ public class ContractParagraphImportService {
         final int queryBatchSize = 500;
         for (int start = 0; start < hashes.size(); start += queryBatchSize) {
             int end = Math.min(start + queryBatchSize, hashes.size());
-            List<ContractParagraphDO> existing = mapper.selectByTextHashes(hashes.subList(start, end));
+            List<ContractParagraphDO> existing = mapper.selectByTextHashes(hashes.subList(start, end),
+                    properties.getEmbedding().getModelVersion());
             for (ContractParagraphDO paragraph : existing) {
                 result.put(paragraph.getTextHash(), paragraph);
             }
@@ -299,12 +331,12 @@ public class ContractParagraphImportService {
                 && Integer.valueOf(properties.getEmbedding().getDimension()).equals(existing.getVectorDim());
     }
 
-    /** 限制第一版物理样本总数；更新已有Hash不会增加记录数。 */
+    /** 新增和停用重新启用均占有效容量，历史失效版本不占容量。 */
     private void enforceTotalSampleLimit(int newCount) {
         if (newCount == 0) {
             return;
         }
-        int currentCount = mapper.countAllParagraphs();
+        int currentCount = mapper.countActiveParagraphs(properties.getEmbedding().getModelVersion());
         int limit = properties.getImportConfig().getMaxTotalSamples();
         if ((long) currentCount + newCount > limit) {
             throw new ContractChangeBusinessException("历史样本总数不能超过" + limit
@@ -313,35 +345,35 @@ public class ContractParagraphImportService {
     }
 
     /** Excel解析阶段的临时结果，只在本导入服务内部使用，不属于接口返回或数据库对象。 */
-    private static class ParsedExcel {
+    static class ParsedExcel {
         /** Excel 非空数据行数量。 */
-        private int totalRows;
+        int totalRows;
         /** Excel 内部标签相同的重复行数量。 */
-        private int skipped;
+        int skipped;
         /** 按文本 Hash 去重并保持 Excel 原始顺序的有效行。 */
-        private final Map<String, PreparedRow> rows = new LinkedHashMap<String, PreparedRow>();
+        final Map<String, PreparedRow> rows = new LinkedHashMap<String, PreparedRow>();
         /** 可一次性返回给操作人员的逐行错误。 */
-        private final List<ImportErrorItem> errors = new ArrayList<ImportErrorItem>();
+        final List<ImportErrorItem> errors = new ArrayList<ImportErrorItem>();
     }
 
     /** 一行已经完成文本整理和业务校验、等待生成向量的数据。 */
-    private static class PreparedRow {
+    static class PreparedRow {
         /** 原 Excel 行号，用于向调用方返回准确错误位置。 */
-        private final int rowNumber;
+        final int rowNumber;
         /** 用于数据库追溯和预测证据展示的原始段落。 */
-        private final String originalText;
+        final String originalText;
         /** 用于 Hash 和模型计算的规范化段落。 */
-        private final String normalizedText;
+        final String normalizedText;
         /** 规范化段落的 SHA-256。 */
-        private final String textHash;
+        final String textHash;
         /** 已去重、排序的类型编码字符串。 */
-        private final String changeTypeCodes;
+        final String changeTypeCodes;
         /** 模型调用完成后回填的归一化向量。 */
-        private float[] vector;
-        /** 非空时表示更新全局唯一Hash对应的已有记录。 */
+        float[] vector;
+        /** 非空时表示重新启用当前版本同Hash的已有记录。 */
         private Long existingId;
 
-        private PreparedRow(int rowNumber, String originalText, String normalizedText,
+        PreparedRow(int rowNumber, String originalText, String normalizedText,
                             String textHash, String changeTypeCodes) {
             this.rowNumber = rowNumber;
             this.originalText = originalText;

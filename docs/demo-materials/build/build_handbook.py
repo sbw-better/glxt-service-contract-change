@@ -88,9 +88,9 @@ doc.add_heading("二、逐页讲稿", level=1)
 slides = [
     ("1. 标题页", "本次汇报的是合同段落变更类型识别服务第一版。它不是替代人工审查，而是把历史段落和变更类型经验沉淀下来，在新段落出现时给出候选类型和参考证据。"),
     ("2. 背景价值", "合同文档比对完成后会产生大量变化段落。过去依赖人工逐段判断，耗时且口径不稳定。系统的目标是复用历史经验，提升初筛效率。"),
-    ("3. 第一版边界", "第一版刻意保持轻量：历史 Excel 导入、统一模型网关向量化、Oracle 持久化、JVM 内存检索。不引入向量数据库、Rerank、异步任务和额外业务表。"),
+    ("3. 第一版边界", "历史 Excel 导入、统一模型网关向量化、Oracle 持久化、JVM 内存检索。不引入向量数据库、Rerank或后台执行器；保留一张版本控制表。"),
     ("4. 核心闭环", "历史样本先进入知识库，新段落预测时匹配历史样本。文档比对产生的新段落，只有经过人工确认类型后才补充回历史库，这样系统能持续完善，同时避免误判自我放大。"),
-    ("5. 接口结构", "导入、预测、索引状态和索引重载四类接口覆盖第一版核心使用场景。导入和预测必须携带 UserId，用于模型平台审计透传，不入库也不输出日志。"),
+    ("5. 接口结构", "导入、预测、索引状态和索引重载四类接口覆盖第一版核心使用场景。导入JSON传入userId，预测携带UserId请求头，用于模型平台审计透传，不入库也不输出日志。"),
     ("6. 预测算法", "系统先做规范化和 Hash 精确匹配；未命中才调用模型生成向量。语义匹配时取 Top 10 历史样本，过滤低相似度后做 similarity 平方加权投票。"),
     ("7. 分数解释", "similarity 是新段落和某条历史段落有多像；score 是历史证据对某个类型的综合支持度。score 不是概率，多标签分数之和不要求等于 1。"),
     ("8. 技术选型", "当前样本规模最多 1 万条，JVM 内存精确点积足够。1024 维能把网络、存储、内存和计算压力控制在合理范围。Oracle 保留业务可审计数据。"),
@@ -109,13 +109,13 @@ doc.add_heading("三、现场演示操作脚本", level=1)
 steps = [
     ("准备窗口", "打开 PPT、Swagger 或 Postman、Oracle 查询窗口、服务日志窗口。确认不要展示 API Key、真实合同正文和真实 UserId。"),
     ("index/status", "调用 GET /glxt-service-contract-change/service/contract-change/index/status。说明 status、sampleCount、modelVersion、vectorDimension、loadedAt、errorCount。"),
-    ("导入匿名小 Excel", "调用 POST /samples/import，文件使用正常样本 Excel，Header 带 UserId。观察 totalRows、inserted、updated、skipped、indexReloaded。"),
+    ("导入匿名小 Excel", "调用 POST /samples/import，JSON传入服务器Excel路径fileGetPath及userId。观察 totalRows、inserted、updated、skipped、indexReloaded。"),
     ("Oracle 只读查询", "查询 TEXT_HASH、BGLX_CODES、VECTOR_DIM、MODEL_VERSION、DBMS_LOB.GETLENGTH(VECTOR_DATA)。向量保存为 CLOB JSON 数字数组，长度为字符数、不固定；JSON与维度正确性由应用解析校验。"),
     ("EXACT 预测", "用已导入段落原文预测。预期 matchType=EXACT，score=1，similarity=1，不调用模型。"),
     ("HIGH 语义预测", "用语义相近但文字不同的段落预测。解释相似历史段落、supportCount 和 HIGH 条件。"),
     ("CANDIDATE/兜底", "用强相似但标签分散的段落预测。解释第一名 similarity 足够高时触发候选兜底，score 仍是真实投票占比。"),
     ("NO_RELIABLE_MATCH", "用明显不相关段落预测。说明没有足够可靠历史证据时系统不强行给结论。"),
-    ("index/reload", "调用 POST /index/reload。说明用于模型版本切换、手工恢复或数据库样本变更后的索引刷新。"),
+    ("index/reload", "调用 POST /index/reload，仅从数据库恢复索引，不生成向量；重建提交前禁止重载，DB_COMMITTED时用于恢复新版本索引。"),
 ]
 for title, body in steps:
     p = doc.add_paragraph(style=None)
@@ -129,7 +129,7 @@ qa = [
     ("为什么类型编码不做向量？", "类型编码不是自然语言证据，本项目要判断的是段落和历史段落是否相似，再由历史段落标签投票。"),
     ("为什么不自动把预测结果入库？", "预测结果未经人工确认会污染历史标签。系统支持人工确认后入库，保证知识库越用越准，而不是越用越偏。"),
     ("没有真实测试数据怎么证明效果？", "现场演示证明流程可用；准确性要通过 30-100 条独立人工标注段落统计指标后再给结论。"),
-    ("如果模型版本变化怎么办？", "MODEL_VERSION 和 VECTOR_DIM 用于隔离向量。模型或维度变化后需要重新生成历史向量，不能混合检索。"),
+    ("如果模型版本变化怎么办？", "更新完整MODEL_VERSION并重启，导入Excel时同步合并当前有效历史样本并全部重新向量化；一个事务新增新版本、停用旧版本，再发布索引。旧记录保留，已使用版本禁止复用。"),
     ("强相似兜底为什么还是 CANDIDATE？", "因为它只是说明第一条历史样本很像，不代表多条历史证据形成稳定共识，所以不能直接给 HIGH。"),
 ]
 for q, a in qa:
@@ -155,5 +155,7 @@ doc.add_heading("六、人工确认入库口径", level=1)
 doc.add_paragraph("文档比对完成后，系统可以把候选变更段落导出为待确认样本。业务人员确认或修正变更类型后，再通过现有 Excel 导入流程沉淀到 TPIF_HTDLYB。")
 doc.add_paragraph("入库条件建议：段落有效、类型合法、Hash 去重、冲突人工处理、记录模型版本和维度。未经确认的预测结果不自动入库。")
 
+from build_model_upgrade_notes import append_model_upgrade_notes
+append_model_upgrade_notes(doc)
 doc.save(OUT)
 print(OUT)

@@ -39,13 +39,26 @@ public class SftpContractFileLoader {
     }
 
     public byte[] load(String path) {
+        return load(path, false);
+    }
+
+    /** 历史样本与合同比对共用主备SFTP配置；Excel独立限制为20MB。 */
+    public byte[] loadExcel(String path) {
+        if (!StringUtils.hasText(path))
+            throw new ContractChangeBusinessException("Excel文件路径不能为空");
+        if (!path.toLowerCase(java.util.Locale.ROOT).endsWith(".xlsx"))
+            throw new ContractChangeBusinessException("只支持xlsx格式文件");
+        return load(path, true);
+    }
+
+    private byte[] load(String path, boolean excel) {
         if (!StringUtils.hasText(path)) {
             throw new ContractChangeBusinessException("合同文件路径不能为空");
         }
         Exception primaryFailure;
         try {
-            byte[] bytes = download(host1, port1, username1, password1, path);
-            validateDocxHeader(bytes);
+            byte[] bytes = download(host1, port1, username1, password1, path, excel);
+            if (!excel) validateDocxHeader(bytes);
             return bytes;
         } catch (ContractChangeBusinessException ex) {
             primaryFailure = ex;
@@ -56,19 +69,19 @@ public class SftpContractFileLoader {
             log.warn("主SFTP读取合同失败, exception={}", ex.getClass().getSimpleName());
         }
         try {
-            byte[] bytes = download(host2, port2, username2, password2, path);
-            validateDocxHeader(bytes);
+            byte[] bytes = download(host2, port2, username2, password2, path, excel);
+            if (!excel) validateDocxHeader(bytes);
             return bytes;
         } catch (ContractChangeBusinessException ex) {
             throw ex;
         } catch (Exception ex) {
             log.warn("备用SFTP读取合同失败, primaryException={}, backupException={}",
                     primaryFailure.getClass().getSimpleName(), ex.getClass().getSimpleName());
-            throw new ContractChangeBusinessException("合同文件下载失败，请核对服务器路径");
+            throw new ContractChangeBusinessException(excel ? "Excel文件下载失败，请核对服务器路径" : "合同文件下载失败，请核对服务器路径");
         }
     }
 
-    private byte[] download(String host, int port, String username, String password, String path) throws Exception {
+    private byte[] download(String host, int port, String username, String password, String path, boolean excel) throws Exception {
         if (!StringUtils.hasText(host)) {
             throw new IllegalStateException("SFTP host is empty");
         }
@@ -82,8 +95,8 @@ public class SftpContractFileLoader {
                 int count;
                 while ((count = input.read(buffer)) != -1) {
                     total += count;
-                    if (total > properties.getMaxFileSizeBytes()) {
-                        throw new ContractChangeBusinessException("单份合同文件大小超过限制");
+                    if (total > (excel ? 20 * 1024 * 1024 : properties.getMaxFileSizeBytes())) {
+                        throw new ContractChangeBusinessException(excel ? "Excel文件不能超过20MB" : "单份合同文件大小超过限制");
                     }
                     output.write(buffer, 0, count);
                 }

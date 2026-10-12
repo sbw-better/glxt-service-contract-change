@@ -27,6 +27,15 @@ public class VectorIndexSnapshot {
     private final int errorCount;
     /** 快照构建完成时间。 */
     private final Date loadedAt;
+    private final String modelName;
+    private final String modelVersion;
+    private final int vectorDimension;
+    private final long revision;
+
+    public VectorIndexSnapshot(List<ParagraphVectorSample> samples,Map<String,ParagraphVectorSample> hashIndex,
+            String status,int errorCount,Date loadedAt) {
+        this(samples,hashIndex,status,errorCount,loadedAt,null,null,0,0);
+    }
 
     /** 创建应用尚未完成首次Oracle加载时的初始快照。 */
     public static VectorIndexSnapshot notReady() {

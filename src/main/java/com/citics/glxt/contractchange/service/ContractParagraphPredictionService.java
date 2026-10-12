@@ -64,6 +64,12 @@ public class ContractParagraphPredictionService {
      * 按输入顺序批量预测多个段落。精确命中不调用模型，其余段落按网关上限分批生成向量。
      */
     public List<PredictionResponse> predictBatch(List<String> paragraphs, String userId) {
+        indexService.beginPrediction();
+        try { return predictBatchPinned(paragraphs,userId); }
+        finally { indexService.endPrediction(); }
+    }
+
+    private List<PredictionResponse> predictBatchPinned(List<String> paragraphs, String userId) {
         if (paragraphs == null || paragraphs.isEmpty()) {
             return Collections.emptyList();
         }
@@ -100,6 +106,16 @@ public class ContractParagraphPredictionService {
      * 不丢失其他批次和Hash精确命中的结果。
      */
     public List<LenientPrediction> predictBatchLenient(List<String> paragraphs, String userId) {
+        try { indexService.beginPrediction(); }
+        catch (ContractChangeBusinessException ex) {
+            if (paragraphs==null) return Collections.emptyList();
+            return new ArrayList<>(Collections.nCopies(paragraphs.size(),LenientPrediction.failed("INDEX_UNAVAILABLE")));
+        }
+        try { return predictBatchLenientPinned(paragraphs,userId); }
+        finally { indexService.endPrediction(); }
+    }
+
+    private List<LenientPrediction> predictBatchLenientPinned(List<String> paragraphs, String userId) {
         if (paragraphs == null || paragraphs.isEmpty()) {
             return Collections.emptyList();
         }

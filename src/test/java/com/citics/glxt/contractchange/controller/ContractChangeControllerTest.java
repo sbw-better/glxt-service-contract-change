@@ -13,7 +13,6 @@ import org.junit.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.mock.web.MockMultipartFile;
 
 import java.util.Collections;
 
@@ -22,21 +21,20 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /** 验证业务接口必须接收并透传模型平台审计所需的 UserId。 */
 public class ContractChangeControllerTest {
-    private ContractParagraphImportService importService;
+    private com.citics.glxt.contractchange.service.SampleLibraryImportService importService;
     private ContractParagraphPredictionService predictionService;
     private ContractDocumentChangePredictionService documentPredictionService;
     private MockMvc mockMvc;
 
     @Before
     public void setUp() {
-        importService = mock(ContractParagraphImportService.class);
+        importService = mock(com.citics.glxt.contractchange.service.SampleLibraryImportService.class);
         predictionService = mock(ContractParagraphPredictionService.class);
         documentPredictionService = mock(ContractDocumentChangePredictionService.class);
         ParagraphVectorIndexService indexService = mock(ParagraphVectorIndexService.class);
@@ -73,12 +71,10 @@ public class ContractChangeControllerTest {
     public void shouldReturnBadRequestCodeForExcelValidationFailure() throws Exception {
         ImportResponse failure = new ImportResponse(false, 1, 0, 0, 0, false,
                 Collections.singletonList(new ImportErrorItem(2, "合同段落不能为空")));
-        when(importService.importExcel(any(), eq("employee-001"))).thenReturn(failure);
-        MockMultipartFile file = new MockMultipartFile("file", "samples.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", new byte[]{1});
-
-        mockMvc.perform(multipart("/service/contract-change/samples/import")
-                .file(file).header("UserId", "employee-001"))
+        when(importService.importFromPath(any())).thenReturn(failure);
+        mockMvc.perform(post("/service/contract-change/samples/import")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fileGetPath\":\"samples.xlsx\",\"userId\":\"employee-001\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.data.success").value(false))
@@ -87,11 +83,11 @@ public class ContractChangeControllerTest {
 
     @Test
     public void shouldRejectMissingExcelFileAsBadRequest() throws Exception {
-        mockMvc.perform(multipart("/service/contract-change/samples/import")
-                .header("UserId", "employee-001"))
+        mockMvc.perform(post("/service/contract-change/samples/import")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"userId\":\"employee-001\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
-                .andExpect(jsonPath("$.message").value("file文件不能为空"));
+                .andExpect(jsonPath("$.message").value("Excel文件路径不能为空"));
     }
 
     @Test
@@ -132,5 +128,38 @@ public class ContractChangeControllerTest {
                 .andExpect(jsonPath("$.data.fileChangeTypeCodes[1]").value("19"));
 
         verify(documentPredictionService).analyzeAndPredict(any(), eq("employee-001"));
+    }
+
+    @Test public void shouldReturnCompletedSynchronousRebuildInsteadOf202() throws Exception {
+        when(importService.importFromPath(any())).thenReturn(
+                new com.citics.glxt.contractchange.model.SampleRebuildResponse("test-id","old-v1","new-v2",2,1));
+        mockMvc.perform(post("/service/contract-change/samples/import")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fileGetPath\":\"samples.xlsx\",\"userId\":\"employee-001\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.rebuild").value(true)).andExpect(jsonPath("$.data.success").value(true))
+                .andExpect(jsonPath("$.data.operationId").value("test-id")).andExpect(jsonPath("$.data.taskId").doesNotExist())
+                .andExpect(jsonPath("$.data.accepted").doesNotExist());
+    }
+    @Test public void shouldRejectImportWithoutBodyUserIdEvenWithHeader() throws Exception {
+        mockMvc.perform(post("/service/contract-change/samples/import")
+                .header("UserId","employee-001").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fileGetPath\":\"samples.xlsx\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("userId不能为空"));
+        org.mockito.Mockito.verifyZeroInteractions(importService);
+    }
+
+    @Test public void shouldPassPathAndUserIdWithoutHeader() throws Exception {
+        when(importService.importFromPath(any())).thenReturn(new ImportResponse(true,1,1,0,0,true,Collections.emptyList()));
+        mockMvc.perform(post("/service/contract-change/samples/import")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fileGetPath\":\"/uploads/samples.xlsx\",\"userId\":\"employee-001\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200));
+        org.mockito.ArgumentCaptor<com.citics.glxt.contractchange.model.SampleImportRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(com.citics.glxt.contractchange.model.SampleImportRequest.class);
+        verify(importService).importFromPath(captor.capture());
+        org.junit.Assert.assertEquals("/uploads/samples.xlsx",captor.getValue().getFileGetPath());
+        org.junit.Assert.assertEquals("employee-001",captor.getValue().getUserId());
     }
 }

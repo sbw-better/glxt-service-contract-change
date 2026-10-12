@@ -111,5 +111,7 @@ for q, a in brief:
     set_font(r, size=10.5, bold=True)
     add_para(doc, "答：" + a)
 
+from build_model_upgrade_notes import append_model_upgrade_notes
+append_model_upgrade_notes(doc)
 doc.save(OUT)
 print(OUT)

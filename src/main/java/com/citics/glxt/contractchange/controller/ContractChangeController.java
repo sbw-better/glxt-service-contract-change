@@ -9,21 +9,21 @@ import com.citics.glxt.contractchange.model.PredictRequest;
 import com.citics.glxt.contractchange.model.PredictionResponse;
 import com.citics.glxt.contractchange.model.dto.DocxAnalysisDTO;
 import com.citics.glxt.contractchange.service.ContractDocumentChangePredictionService;
-import com.citics.glxt.contractchange.service.ContractParagraphImportService;
 import com.citics.glxt.contractchange.service.ContractParagraphPredictionService;
 import com.citics.glxt.contractchange.service.ParagraphVectorIndexService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiParam;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.validation.annotation.Validated;
+import com.citics.glxt.contractchange.service.SampleLibraryImportService;
+import com.citics.glxt.contractchange.model.SampleRebuildResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestPart;
+import com.citics.glxt.contractchange.model.SampleImportRequest;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
 
 import javax.validation.Valid;
 import javax.validation.constraints.NotBlank;
@@ -38,31 +38,31 @@ import javax.validation.constraints.NotBlank;
 @RequestMapping("/service/contract-change")
 @Api(tags = "合同段落变更类型识别")
 public class ContractChangeController {
-    private final ContractParagraphImportService importService;
     private final ContractParagraphPredictionService predictionService;
     private final ParagraphVectorIndexService indexService;
     private final ContractDocumentChangePredictionService documentPredictionService;
+    private final SampleLibraryImportService libraryImporter;
 
     /** 注入导入、预测和索引运维三个核心业务服务。 */
-    public ContractChangeController(ContractParagraphImportService importService,
+    public ContractChangeController(SampleLibraryImportService importService,
                                     ContractParagraphPredictionService predictionService,
                                     ParagraphVectorIndexService indexService,
                                     ContractDocumentChangePredictionService documentPredictionService) {
-        this.importService = importService;
+        this.libraryImporter = importService;
         this.predictionService = predictionService;
         this.indexService = indexService;
         this.documentPredictionService = documentPredictionService;
     }
 
     /** 导入历史段落与变更类型编码对应关系。 */
-    @PostMapping(value = "/samples/import", consumes = "multipart/form-data")
+    @PostMapping(value = "/samples/import", consumes = "application/json")
     @ApiOperation(value = "导入历史合同段落Excel",
-            notes = "必须携带UserId请求头；模型网关不可用时统一响应体code=503")
-    public ContractChangeResult<ImportResponse> importSamples(
-            @ApiParam(value = "实际操作人工号，用于统一模型平台审计", required = true)
-            @RequestHeader("UserId") @NotBlank(message = "UserId不能为空") String userId,
-            @RequestPart("file") MultipartFile file) {
-        ImportResponse response = importService.importExcel(file, userId);
+            notes = "JSON传入fileGetPath及userId；模型网关不可用时统一响应体code=503")
+    public ContractChangeResult<?> importSamples(@Valid @RequestBody SampleImportRequest request) {
+        Object result=libraryImporter.importFromPath(request);
+        if (result instanceof SampleRebuildResponse)
+            return ContractChangeResult.success("全量重建完成",result);
+        ImportResponse response = (ImportResponse)result;
         return response.isSuccess()
                 ? ContractChangeResult.success(response)
                 : ContractChangeResult.of(CommonConstants.BAD_REQUEST, "Excel导入校验失败", response);

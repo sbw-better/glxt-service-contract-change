@@ -43,7 +43,9 @@ public class HttpEmbeddingClient implements EmbeddingClient {
 
     /** 创建模型专用的HTTP客户端，并设置连接超时和等待响应的最长时间。 */
     public HttpEmbeddingClient(ContractChangeProperties contractProperties) {
-        this.properties = contractProperties.getEmbedding();
+        this.properties = new ContractChangeProperties.Embedding();
+        // 启动时固定模型与网关配置；不支持运行时热切换。
+        org.springframework.beans.BeanUtils.copyProperties(contractProperties.getEmbedding(), this.properties);
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(properties.getConnectTimeoutMs());
         factory.setReadTimeout(properties.getReadTimeoutMs());

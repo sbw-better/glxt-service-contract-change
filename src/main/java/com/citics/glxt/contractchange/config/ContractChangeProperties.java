@@ -81,7 +81,7 @@ public class ContractChangeProperties {
         /** 单份 Excel 允许的最大非空数据行数。 */
         @Min(1)
         private int maxRows = 1000;
-        /** 第一版允许持久化的历史段落总数，防止内存精确检索规模失控。 */
+        /** 当前版本有效样本数量上限，历史失效记录不占容量。 */
         @Min(1)
         private int maxTotalSamples = 10000;
     }

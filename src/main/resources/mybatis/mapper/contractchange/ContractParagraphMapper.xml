@@ -41,17 +41,17 @@
         )
     </insert>
 
-    <!-- 导入查重只读取决策所需字段，同时包含停用记录和旧模型记录。 -->
+    <!-- 导入查重限定版本，包含该版本停用记录。 -->
     <select id="selectByTextHashes" resultMap="ContractParagraphResultMap">
         SELECT ID, TEXT_HASH, BGLX_CODES, VECTOR_DIM, MODEL_VERSION, SFSX
         FROM TPIF_HTDLYB
-        WHERE TEXT_HASH IN
+        WHERE MODEL_VERSION = #{modelVersion} AND TEXT_HASH IN
         <foreach collection="textHashes" item="textHash" open="(" separator="," close=")">
             #{textHash}
         </foreach>
     </select>
 
-    <!-- 全局唯一Hash对应一行；停用重启、标签修正和模型升级均更新该行。 -->
+    <!-- 同版本同标签停用记录重新启用；升级不覆盖旧行。 -->
     <update id="updateParagraph"
             parameterType="com.citics.glxt.contractchange.domain.ContractParagraphDO">
         UPDATE TPIF_HTDLYB
@@ -62,13 +62,23 @@
             VECTOR_DIM = #{vectorDim},
             MODEL_VERSION = #{modelVersion},
             SFSX = 1
-        WHERE ID = #{id}
+        WHERE ID = #{id} AND MODEL_VERSION = #{modelVersion}
     </update>
 
-    <!-- 第一版将物理记录总数限制在配置范围内，停用记录也占用唯一Hash。 -->
+    <!-- 空库判定，不用于有效容量统计。 -->
     <select id="countAllParagraphs" resultType="int">
         SELECT COUNT(1) FROM TPIF_HTDLYB
     </select>
+
+    <select id="selectAllActiveParagraphs" resultMap="ContractParagraphResultMap">
+        SELECT <include refid="AllColumns"/> FROM TPIF_HTDLYB WHERE SFSX=1 ORDER BY ID
+    </select>
+    <select id="countActiveParagraphs" resultType="int">
+        SELECT COUNT(*) FROM TPIF_HTDLYB WHERE MODEL_VERSION=#{modelVersion} AND SFSX=1
+    </select>
+    <update id="disableActiveParagraphs">
+        UPDATE TPIF_HTDLYB SET SFSX=0 WHERE MODEL_VERSION=#{modelVersion} AND SFSX=1
+    </update>
 
     <!-- 应用启动/手工重载时，只加载当前模型版本和向量维度的数据。 -->
     <select id="selectActiveParagraphs" resultMap="ContractParagraphResultMap">

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "合同段落变更类型识别服务",
-    "description": "用于线上汇报演示的 Postman Collection。导入和预测请求必须携带 UserId；请勿在 Collection 中保存真实 API Key 或真实合同正文。",
+    "description": "用于线上汇报演示的 Postman Collection。导入JSON传入userId，预测请求携带UserId请求头；请勿在 Collection 中保存真实 API Key 或真实合同正文。",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -28,6 +28,10 @@
     {
       "key": "predictNoReliableParagraph",
       "value": "本段文字讨论办公室咖啡机维护计划，与工程合同变更事项无关。"
+    },
+    {
+      "key": "sampleServerDir",
+      "value": "/data/contract-samples"
     }
   ],
   "item": [
@@ -38,8 +42,15 @@
         "header": [],
         "url": {
           "raw": "{{baseUrl}}/service/contract-change/index/status",
-          "host": ["{{baseUrl}}"],
-          "path": ["service", "contract-change", "index", "status"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "service",
+            "contract-change",
+            "index",
+            "status"
+          ]
         },
         "description": "演示第一步：确认 status、sampleCount、modelVersion、vectorDimension、loadedAt 和 errorCount。"
       }
@@ -50,26 +61,32 @@
         "method": "POST",
         "header": [
           {
-            "key": "UserId",
-            "value": "{{userId}}"
+            "key": "Content-Type",
+            "value": "application/json"
           }
         ],
         "body": {
-          "mode": "formdata",
-          "formdata": [
-            {
-              "key": "file",
-              "type": "file",
-              "src": "docs/demo-materials/演示导入样本-正常.xlsx"
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"fileGetPath\": \"{{sampleServerDir}}/演示导入样本-正常.xlsx\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
             }
-          ]
+          }
         },
         "url": {
           "raw": "{{baseUrl}}/service/contract-change/samples/import",
-          "host": ["{{baseUrl}}"],
-          "path": ["service", "contract-change", "samples", "import"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "service",
+            "contract-change",
+            "samples",
+            "import"
+          ]
         },
-        "description": "预期：success=true，totalRows>0，inserted/updated/skipped 根据库内已有数据变化，indexReloaded=true。"
+        "description": "预期：success=true，totalRows>0，inserted/updated/skipped 根据库内已有数据变化，indexReloaded=true。 请先将Excel放到SFTP服务器sampleServerDir目录；JSON传入fileGetPath及userId。"
       }
     },
     {
@@ -92,8 +109,14 @@
         },
         "url": {
           "raw": "{{baseUrl}}/service/contract-change/predict",
-          "host": ["{{baseUrl}}"],
-          "path": ["service", "contract-change", "predict"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "service",
+            "contract-change",
+            "predict"
+          ]
         },
         "description": "预期：matchType=EXACT，maxSimilarity=1，changeTypes[].score=1，不调用模型。"
       }
@@ -118,8 +141,14 @@
         },
         "url": {
           "raw": "{{baseUrl}}/service/contract-change/predict",
-          "host": ["{{baseUrl}}"],
-          "path": ["service", "contract-change", "predict"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "service",
+            "contract-change",
+            "predict"
+          ]
         },
         "description": "预期：matchType=SEMANTIC，若历史样本足够一致，level 可能为 HIGH；以实际模型响应为准。"
       }
@@ -144,8 +173,14 @@
         },
         "url": {
           "raw": "{{baseUrl}}/service/contract-change/predict",
-          "host": ["{{baseUrl}}"],
-          "path": ["service", "contract-change", "predict"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "service",
+            "contract-change",
+            "predict"
+          ]
         },
         "description": "用于解释：score 是历史证据支持度，不是概率；强相似兜底仍只返回 CANDIDATE。"
       }
@@ -170,8 +205,14 @@
         },
         "url": {
           "raw": "{{baseUrl}}/service/contract-change/predict",
-          "host": ["{{baseUrl}}"],
-          "path": ["service", "contract-change", "predict"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "service",
+            "contract-change",
+            "predict"
+          ]
         },
         "description": "预期：没有足够可靠历史证据时返回 NO_RELIABLE_MATCH，不强行给结论。"
       }
@@ -183,8 +224,15 @@
         "header": [],
         "url": {
           "raw": "{{baseUrl}}/service/contract-change/index/reload",
-          "host": ["{{baseUrl}}"],
-          "path": ["service", "contract-change", "index", "reload"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "service",
+            "contract-change",
+            "index",
+            "reload"
+          ]
         },
         "description": "用于演示运维动作：从 Oracle 重新加载当前模型版本、当前维度、SFSX=1 的记录。"
       }
@@ -195,26 +243,32 @@
         "method": "POST",
         "header": [
           {
-            "key": "UserId",
-            "value": "{{userId}}"
+            "key": "Content-Type",
+            "value": "application/json"
           }
         ],
         "body": {
-          "mode": "formdata",
-          "formdata": [
-            {
-              "key": "file",
-              "type": "file",
-              "src": "docs/demo-materials/演示导入样本-重复.xlsx"
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"fileGetPath\": \"{{sampleServerDir}}/演示导入样本-重复.xlsx\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
             }
-          ]
+          }
         },
         "url": {
           "raw": "{{baseUrl}}/service/contract-change/samples/import",
-          "host": ["{{baseUrl}}"],
-          "path": ["service", "contract-change", "samples", "import"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "service",
+            "contract-change",
+            "samples",
+            "import"
+          ]
         },
-        "description": "时间允许时演示：相同段落、相同类型应幂等跳过。"
+        "description": "时间允许时演示：相同段落、相同类型应幂等跳过。 请先将Excel放到SFTP服务器sampleServerDir目录；JSON传入fileGetPath及userId。"
       }
     },
     {
@@ -223,26 +277,32 @@
         "method": "POST",
         "header": [
           {
-            "key": "UserId",
-            "value": "{{userId}}"
+            "key": "Content-Type",
+            "value": "application/json"
           }
         ],
         "body": {
-          "mode": "formdata",
-          "formdata": [
-            {
-              "key": "file",
-              "type": "file",
-              "src": "docs/demo-materials/演示导入样本-冲突.xlsx"
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"fileGetPath\": \"{{sampleServerDir}}/演示导入样本-冲突.xlsx\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
             }
-          ]
+          }
         },
         "url": {
           "raw": "{{baseUrl}}/service/contract-change/samples/import",
-          "host": ["{{baseUrl}}"],
-          "path": ["service", "contract-change", "samples", "import"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "service",
+            "contract-change",
+            "samples",
+            "import"
+          ]
         },
-        "description": "时间允许时演示：相同段落但类型不同应拒绝静默覆盖。"
+        "description": "时间允许时演示：相同段落但类型不同应拒绝静默覆盖。 请先将Excel放到SFTP服务器sampleServerDir目录；JSON传入fileGetPath及userId。"
       }
     },
     {
@@ -251,26 +311,32 @@
         "method": "POST",
         "header": [
           {
-            "key": "UserId",
-            "value": "{{userId}}"
+            "key": "Content-Type",
+            "value": "application/json"
           }
         ],
         "body": {
-          "mode": "formdata",
-          "formdata": [
-            {
-              "key": "file",
-              "type": "file",
-              "src": "docs/demo-materials/演示导入样本-错误表头.xlsx"
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"fileGetPath\": \"{{sampleServerDir}}/演示导入样本-错误表头.xlsx\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
             }
-          ]
+          }
         },
         "url": {
           "raw": "{{baseUrl}}/service/contract-change/samples/import",
-          "host": ["{{baseUrl}}"],
-          "path": ["service", "contract-change", "samples", "import"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "service",
+            "contract-change",
+            "samples",
+            "import"
+          ]
         },
-        "description": "时间允许时演示：第一张 Sheet 前两列表头必须为合同段落、变更类型编码。"
+        "description": "时间允许时演示：第一张 Sheet 前两列表头必须为合同段落、变更类型编码。 请先将Excel放到SFTP服务器sampleServerDir目录；JSON传入fileGetPath及userId。"
       }
     }
   ]
