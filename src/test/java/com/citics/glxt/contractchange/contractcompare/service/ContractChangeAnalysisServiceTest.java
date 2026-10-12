@@ -35,6 +35,15 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class ContractChangeAnalysisServiceTest {
+    @Test public void inactivePathMustNotBePersistedWithoutValidation() {
+        when(extractor.extract(any(ContractCompareRequest.class))).thenReturn(detailWithContext());
+        ContractCompareRequest request=request();
+        request.setChangeFileGetPath(String.join("",Collections.nCopies(1001,"x")));
+        service.analyze(request);
+        ArgumentCaptor<AnalysisLogDO> processing=ArgumentCaptor.forClass(AnalysisLogDO.class);
+        verify(persistenceService).createProcessing(processing.capture());
+        org.junit.Assert.assertNull(processing.getValue().getChangeFileGetPath());
+    }
     private ContractChangeExtractorRegistry registry;
     private ContractChangeExtractor extractor;
     private ContractComparePredictionService predictionService;

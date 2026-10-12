@@ -13,7 +13,6 @@ import com.citics.glxt.contractchange.util.ContractTextNormalizer;
 import com.citics.glxt.contractchange.util.HashUtils;
 import com.citics.glxt.contractchange.util.VectorCodec;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.poi.ooxml.POIXMLException;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
@@ -222,7 +221,9 @@ public class ContractParagraphImportService {
                     result.errors.add(new ImportErrorItem(excelRow, ex.getMessage()));
                 }
             }
-        } catch (IOException | POIXMLException ex) {
+        } catch (ContractChangeBusinessException ex) {
+            throw ex;
+        } catch (IOException | RuntimeException ex) {
             log.warn("Excel读取失败, fileSizeBytes={}, exception={}",
                     bytes.length, ex.getClass().getSimpleName());
             throw new ContractChangeBusinessException("Excel读取失败，请确认文件未损坏且格式为xlsx");
@@ -317,6 +318,21 @@ public class ContractParagraphImportService {
             List<ContractParagraphDO> existing = mapper.selectByTextHashes(hashes.subList(start, end),
                     properties.getEmbedding().getModelVersion());
             for (ContractParagraphDO paragraph : existing) {
+                if (paragraph == null
+                        || !properties.getEmbedding().getModelVersion().equals(paragraph.getModelVersion())
+                        || !Integer.valueOf(properties.getEmbedding().getDimension()).equals(paragraph.getVectorDim())
+                        || !(Integer.valueOf(0).equals(paragraph.getEnabled()) || Integer.valueOf(1).equals(paragraph.getEnabled()))
+                        || !hashes.contains(paragraph.getTextHash())
+                        || result.containsKey(paragraph.getTextHash())) {
+                    throw new ContractChangeBusinessException(409,"同版本历史样本的Hash、维度或生效状态异常，取消导入");
+                }
+                try {
+                    if (!ChangeTypeCodes.canonicalize(paragraph.getChangeTypeCodes()).equals(paragraph.getChangeTypeCodes())) {
+                        throw new ContractChangeBusinessException("历史标签非规范格式");
+                    }
+                } catch (ContractChangeBusinessException ex) {
+                    throw new ContractChangeBusinessException(409,"同版本历史样本标签异常，取消导入");
+                }
                 result.put(paragraph.getTextHash(), paragraph);
             }
         }

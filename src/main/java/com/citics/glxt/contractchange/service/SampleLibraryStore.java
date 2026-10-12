@@ -30,6 +30,7 @@ public class SampleLibraryStore {
         SampleLibraryControlDO value=mapper.lockControl();
         if (value==null || (value.getModelVersion()==null && paragraphs.countAllParagraphs()!=0))
             throw conflict("样本库控制信息未初始化，需要明确初始化模型身份");
+        if (!validControl(value)) throw conflict("样本库控制状态或模型身份异常，请核对控制行");
         if (value.getOperationId()!=null) throw conflict("样本库正在写入，operationId="+value.getOperationId());
         if (value.getModelVersion()!=null && value.getModelVersion().equals(target.getModelVersion())) {
             if (!compatible(value,target)) throw conflict("模型名称或维度变化，请更新MODEL_VERSION");
@@ -80,14 +81,15 @@ public class SampleLibraryStore {
     @Transactional
     public void recoverInterrupted() {
         SampleLibraryControlDO value=mapper.lockControl();
-        if (value==null || value.getOperationId()==null) return;
-        if ("DB_COMMITTED".equals(value.getOperationStatus())) return;
-        mapper.release(value.getOperationId());
+        if (value==null) return;
+        if (!validControl(value)) throw conflict("样本库控制状态或模型身份异常，不能自动恢复");
+        if ("RUNNING".equals(value.getOperationStatus())) require(mapper.release(value.getOperationId()));
     }
 
     private SampleLibraryControlDO owned(String id,long revision,String version) {
         SampleLibraryControlDO value=mapper.lockControl();
-        if (value==null || !Objects.equals(id,value.getOperationId()) || value.getRevision()!=revision
+        if (!validControl(value) || !"RUNNING".equals(value.getOperationStatus())
+                || !Objects.equals(id,value.getOperationId()) || value.getRevision()!=revision
                 || !Objects.equals(version,value.getModelVersion())) throw conflict("样本库版本、修订号或写入占用已变化");
         return value;
     }
@@ -96,6 +98,22 @@ public class SampleLibraryStore {
             && Objects.equals(value.getModelName(),target.getModelName())
             && Objects.equals(value.getVectorDim(),target.getDimension());
     }
+    /** 在Java侧也核对控制行，防止人工建表遗漏约束时误占用或误启用识别。 */
+    public static boolean validControl(SampleLibraryControlDO value) {
+        if (value==null || value.getRevision()<0) return false;
+        boolean uninitialized=value.getModelName()==null && value.getModelVersion()==null && value.getVectorDim()==null;
+        boolean initialized=hasText(value.getModelName()) && hasText(value.getModelVersion())
+                && value.getVectorDim()!=null && value.getVectorDim()>0;
+        if (!uninitialized && !initialized) return false;
+        if ("IDLE".equals(value.getOperationStatus()))
+            return value.getOperationId()==null && value.getExpectedSamples()==null;
+        if ("RUNNING".equals(value.getOperationStatus()))
+            return hasText(value.getOperationId()) && value.getExpectedSamples()==null;
+        if ("DB_COMMITTED".equals(value.getOperationStatus()))
+            return initialized && hasText(value.getOperationId()) && value.getExpectedSamples()!=null && value.getExpectedSamples()>0;
+        return false;
+    }
+    private static boolean hasText(String value) { return value!=null && !value.trim().isEmpty(); }
     private static void require(int count) { if(count!=1) throw conflict("样本库操作状态冲突"); }
     private static ContractChangeBusinessException conflict(String message) { return new ContractChangeBusinessException(409,message); }
 }

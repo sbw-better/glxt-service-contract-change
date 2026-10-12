@@ -95,9 +95,12 @@ public class ContractChangeAnalysisService {
         log.setInstId(request.getInstId());
         log.setUserId(userId);
         log.setAnalysisType(analysisType.name());
-        log.setOldFileGetPath(request.getOldFileGetPath());
-        log.setNewFileGetPath(request.getNewFileGetPath());
-        log.setChangeFileGetPath(request.getChangeFileGetPath());
+        if (analysisType == AnalysisType.DOUBLE_VERSION) {
+            log.setOldFileGetPath(request.getOldFileGetPath());
+            log.setNewFileGetPath(request.getNewFileGetPath());
+        } else {
+            log.setChangeFileGetPath(request.getChangeFileGetPath());
+        }
         log.setStatus(AnalysisLogStatus.PROCESSING.name());
         log.setEmbeddingModel(properties.getEmbedding().getModelName());
         log.setModelVersion(properties.getEmbedding().getModelVersion());

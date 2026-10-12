@@ -37,7 +37,10 @@ public class ContractParagraphPersistenceService {
         try {
             for (ContractParagraphDO paragraph : paragraphs) {
                 if (paragraph.getId() == null) {
-                    mapper.insertParagraph(paragraph);
+                    int affected = mapper.insertParagraph(paragraph);
+                    if (affected != 1) {
+                        throw new IllegalStateException("历史样本新增记录数不正确");
+                    }
                 } else {
                     int affected = mapper.updateParagraph(paragraph);
                     if (affected != 1) {

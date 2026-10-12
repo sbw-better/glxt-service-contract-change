@@ -8,6 +8,8 @@ import com.citics.glxt.contractchange.model.IndexStatusResponse;
 import com.citics.glxt.contractchange.util.ChangeTypeCodes;
 import com.citics.glxt.contractchange.util.VectorCodec;
 import com.citics.glxt.contractchange.util.VectorUtils;
+import com.citics.glxt.contractchange.util.ContractTextNormalizer;
+import com.citics.glxt.contractchange.util.HashUtils;
 import com.citics.glxt.contractchange.vector.ParagraphSearchResult;
 import com.citics.glxt.contractchange.vector.ParagraphVectorSample;
 import com.citics.glxt.contractchange.vector.VectorIndexSnapshot;
@@ -63,6 +65,9 @@ public class ParagraphVectorIndexService {
             if (store != null) store.recoverInterrupted();
             reload();
         } catch (RuntimeException ex) {
+            if ("NOT_READY".equals(current.get().getStatus())) {
+                current.set(VectorIndexSnapshot.loadFailed());
+            }
             log.error("应用启动时加载历史段落向量失败，索引状态已标记为LOAD_FAILED", ex);
         }
     }
@@ -98,14 +103,22 @@ public class ParagraphVectorIndexService {
         SampleLibraryControlDO control=store==null ? null : store.control();
         if (store!=null && (control==null || !Objects.equals(operationId,control.getOperationId())))
             throw new ContractChangeBusinessException(409,"索引重载未持有写入占用");
+        if (store!=null && !SampleLibraryStore.validControl(control))
+            throw new ContractChangeBusinessException(409,"样本库控制状态或模型身份异常，不能重载索引");
+        if (control!=null && "DB_COMMITTED".equals(control.getOperationStatus())) {
+            // 恢复条件以持久化状态为准，不能被调用方传入null降级成普通重载。
+            expectedSize=control.getExpectedSamples();
+        }
         if (control!=null && control.getModelVersion()!=null) {
             dimension=control.getVectorDim(); modelVersion=control.getModelVersion();
             modelName=control.getModelName(); revision=control.getRevision();
         }
         log.info("历史段落向量索引加载开始, modelVersion={}, dimension={}", modelVersion, dimension);
         List<ContractParagraphDO> rows;
+        int filteredRecords;
         try {
             rows = mapper.selectActiveParagraphs(modelVersion, dimension);
+            filteredRecords=Math.max(0,mapper.countActiveParagraphs(modelVersion)-rows.size());
         } catch (RuntimeException ex) {
             // 首次加载失败不能伪装成正常空库；已有可用快照时仍继续保留旧快照。
             if (current.get().getSamples().isEmpty() || !snapshotCompatible(current.get())) {
@@ -118,9 +131,22 @@ public class ParagraphVectorIndexService {
         // samples供语义相似度遍历；hashIndex供完全相同段落快速命中。
         List<ParagraphVectorSample> samples = new ArrayList<ParagraphVectorSample>(rows.size());
         Map<String, ParagraphVectorSample> hashIndex = new HashMap<String, ParagraphVectorSample>();
-        int errors = 0;
+        int errors = filteredRecords;
         for (ContractParagraphDO row : rows) {
             try {
+                String normalized = ContractTextNormalizer.normalize(row.getOriginalText());
+                String canonicalCodes = ChangeTypeCodes.canonicalize(row.getChangeTypeCodes());
+                if (normalized.isEmpty()
+                        || normalized.length() > properties.getSearch().getMaxParagraphLength()
+                        || !Objects.equals(normalized, row.getNormalizedText())
+                        || !Objects.equals(HashUtils.sha256(normalized), row.getTextHash())
+                        || !Objects.equals(canonicalCodes, row.getChangeTypeCodes())
+                        || !Objects.equals(modelVersion, row.getModelVersion())
+                        || !Objects.equals(dimension, row.getVectorDim())
+                        || !Integer.valueOf(1).equals(row.getEnabled())
+                        || hashIndex.containsKey(row.getTextHash())) {
+                    throw new IllegalArgumentException("历史样本正文、标签、Hash或模型身份异常");
+                }
                 float[] vector = VectorCodec.decode(row.getVectorData(), dimension);
                 VectorUtils.normalize(vector);
                 ParagraphVectorSample sample = new ParagraphVectorSample(row.getId(), row.getOriginalText(),
@@ -134,11 +160,11 @@ public class ParagraphVectorIndexService {
             }
         }
         String status;
-        if (rows.isEmpty()) {
-            status = "EMPTY";
-        } else if (errors > 0) {
+        if (errors > 0) {
             // 包括“数据库有记录但全部损坏”的情况，不能误报为正常空库。
             status = "DEGRADED";
+        } else if (rows.isEmpty()) {
+            status = "EMPTY";
         } else {
             status = "READY";
         }
@@ -241,7 +267,7 @@ public class ParagraphVectorIndexService {
                 || "LOAD_FAILED".equals(snapshot.getStatus()) || ("DEGRADED".equals(snapshot.getStatus())
                     && snapshot.getSamples().isEmpty())) return false;
         if (store==null) return true;
-        if (control==null) return false;
+        if (!SampleLibraryStore.validControl(control)) return false;
         if (control.getModelVersion()==null) return "EMPTY".equals(snapshot.getStatus()) && mapper.countAllParagraphs()==0;
         if (!SampleLibraryStore.compatible(control,properties.getEmbedding())
                 || !Objects.equals(control.getModelVersion(),snapshot.getModelVersion())) return false;
