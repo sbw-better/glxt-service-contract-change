@@ -1,8 +1,10 @@
 package com.citics.glxt.contractchange.controller;
 
+import com.citics.glxt.contractchange.docx.controller.DocxController;
+import com.citics.glxt.contractchange.docx.model.dto.DocxAnalysisDTO;
+
 import com.citics.glxt.contractchange.common.result.ResultModel;
-import com.citics.glxt.contractchange.model.dto.DocxAnalysisDTO;
-import com.citics.glxt.contractchange.service.DocxModifyAndLandService;
+import com.citics.glxt.contractchange.docx.service.DocxModifyAndLandService;
 import org.junit.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 

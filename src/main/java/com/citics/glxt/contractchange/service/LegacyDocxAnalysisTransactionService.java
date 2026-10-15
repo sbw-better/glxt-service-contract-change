@@ -1,6 +1,7 @@
 package com.citics.glxt.contractchange.service;
 
-import com.citics.glxt.contractchange.model.dto.DocxAnalysisDTO;
+import com.citics.glxt.contractchange.docx.model.dto.DocxAnalysisDTO;
+import com.citics.glxt.contractchange.docx.service.DocxModifyAndLandService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

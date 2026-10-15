@@ -49,6 +49,69 @@ public class CommonServiceImpl implements CommonService {
     // docx 文件头固定字节（PK\x03\x04）
     private static final byte[] DOCX_HEADER = new byte[]{0x50, 0x4B, 0x03, 0x04};
 
+    @Override
+    public Boolean sftpUpload(String src, String dst, String encoding) {
+        Integer ftpPort = Integer.valueOf(sftp1Port);
+        Boolean uploadStatus = sftpUpload(
+                src,
+                sftp1Host,
+                ftpPort,
+                sftp1Username,
+                sftp1Password,
+                dst,
+                encoding
+        );
+
+        if (!uploadStatus) {
+            ftpPort = Integer.valueOf(sftp2Port);
+            uploadStatus = sftpUpload(
+                    src,
+                    sftp2Host,
+                    ftpPort,
+                    sftp2Username,
+                    sftp2Password,
+                    dst,
+                    encoding
+            );
+        }
+
+        return uploadStatus;
+    }
+
+    /**
+     * 通用Sftp上传
+     *
+     */
+    @Override
+    public Boolean sftpUpload(String src, String host, Integer port, String username, String password, String dst, String encoding)
+    {
+        log.info("sftp connect, srce={}, host={}, port={}, username={}, filepath={}, encoding={}",
+                src, host, port, username, dst, encoding);
+
+        if (StringUtils.isEmpty(host) || null == port || StringUtils.isEmpty(src) || StringUtils.isEmpty(dst)) {
+            log.error("sftp通用上传未传入所有基本参数, host={}:{}, username={}, src={}, dst={}, encoding={}",
+                    host, port, username, src, dst, encoding);
+            return false;
+        }
+
+        SftpUtil sftpUtil = null;
+        try {
+            sftpUtil = SftpUtil.create(host, port);
+            sftpUtil.connect(username, password, encoding);
+            sftpUtil.upload(src, dst);
+
+        } catch (Exception e) {
+            log.error("sftp上传失败, err={}, host={}:{}, username={}, src={}, dst={}, encoding={}",
+                    e.getMessage(), host, port, username, src, dst, encoding);
+            e.printStackTrace();
+            return false;
+        } finally {
+            sftpUtil.disconnect();
+        }
+
+        return true;
+    }
+
     /**
      * 从指定表名路径下下载文件
      * @param fileGetPath 文件获取地址

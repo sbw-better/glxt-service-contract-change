@@ -1,7 +1,9 @@
 package com.citics.glxt.contractchange.service;
 
-import com.citics.glxt.contractchange.model.dto.DocxAnalysisDTO;
-import com.citics.glxt.contractchange.service.impl.DocxCommonServiceImpl;
+import com.citics.glxt.contractchange.docx.model.dto.DocxAnalysisDTO;
+
+import com.citics.glxt.contractchange.docx.service.DocxCommonService;
+import com.citics.glxt.contractchange.docx.service.impl.DocxCommonServiceImpl;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.openpackaging.parts.WordprocessingML.MainDocumentPart;
 import org.docx4j.openpackaging.parts.WordprocessingML.NumberingDefinitionsPart;

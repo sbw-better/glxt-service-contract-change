@@ -1,8 +1,8 @@
 package com.citics.glxt.contractchange.service;
 
+import com.citics.glxt.contractchange.docx.model.dto.DocxAnalysisDTO;
 import com.citics.glxt.contractchange.model.DocumentChangeTypeSummaryResponse;
 import com.citics.glxt.contractchange.model.PredictionResponse;
-import com.citics.glxt.contractchange.model.dto.DocxAnalysisDTO;
 import com.citics.glxt.contractchange.util.ContractTextNormalizer;
 import org.springframework.stereotype.Service;
 

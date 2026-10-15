@@ -1,13 +1,13 @@
-package com.citics.glxt.contractchange.service.impl;
+package com.citics.glxt.contractchange.docx.service.impl;
 
-import com.citics.glxt.contractchange.domain.ContractAnalysisDetail;
-import com.citics.glxt.contractchange.domain.ContractAnalysisMain;
-import com.citics.glxt.contractchange.mapper.ContractAnalysisDetailMapper;
-import com.citics.glxt.contractchange.mapper.ContractAnalysisMainMapper;
-import com.citics.glxt.contractchange.model.dto.DocxAnalysisDTO;
-import com.citics.glxt.contractchange.service.ContractAnalysisDetailService;
-import com.citics.glxt.contractchange.service.DocxCommonService;
-import com.citics.glxt.contractchange.service.DocxModifyAndLandService;
+import com.citics.glxt.contractchange.docx.domain.ContractAnalysisDetail;
+import com.citics.glxt.contractchange.docx.domain.ContractAnalysisMain;
+import com.citics.glxt.contractchange.docx.mapper.ContractAnalysisDetailMapper;
+import com.citics.glxt.contractchange.docx.mapper.ContractAnalysisMainMapper;
+import com.citics.glxt.contractchange.docx.model.dto.DocxAnalysisDTO;
+import com.citics.glxt.contractchange.docx.service.ContractAnalysisDetailService;
+import com.citics.glxt.contractchange.docx.service.DocxCommonService;
+import com.citics.glxt.contractchange.docx.service.DocxModifyAndLandService;
 import io.micrometer.core.instrument.util.StringUtils;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.openpackaging.parts.WordprocessingML.MainDocumentPart;

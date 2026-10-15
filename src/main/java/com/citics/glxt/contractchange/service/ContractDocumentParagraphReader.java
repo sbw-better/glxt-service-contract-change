@@ -1,7 +1,8 @@
 package com.citics.glxt.contractchange.service;
 
 import com.citics.glxt.contractchange.common.exception.ContractChangeBusinessException;
-import com.citics.glxt.contractchange.model.dto.DocxAnalysisDTO;
+import com.citics.glxt.contractchange.docx.model.dto.DocxAnalysisDTO;
+import com.citics.glxt.contractchange.docx.service.DocxCommonService;
 import io.micrometer.core.instrument.util.StringUtils;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.openpackaging.parts.WordprocessingML.MainDocumentPart;

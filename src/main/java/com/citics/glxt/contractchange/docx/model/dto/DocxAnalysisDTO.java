@@ -1,19 +1,21 @@
-package com.citics.glxt.contractchange.model.dto;
+package com.citics.glxt.contractchange.docx.model.dto;
 
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
+
 import java.io.Serializable;
 
 @Data
-@ApiModel(value="合同处理入参dto", description="")
+@ApiModel(value = "合同处理入参dto", description = "")
 public class DocxAnalysisDTO implements Serializable {
 
-    private static final long serialVersionUID = 5207213186902018442L;
+    private static final long serialVersionUID = 5207213180902018442L;
 
     /**
-     * ********************公共入参：********************
+     * ******************************公共入参******************************
      */
+
     /**
      * 1|根据修订记录生成补充协议
      * 2|根据补充协议生成合同
@@ -23,8 +25,9 @@ public class DocxAnalysisDTO implements Serializable {
     private Long operateType;
 
     /**
-     * ********************运作指引整改协商函生成新版合同：********************
+     * ******************************运作指引整改协商函生成新版合同******************************
      */
+
     /**
      * 1|方案1
      * 2|方案2
@@ -49,8 +52,9 @@ public class DocxAnalysisDTO implements Serializable {
     private Boolean isZhongJin;
 
     /**
-     * ********************根据修订记录生成补充协议：********************
+     * ******************************根据修订记录生成补充协议******************************
      */
+
     @ApiModelProperty("根据修订记录生成补充协议--修订记录文件获取地址")
     private String revisionFileGetPath;
 
@@ -60,9 +64,13 @@ public class DocxAnalysisDTO implements Serializable {
     @ApiModelProperty("根据修订记录生成补充协议--补充协议文件保存地址")
     private String supplementFileSavePath;
 
+    @ApiModelProperty("根据修订记录生成补充协议--生成类型")
+    private Integer generateByRevisionType;
+
     /**
-     * ********************文档内容替换：********************
+     * ******************************文档内容替换******************************
      */
+
     @ApiModelProperty("文档内容替换--合同文件获取地址")
     private String replaceFileGetPath;
 
@@ -82,8 +90,9 @@ public class DocxAnalysisDTO implements Serializable {
     private Boolean isModify;
 
     /**
-     * ********************经办人关键字处理：********************
+     * ******************************经办人关键字处理******************************
      */
+
     @ApiModelProperty("经办人关键字处理--合同文件获取地址")
     private String jbrFileGetPath;
 
@@ -95,6 +104,5 @@ public class DocxAnalysisDTO implements Serializable {
 
     @ApiModelProperty("经办人关键字处理--定位关键字")
     private String jbrKeyWords;
-
 }
 

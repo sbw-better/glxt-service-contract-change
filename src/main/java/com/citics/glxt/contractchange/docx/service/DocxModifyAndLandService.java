@@ -1,6 +1,6 @@
-package com.citics.glxt.contractchange.service;
+package com.citics.glxt.contractchange.docx.service;
 
-import com.citics.glxt.contractchange.model.dto.DocxAnalysisDTO;
+import com.citics.glxt.contractchange.docx.model.dto.DocxAnalysisDTO;
 
 public interface DocxModifyAndLandService {
     /**

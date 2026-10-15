@@ -23,7 +23,7 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <mybatis-plus.version>3.4.3.4</mybatis-plus.version>
+        <mybatis-plus.version>3.1.1</mybatis-plus.version>
         <poi.version>4.1.2</poi.version>
         <springfox.version>2.9.2</springfox.version>
         <ojdbc.version>19.3.0.0</ojdbc.version>
@@ -86,7 +86,7 @@
             <groupId>org.docx4j</groupId>
             <artifactId>docx4j-JAXB-ReferenceImpl</artifactId>
             <version>8.2.9</version>
-            <!--<version>8.3.9</version>-->
+            <!-- <version>8.3.9</version>-->
         </dependency>
         <dependency>
             <groupId>org.docx4j</groupId>
@@ -98,6 +98,7 @@
             <artifactId>docx4j-core</artifactId>
             <version>8.2.9</version>
         </dependency>
+
 
         <!-- SFTP -->
         <dependency>
@@ -133,6 +134,16 @@
                     <artifactId>aspose-words</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.aspectj</groupId>
+            <artifactId>aspectjweaver</artifactId>
+            <version>1.9.4</version>
+        </dependency>
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-all</artifactId>
+            <version>5.4.1</version>
         </dependency>
 
     </dependencies>

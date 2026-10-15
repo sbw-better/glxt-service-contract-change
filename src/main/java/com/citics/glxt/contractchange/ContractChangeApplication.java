@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 
 /** 合同段落变更类型识别服务启动入口。 */
 @SpringBootApplication
-@MapperScan("com.citics.glxt.contractchange.mapper")
+@MapperScan({"com.citics.glxt.contractchange.mapper", "com.citics.glxt.contractchange.docx.mapper"})
 @EnableConfigurationProperties({ContractChangeProperties.class, ContractCompareProperties.class})
 public class ContractChangeApplication {
     /** 启动 Spring Boot 应用。 */

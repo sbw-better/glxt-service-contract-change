@@ -2,12 +2,12 @@ package com.citics.glxt.contractchange.controller;
 
 import com.citics.glxt.contractchange.common.result.ContractChangeResult;
 import com.citics.glxt.contractchange.common.constants.CommonConstants;
+import com.citics.glxt.contractchange.docx.model.dto.DocxAnalysisDTO;
 import com.citics.glxt.contractchange.model.ImportResponse;
 import com.citics.glxt.contractchange.model.IndexStatusResponse;
 import com.citics.glxt.contractchange.model.DocumentChangeTypeSummaryResponse;
 import com.citics.glxt.contractchange.model.PredictRequest;
 import com.citics.glxt.contractchange.model.PredictionResponse;
-import com.citics.glxt.contractchange.model.dto.DocxAnalysisDTO;
 import com.citics.glxt.contractchange.service.ContractDocumentChangePredictionService;
 import com.citics.glxt.contractchange.service.ContractParagraphPredictionService;
 import com.citics.glxt.contractchange.service.ParagraphVectorIndexService;
