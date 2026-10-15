@@ -38,17 +38,16 @@ public class HttpEmbeddingClient implements EmbeddingClient {
     private static final String USER_ID_HEADER = "UserId";
     private static final String FLOAT_ENCODING_FORMAT = "float";
 
-    private final ContractChangeProperties.Embedding properties;
+    private final ContractChangeProperties contractProperties;
     private final RestTemplate restTemplate;
 
-    /** 创建模型专用的HTTP客户端，并设置连接超时和等待响应的最长时间。 */
+    /** 创建HTTP客户端；每批请求读取当前配置快照，支持Nacos更新后执行模型重建。 */
     public HttpEmbeddingClient(ContractChangeProperties contractProperties) {
-        this.properties = new ContractChangeProperties.Embedding();
-        // 启动时固定模型与网关配置；不支持运行时热切换。
-        org.springframework.beans.BeanUtils.copyProperties(contractProperties.getEmbedding(), this.properties);
+        this.contractProperties = contractProperties;
+        ContractChangeProperties.Embedding initial = snapshot();
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(properties.getConnectTimeoutMs());
-        factory.setReadTimeout(properties.getReadTimeoutMs());
+        factory.setConnectTimeout(initial.getConnectTimeoutMs());
+        factory.setReadTimeout(initial.getReadTimeoutMs());
         this.restTemplate = new RestTemplate(factory);
     }
 
@@ -58,6 +57,7 @@ public class HttpEmbeddingClient implements EmbeddingClient {
      */
     @Override
     public EmbeddingBatchResult embed(List<String> texts, String userId) {
+        ContractChangeProperties.Embedding properties = snapshot();
         validateRequest(texts, userId);
         long started = System.currentTimeMillis();
         RuntimeException last = null;
@@ -69,9 +69,10 @@ public class HttpEmbeddingClient implements EmbeddingClient {
                         String.valueOf(properties.getDimension()),
                         FLOAT_ENCODING_FORMAT);
                 ResponseEntity<EmbeddingGatewayResponse> response = restTemplate.postForEntity(
-                        properties.getUrl(), new HttpEntity<EmbeddingGatewayRequest>(body, gatewayHeaders(userId)),
+                        properties.getUrl(), new HttpEntity<EmbeddingGatewayRequest>(body,
+                                gatewayHeaders(userId, properties.getApiKey())),
                         EmbeddingGatewayResponse.class);
-                List<float[]> vectors = parse(response.getBody(), texts.size());
+                List<float[]> vectors = parse(response.getBody(), texts.size(), properties.getDimension());
                 log.info("Embedding网关调用成功, count={}, elapsedMs={}", texts.size(),
                         System.currentTimeMillis() - started);
                 return new EmbeddingBatchResult(properties.getDimension(), vectors);
@@ -107,10 +108,10 @@ public class HttpEmbeddingClient implements EmbeddingClient {
     }
 
     /** 组装模型平台要求的请求头；API Key只来自服务端配置，不能由前端传入。 */
-    private HttpHeaders gatewayHeaders(String userId) {
+    private HttpHeaders gatewayHeaders(String userId, String apiKey) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set(HttpHeaders.AUTHORIZATION, "Bearer " + properties.getApiKey());
+        headers.set(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey);
         headers.set(USER_ID_HEADER, userId.trim());
         return headers;
     }
@@ -134,7 +135,7 @@ public class HttpEmbeddingClient implements EmbeddingClient {
      * 检查模型返回结果，并把每条向量调整到统一长度标准。
      * 这样后续直接计算两个向量的点积，就能得到段落之间的余弦相似度。
      */
-    private List<float[]> parse(EmbeddingGatewayResponse response, int expectedCount) {
+    private List<float[]> parse(EmbeddingGatewayResponse response, int expectedCount, int dimension) {
         List<EmbeddingGatewayData> rows = response == null ? null : response.getData();
         if (rows == null || rows.size() != expectedCount) {
             throw new ContractChangeBusinessException("Embedding返回数量与输入数量不一致");
@@ -143,9 +144,9 @@ public class HttpEmbeddingClient implements EmbeddingClient {
         List<float[]> vectors = new ArrayList<float[]>(orderedRows.size());
         for (EmbeddingGatewayData row : orderedRows) {
             List<Double> values = row == null ? null : row.getEmbedding();
-            if (values == null || values.size() != properties.getDimension()) {
+            if (values == null || values.size() != dimension) {
                 throw new ContractChangeBusinessException(
-                        "Embedding向量维度不是" + properties.getDimension());
+                        "Embedding向量维度不是" + dimension);
             }
             float[] vector = new float[values.size()];
             for (int i = 0; i < values.size(); i++) {
@@ -166,6 +167,13 @@ public class HttpEmbeddingClient implements EmbeddingClient {
             vectors.add(vector);
         }
         return vectors;
+    }
+
+    /** 每个模型批次固定读取一份配置，避免Nacos刷新时请求参数前后不一致。 */
+    private ContractChangeProperties.Embedding snapshot() {
+        ContractChangeProperties.Embedding value = new ContractChangeProperties.Embedding();
+        org.springframework.beans.BeanUtils.copyProperties(contractProperties.getEmbedding(), value);
+        return value;
     }
 
     /**
