@@ -8,6 +8,8 @@ import com.citics.glxt.contractchange.embedding.dto.EmbeddingGatewayRequest;
 import com.citics.glxt.contractchange.embedding.dto.EmbeddingGatewayResponse;
 import com.citics.glxt.contractchange.model.EmbeddingBatchResult;
 import com.citics.glxt.contractchange.util.VectorUtils;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -37,6 +39,7 @@ import java.util.List;
 public class HttpEmbeddingClient implements EmbeddingClient {
     private static final String USER_ID_HEADER = "UserId";
     private static final String FLOAT_ENCODING_FORMAT = "float";
+    private static final ObjectMapper ERROR_MAPPER = new ObjectMapper();
 
     private final ContractChangeProperties contractProperties;
     private final RestTemplate restTemplate;
@@ -65,7 +68,7 @@ public class HttpEmbeddingClient implements EmbeddingClient {
             try {
                 EmbeddingGatewayRequest body = new EmbeddingGatewayRequest(
                         properties.getModelName(),
-                        texts.size() == 1 ? texts.get(0) : texts,
+                        texts,
                         String.valueOf(properties.getDimension()),
                         FLOAT_ENCODING_FORMAT);
                 ResponseEntity<EmbeddingGatewayResponse> response = restTemplate.postForEntity(
@@ -80,7 +83,7 @@ public class HttpEmbeddingClient implements EmbeddingClient {
                 int status = ex.getStatusCode().value();
                 log.warn("Embedding网关请求被拒绝, status={}, count={}, attempt={}",
                         status, texts.size(), attempt + 1);
-                throw unavailable(clientErrorMessage(status), ex);
+                throw unavailable(clientErrorMessage(status, ex), ex);
             } catch (HttpServerErrorException ex) {
                 last = ex;
                 log.warn("Embedding网关服务端异常, status={}, count={}, attempt={}/{}",
@@ -202,20 +205,52 @@ public class HttpEmbeddingClient implements EmbeddingClient {
     }
 
     /** 将常见 4xx 转换为不泄露平台响应体的明确诊断信息。 */
-    private String clientErrorMessage(int status) {
+    private String clientErrorMessage(int status, HttpClientErrorException ex) {
+        String message;
         if (status == 401 || status == 403) {
-            return "Embedding网关认证或权限失败";
+            message="Embedding网关认证或权限失败";
+        } else if (status == 404) {
+            message="Embedding接口地址或模型部署名称错误";
+        } else if (status == 400 || status == 422) {
+            message="Embedding请求格式、输入长度或批量参数被拒绝";
+        } else if (status == 429) {
+            message="Embedding网关请求过于频繁，请稍后重试";
+        } else {
+            message="Embedding网关请求被拒绝, status=" + status;
         }
-        if (status == 404) {
-            return "Embedding接口地址或模型部署名称错误";
+        String hint=safeErrorMetadata(ex.getResponseBodyAsString());
+        return hint.isEmpty() ? message : message+"（网关错误信息："+hint+"）";
+    }
+
+    /** 只提取错误码、类型和参数名；不透出可能回显输入文本的网关错误正文。 */
+    private String safeErrorMetadata(String responseBody) {
+        if (responseBody==null || responseBody.trim().isEmpty()) return "";
+        try {
+            JsonNode root=ERROR_MAPPER.readTree(responseBody);
+            JsonNode error=root.path("error").isObject() ? root.path("error") : root;
+            String code=safeMetadataValue(error.path("code").asText());
+            String type=safeMetadataValue(error.path("type").asText());
+            String param=safeMetadataValue(error.path("param").asText());
+            StringBuilder result=new StringBuilder();
+            if (!code.isEmpty()) result.append("code=").append(code);
+            if (!type.isEmpty()) {
+                if (result.length()>0) result.append(", ");
+                result.append("type=").append(type);
+            }
+            if (!param.isEmpty()) {
+                if (result.length()>0) result.append(", ");
+                result.append("param=").append(param);
+            }
+            return result.toString();
+        } catch (Exception ignored) {
+            return "";
         }
-        if (status == 400 || status == 422) {
-            return "Embedding请求格式、输入长度或批量参数被拒绝";
-        }
-        if (status == 429) {
-            return "Embedding网关请求过于频繁，请稍后重试";
-        }
-        return "Embedding网关请求被拒绝, status=" + status;
+    }
+
+    private String safeMetadataValue(String value) {
+        if (value==null || value.isEmpty()) return "";
+        String safe=value.replaceAll("[^A-Za-z0-9_.:\\[\\]-]", "");
+        return safe.length()>100 ? safe.substring(0,100) : safe;
     }
 
     /** 将模型侧异常统一转换为服务不可用错误，同时避免透出响应体和敏感请求信息。 */

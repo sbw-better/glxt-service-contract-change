@@ -39,7 +39,7 @@ public class HttpEmbeddingClientTest {
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer test-key"))
                 .andExpect(header("UserId", "employee-001"))
-                .andExpect(content().json("{\"model\":\"test-model\",\"input\":\"测试段落\","
+                .andExpect(content().json("{\"model\":\"test-model\",\"input\":[\"测试段落\"],"
                         + "\"dimensions\":\"3\",\"encoding_format\":\"float\"}"))
                 .andRespond(withSuccess("{\"data\":[{\"embedding\":[3,4,0]}]}",
                         MediaType.APPLICATION_JSON));

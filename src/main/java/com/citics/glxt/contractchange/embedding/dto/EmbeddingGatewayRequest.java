@@ -4,13 +4,13 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
-/** OpenAI 兼容 Embedding 请求体；input 可以是单个字符串或字符串数组。 */
+/** OpenAI 兼容 Embedding 请求体；input统一使用字符串数组，单条输入也保持相同结构。 */
 @Getter
 @AllArgsConstructor
 public class EmbeddingGatewayRequest {
     /** 模型平台分配的请求模型名称。 */
     private final String model;
-    /** 单条调用使用 String，批量调用使用 List&lt;String&gt;。 */
+    /** 单条或批量输入均使用 List&lt;String&gt;，避免不同批大小改变请求结构。 */
     private final Object input;
     /**
      * 明确要求网关返回的向量维度。
