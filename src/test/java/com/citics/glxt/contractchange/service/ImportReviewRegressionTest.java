@@ -34,6 +34,48 @@ public class ImportReviewRegressionTest {
         } catch (IllegalStateException expected) { }
     }
 
+    @Test public void persistedTextMustBeReadBackAndVerifiedBeforeCommit() {
+        ContractParagraphMapper mapper=mock(ContractParagraphMapper.class);
+        ContractParagraphDO expected=row("保留原文");
+        expected.setId(null);
+        when(mapper.insertParagraph(expected)).thenAnswer(invocation -> {
+            expected.setId(42L);
+            return 1;
+        });
+        when(mapper.selectTextForVerificationByIds(Collections.singletonList(42L)))
+                .thenReturn(Collections.singletonList(expected));
+
+        new ContractParagraphPersistenceService(mapper).saveAll(Collections.singletonList(expected));
+
+        verify(mapper).selectTextForVerificationByIds(Collections.singletonList(42L));
+    }
+
+    @Test public void databaseCharacterConversionMustFailWriteVerificationWithSampleId() {
+        ContractParagraphMapper mapper=mock(ContractParagraphMapper.class);
+        ContractParagraphDO expected=row("包含\u00A0不换行空格");
+        expected.setId(null);
+        expected.setNormalizedText("包含\u00A0不换行空格");
+        expected.setTextHash(HashUtils.sha256(expected.getNormalizedText()));
+        when(mapper.insertParagraph(expected)).thenAnswer(invocation -> {
+            expected.setId(136L);
+            return 1;
+        });
+        ContractParagraphDO converted=row("包含?不换行空格");
+        converted.setId(136L);
+        converted.setOriginalText("包含?不换行空格");
+        converted.setNormalizedText("包含?不换行空格");
+        when(mapper.selectTextForVerificationByIds(Collections.singletonList(136L)))
+                .thenReturn(Collections.singletonList(converted));
+
+        try {
+            new ContractParagraphPersistenceService(mapper).saveAll(Collections.singletonList(expected));
+            fail("database text conversion must be detected before transaction commit");
+        } catch (IllegalStateException ex) {
+            assertTrue(ex.getMessage().contains("ID=136"));
+            assertTrue(ex.getMessage().contains("本批已回滚"));
+        }
+    }
+
     @Test public void strictRecoveryMustRejectWrongHashDespiteCorrectVectorCount() {
         ContractParagraphMapper mapper=mock(ContractParagraphMapper.class);
         ContractParagraphDO corrupted=row("历史条款"); corrupted.setTextHash(HashUtils.sha256("其他条款"));

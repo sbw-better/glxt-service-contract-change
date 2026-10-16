@@ -122,7 +122,7 @@ public class ContractParagraphImportService {
             ContractParagraphDO existing = existingByHash.get(row.textHash);
             if (existing == null) {
                 newRows.add(row);
-            } else if (isCurrentActiveRecord(existing, row.changeTypeCodes,embeddingSnapshot)) {
+            } else if (isCurrentActiveRecord(existing, row,embeddingSnapshot)) {
                 skipped++;
             } else if (existing.getChangeTypeCodes().equals(row.changeTypeCodes)) {
                 // 查重已限定同版本；这里只重新启用同标签停用记录。
@@ -170,9 +170,19 @@ public class ContractParagraphImportService {
         try {
             // 数据提交后重新读取Oracle，让刚导入的样本可以立即参与后续预测。
             log.info("历史样本增量索引刷新开始, operationId={}",operationId);
-            if (source == null) indexService.reload();
-            else indexService.reloadForOperation(source.getOperationId(), null);
-            log.info("历史样本增量索引刷新完成, operationId={}",operationId);
+            com.citics.glxt.contractchange.model.IndexStatusResponse indexStatus = source == null
+                    ? indexService.reload() : indexService.reloadForOperation(source.getOperationId(), null);
+            indexReloaded = indexStatus != null && ("READY".equals(indexStatus.getStatus())
+                    || "EMPTY".equals(indexStatus.getStatus())) && indexStatus.isRecognitionAvailable();
+            if (indexReloaded) {
+                log.info("历史样本增量索引刷新完成, operationId={}, status={}, sampleCount={}",
+                        operationId, indexStatus.getStatus(), indexStatus.getSampleCount());
+            } else {
+                log.error("历史样本已入库但索引未达到可用状态, operationId={}, status={}, errorCount={}, sampleCount={}",
+                        operationId, indexStatus == null ? null : indexStatus.getStatus(),
+                        indexStatus == null ? null : indexStatus.getErrorCount(),
+                        indexStatus == null ? null : indexStatus.getSampleCount());
+            }
         } catch (RuntimeException ex) {
             indexReloaded = false;
             log.error("历史样本已入库，但内存索引刷新失败, operationId={}, exceptionType={}",
@@ -225,7 +235,9 @@ public class ContractParagraphImportService {
                     PreparedRow previous = result.rows.get(hash);
                     if (previous == null) {
                         result.rows.put(hash,
-                                new PreparedRow(excelRow, paragraph.trim(), normalized, hash, codes));
+                                new PreparedRow(excelRow,
+                                        ContractTextNormalizer.replaceUnicodeSpaceCharacters(paragraph).trim(),
+                                        normalized, hash, codes));
                     } else if (previous.changeTypeCodes.equals(codes)) {
                         result.skipped++;
                     } else {
@@ -394,6 +406,9 @@ public class ContractParagraphImportService {
                 } catch (ContractChangeBusinessException ex) {
                     throw new ContractChangeBusinessException(409,"同版本历史样本标签异常，取消导入");
                 }
+                if (result.containsKey(paragraph.getTextHash())) {
+                    throw new ContractChangeBusinessException(409,"同一Hash对应多条历史样本，需先检查数据库重复记录");
+                }
                 result.put(paragraph.getTextHash(), paragraph);
             }
         }
@@ -401,10 +416,11 @@ public class ContractParagraphImportService {
     }
 
     /** 当前模型、当前维度、有效且标签相同才属于可幂等跳过的完整重复记录。 */
-    private boolean isCurrentActiveRecord(ContractParagraphDO existing,String changeTypeCodes,
+    private boolean isCurrentActiveRecord(ContractParagraphDO existing,PreparedRow row,
                                           ContractChangeProperties.Embedding embedding) {
         return Integer.valueOf(1).equals(existing.getEnabled())
-                && changeTypeCodes.equals(existing.getChangeTypeCodes())
+                && row.textHash.equals(existing.getTextHash())
+                && row.changeTypeCodes.equals(existing.getChangeTypeCodes())
                 && embedding.getModelVersion().equals(existing.getModelVersion())
                 && Integer.valueOf(embedding.getDimension()).equals(existing.getVectorDim());
     }

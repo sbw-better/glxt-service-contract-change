@@ -111,7 +111,8 @@ public class OracleVectorClobIntegrationTest {
                 com.citics.glxt.contractchange.service.ParagraphVectorIndexService index =
                         new com.citics.glxt.contractchange.service.ParagraphVectorIndexService(mapper, properties);
                 assertEquals("READY", index.reload().getStatus());
-                assertNotNull(index.exact("first"));
+                String firstHash = com.citics.glxt.contractchange.util.HashUtils.sha256("测试样本first");
+                assertNotNull(index.exact(firstHash));
                 com.citics.glxt.contractchange.embedding.EmbeddingClient embedding = org.mockito.Mockito.mock(
                         com.citics.glxt.contractchange.embedding.EmbeddingClient.class);
                 org.mockito.Mockito.when(embedding.embed(org.mockito.ArgumentMatchers.anyList(),
@@ -122,7 +123,7 @@ public class OracleVectorClobIntegrationTest {
                                 .predict("未入库的新测试段落", "test");
                 assertEquals("SEMANTIC", prediction.getMatchType());
                 assertEquals("49", prediction.getChangeTypes().get(0).getCode());
-                assertEquals(1, mapper.selectByTextHashes(Collections.singletonList("first"), "test-clob").size());
+                assertEquals(1, mapper.selectByTextHashes(Collections.singletonList(firstHash), "test-clob").size());
                 try {
                     // The first insert and update must both roll back after the duplicate insert fails.
                     row.setVectorData(row("unused", 1F).getVectorData());
@@ -147,9 +148,9 @@ public class OracleVectorClobIntegrationTest {
         vector[0] = first;
         VectorUtils.normalize(vector);
         ContractParagraphDO row = new ContractParagraphDO();
-        row.setOriginalText("测试样本");
-        row.setNormalizedText("测试样本");
-        row.setTextHash(hash);
+        row.setOriginalText("测试样本" + hash);
+        row.setNormalizedText("测试样本" + hash);
+        row.setTextHash(com.citics.glxt.contractchange.util.HashUtils.sha256(row.getNormalizedText()));
         row.setChangeTypeCodes("49");
         row.setVectorData(VectorCodec.encode(vector));
         row.setVectorDim(1024);

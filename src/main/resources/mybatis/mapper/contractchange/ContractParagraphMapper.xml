@@ -57,6 +57,7 @@
         UPDATE TPIF_HTDLYB
         SET YWBW = #{originalText,jdbcType=CLOB},
             GFBW = #{normalizedText,jdbcType=CLOB},
+            TEXT_HASH = #{textHash},
             BGLX_CODES = #{changeTypeCodes},
             VECTOR_DATA = #{vectorData,jdbcType=CLOB,typeHandler=org.apache.ibatis.type.ClobTypeHandler},
             VECTOR_DIM = #{vectorDim},
@@ -64,6 +65,16 @@
             SFSX = 1
         WHERE ID = #{id} AND MODEL_VERSION = #{modelVersion}
     </update>
+
+    <!-- 事务内写后校验只读取正文与Hash，避免为校验额外读取向量CLOB。 -->
+    <select id="selectTextForVerificationByIds" resultMap="ContractParagraphResultMap">
+        SELECT ID, YWBW, GFBW, TEXT_HASH
+        FROM TPIF_HTDLYB
+        WHERE ID IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
 
     <!-- 空库判定，不用于有效容量统计。 -->
     <select id="countAllParagraphs" resultType="int">

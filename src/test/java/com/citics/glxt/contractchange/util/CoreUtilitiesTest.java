@@ -18,6 +18,20 @@ public class CoreUtilitiesTest {
     }
 
     @Test
+    public void shouldNormalizeUnicodeWhitespaceBeforeHashing() {
+        String ordinarySpace = ContractTextNormalizer.normalize("收益分配原则 将重新计算");
+        String importedNoBreakSpaces = ContractTextNormalizer.normalize("收益分配原则\u00A0将重新计算");
+        String narrowNoBreakSpace = ContractTextNormalizer.normalize("收益分配原则\u202F将重新计算");
+        String emSpace = ContractTextNormalizer.normalize("收益分配原则\u2003将重新计算");
+
+        assertEquals(ordinarySpace, importedNoBreakSpaces);
+        assertEquals(ordinarySpace, narrowNoBreakSpace);
+        assertEquals(ordinarySpace, emSpace);
+        assertEquals(HashUtils.sha256(ordinarySpace), HashUtils.sha256(importedNoBreakSpaces));
+        assertEquals("第一行\n第二 行", ContractTextNormalizer.replaceUnicodeSpaceCharacters("第一行\n第二\u00A0行"));
+    }
+
+    @Test
     public void shouldCanonicalizeAndParseChangeTypeCodes() {
         String codes = ChangeTypeCodes.canonicalize(" TYPE03；TYPE01,TYPE03 ; TYPE02 ");
         assertEquals("TYPE01;TYPE02;TYPE03", codes);

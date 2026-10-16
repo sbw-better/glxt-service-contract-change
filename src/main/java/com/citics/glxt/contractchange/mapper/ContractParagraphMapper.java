@@ -25,6 +25,9 @@ public interface ContractParagraphMapper {
     /** 更新现有Hash记录的正文、标签、向量、模型版本并重新启用。 */
     int updateParagraph(ContractParagraphDO paragraph);
 
+    /** 在写入事务提交前读回正文，检测数据库字符集转换造成的文本损失。 */
+    List<ContractParagraphDO> selectTextForVerificationByIds(@Param("ids") List<Long> ids);
+
     /** 判断是否为空库；失效历史不计入有效样本容量。 */
     int countAllParagraphs();
 

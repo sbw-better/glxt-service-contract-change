@@ -7,6 +7,7 @@ import com.citics.glxt.contractchange.embedding.EmbeddingClient;
 import com.citics.glxt.contractchange.mapper.ContractParagraphMapper;
 import com.citics.glxt.contractchange.model.EmbeddingBatchResult;
 import com.citics.glxt.contractchange.model.ImportResponse;
+import com.citics.glxt.contractchange.model.IndexStatusResponse;
 import com.citics.glxt.contractchange.util.HashUtils;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.Before;
@@ -18,6 +19,7 @@ import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Collections;
+import java.util.Date;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -43,6 +45,7 @@ public class ContractParagraphImportServiceTest {
         mapper = mock(ContractParagraphMapper.class);
         persistenceService = mock(ContractParagraphPersistenceService.class);
         indexService = mock(ParagraphVectorIndexService.class);
+        when(indexService.reload()).thenReturn(new IndexStatusResponse("READY", 1, "test-v1", 3, new Date(), 0));
         embeddingClient = mock(EmbeddingClient.class);
         properties = new ContractChangeProperties();
         properties.getEmbedding().setDimension(3);
@@ -77,6 +80,42 @@ public class ContractParagraphImportServiceTest {
         ContractParagraphDO saved = captor.getValue().get(0);
         assertEquals("TYPE01;TYPE02", saved.getChangeTypeCodes());
         assertEquals("[1.0,0.0,0.0]", saved.getVectorData());
+    }
+
+    @Test
+    public void shouldNormalizeNonBreakingSpaceBeforeEmbeddingHashAndPersistence() throws Exception {
+        when(mapper.selectByTextHashes(anyList(), anyString())).thenReturn(Collections.emptyList());
+        when(mapper.countActiveParagraphs(anyString())).thenReturn(0);
+        when(embeddingClient.embed(anyList(), anyString())).thenAnswer(invocation ->
+                new EmbeddingBatchResult(3, Collections.singletonList(new float[]{1F, 0F, 0F})));
+
+        ImportResponse response = service.importExcel(excel(new String[][]{{"收益分配原则\u00A0将重新计算", "49"}}), "test-user");
+
+        assertTrue(response.isSuccess());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<String>> texts = (ArgumentCaptor<List<String>>) (ArgumentCaptor<?>) ArgumentCaptor.forClass(List.class);
+        verify(embeddingClient).embed(texts.capture(), anyString());
+        assertEquals(Collections.singletonList("收益分配原则 将重新计算"), texts.getValue());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ContractParagraphDO>> rows =
+                (ArgumentCaptor<List<ContractParagraphDO>>) (ArgumentCaptor<?>) ArgumentCaptor.forClass(List.class);
+        verify(persistenceService).saveAll(rows.capture());
+        assertEquals("收益分配原则 将重新计算", rows.getValue().get(0).getOriginalText());
+        assertEquals("收益分配原则 将重新计算", rows.getValue().get(0).getNormalizedText());
+        assertEquals(HashUtils.sha256("收益分配原则 将重新计算"), rows.getValue().get(0).getTextHash());
+    }
+
+    @Test
+    public void degradedReloadMustNotBeReportedAsSuccessfulIndexSwitch() throws Exception {
+        when(mapper.selectByTextHashes(anyList(), anyString())).thenReturn(Collections.emptyList());
+        when(embeddingClient.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(3,
+                Collections.singletonList(new float[]{1F, 0F, 0F})));
+        when(indexService.reload()).thenReturn(new IndexStatusResponse("DEGRADED", 192, "test-v1", 3, new Date(), 3));
+
+        ImportResponse response = service.importExcel(excel(new String[][]{{"新段落", "49"}}), "test-user");
+
+        assertTrue(response.isSuccess()); // DB写入完成，但索引不可用必须单独明确报告。
+        assertFalse(response.isIndexReloaded());
     }
 
     @Test
