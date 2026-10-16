@@ -1,6 +1,7 @@
 package com.citics.glxt.contractchange.contractcompare.controller;
 
 import com.citics.glxt.contractchange.common.result.ContractChangeResult;
+import com.citics.glxt.contractchange.common.constants.CommonConstants;
 import com.citics.glxt.contractchange.contractcompare.model.AnalysisLogStatus;
 import com.citics.glxt.contractchange.contractcompare.model.ContractChangeAnalysisResponse;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRequest;
@@ -38,13 +39,19 @@ public class ContractCompareController {
 
     @PostMapping("/compare")
     @ApiOperation(value = "分析合同变更业务类型",
-            notes = "请求体必须包含userId、instId和analysisType；仅返回analysisId、fileChangeTypeCodes和analysisStatus")
+            notes = "请求体必须包含userId、instId和analysisType；返回analysisId、fileChangeTypeCodes和analysisStatus。分析失败时返回failureCode及failureReason，失败响应中的类型编码为空")
     public ContractChangeResult<ContractChangeAnalysisResponse> compare(
             @RequestBody ContractCompareRequest request) {
         ContractChangeAnalysisResponse result = analysisService.analyze(request);
-        String message = result.getAnalysisStatus() == AnalysisLogStatus.PARTIAL_SUCCESS
-                ? "合同基础比对已完成，部分业务类型未识别"
-                : "操作成功";
+        if (result.getAnalysisStatus() == AnalysisLogStatus.FAILED) {
+            int code = result.getFailureCode() == null
+                    ? CommonConstants.FAIL : result.getFailureCode();
+            String message = result.getFailureReason() == null
+                    ? "合同分析失败，请查看分析记录"
+                    : result.getFailureReason();
+            return ContractChangeResult.of(code, message, result);
+        }
+        String message = "操作成功";
         return ContractChangeResult.success(message, result);
     }
 

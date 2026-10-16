@@ -1,6 +1,7 @@
 package com.citics.glxt.contractchange.contractcompare.service;
 
 import com.citics.glxt.contractchange.common.exception.ContractChangeBusinessException;
+import com.citics.glxt.contractchange.common.constants.CommonConstants;
 import com.citics.glxt.contractchange.config.ContractChangeProperties;
 import com.citics.glxt.contractchange.contractcompare.model.AnalysisLogDO;
 import com.citics.glxt.contractchange.contractcompare.model.AnalysisLogStatus;
@@ -70,19 +71,43 @@ public class ContractChangeAnalysisService {
             }
 
             long predictStart = System.nanoTime();
-            predictionService.predict(detail, analysisType, userId);
+            predictionService.predict(detail, analysisType, userId, analysisId);
             long predictCostMs = elapsedMillis(predictStart);
 
             AnalysisLogStatus finalStatus = finalStatus(detail);
+            String failureReason = finalStatus == AnalysisLogStatus.FAILED
+                    ? predictionFailureReason(detail) : null;
             AnalysisLogDO finalLog = finalLog(analysisId, detail, finalStatus,
                     elapsedMillis(totalStart), compareCostMs, predictCostMs);
+            finalLog.setErrorMessage(failureReason);
+            if (finalStatus == AnalysisLogStatus.FAILED) {
+                // 主记录只存完整成功结果的聚合编码；失败时部分编码只保留在诊断快照中。
+                finalLog.setChangeTypeCodes(null);
+            }
             finalLog.setResultJson(serialize(detail));
             persistenceService.persistSuccess(finalLog, detail, analysisType);
 
-            List<String> codes = detail.getFileChangeTypeCodes() == null
+            List<String> codes = finalStatus == AnalysisLogStatus.FAILED
+                    || detail.getFileChangeTypeCodes() == null
                     ? Collections.<String>emptyList() : detail.getFileChangeTypeCodes();
-            return new ContractChangeAnalysisResponse(analysisId, codes, finalStatus);
+            ContractChangeAnalysisResponse result =
+                    new ContractChangeAnalysisResponse(analysisId, codes, finalStatus);
+            if (finalStatus == AnalysisLogStatus.FAILED) {
+                result.setFailureReason(failureReason);
+                result.setFailureCode(failureCode(detail));
+                log.error("合同分析未完整完成, analysisId={}, analysisType={}, status={}, reason={}, elapsedMs={}",
+                        analysisId, analysisType, finalStatus, failureReason,
+                        elapsedMillis(totalStart));
+            } else {
+                log.info("合同分析完成, analysisId={}, analysisType={}, status={}, changedParagraphs={}, elapsedMs={}",
+                        analysisId, analysisType, finalStatus, changedParagraphCount(detail),
+                        elapsedMillis(totalStart));
+            }
+            return result;
         } catch (RuntimeException ex) {
+            log.error("合同分析异常终止, analysisId={}, analysisType={}, failureType={}, elapsedMs={}",
+                    analysisId, analysisType, ex.getClass().getSimpleName(),
+                    elapsedMillis(totalStart));
             markFailed(analysisId, elapsedMillis(totalStart), ex);
             throw ex;
         }
@@ -127,9 +152,84 @@ public class ContractChangeAnalysisService {
         PredictionSummary summary = detail.getPredictionSummary();
         if (summary != null && (summary.getFailedCount() > 0
                 || summary.getSkippedTooLongCount() > 0)) {
-            return AnalysisLogStatus.PARTIAL_SUCCESS;
+            return AnalysisLogStatus.FAILED;
+        }
+        if (detail.getChanges() != null) {
+            for (ClauseChange change : detail.getChanges()) {
+                if (change == null || change.getChangedParagraphs() == null) continue;
+                for (ContractCompareResponse.ChangedParagraph paragraph : change.getChangedParagraphs()) {
+                    if (paragraph == null || paragraph.getBusinessTypePrediction() == null) continue;
+                    String status = paragraph.getBusinessTypePrediction().getStatus();
+                    if ("FAILED".equals(status) || "SKIPPED_TOO_LONG".equals(status)) {
+                        return AnalysisLogStatus.FAILED;
+                    }
+                }
+            }
         }
         return AnalysisLogStatus.SUCCESS;
+    }
+
+    private String predictionFailureReason(ContractCompareResponse detail) {
+        PredictionSummary summary = detail.getPredictionSummary();
+        int failed = summary == null ? countPredictionStatus(detail, "FAILED")
+                : summary.getFailedCount();
+        int skipped = summary == null ? countPredictionStatus(detail, "SKIPPED_TOO_LONG")
+                : summary.getSkippedTooLongCount();
+        StringBuilder reason = new StringBuilder("合同比对失败：业务类型识别未全部完成");
+        if (failed > 0) reason.append("，调用或识别失败 ").append(failed).append(" 个段落");
+        if (skipped > 0) reason.append("，超长未识别 ").append(skipped).append(" 个段落");
+        String first = firstPredictionFailure(detail);
+        if (StringUtils.hasText(first)) reason.append("；示例原因：").append(first);
+        return reason.toString();
+    }
+
+    private int countPredictionStatus(ContractCompareResponse detail, String expectedStatus) {
+        int count = 0;
+        if (detail.getChanges() == null) return count;
+        for (ClauseChange change : detail.getChanges()) {
+            if (change == null || change.getChangedParagraphs() == null) continue;
+            for (ContractCompareResponse.ChangedParagraph paragraph : change.getChangedParagraphs()) {
+                if (paragraph != null && paragraph.getBusinessTypePrediction() != null
+                        && expectedStatus.equals(paragraph.getBusinessTypePrediction().getStatus())) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    private String firstPredictionFailure(ContractCompareResponse detail) {
+        if (detail.getChanges() == null) return null;
+        for (ClauseChange change : detail.getChanges()) {
+            if (change == null || change.getChangedParagraphs() == null) continue;
+            for (ContractCompareResponse.ChangedParagraph paragraph : change.getChangedParagraphs()) {
+                if (paragraph == null || paragraph.getBusinessTypePrediction() == null) continue;
+                String status = paragraph.getBusinessTypePrediction().getStatus();
+                if ("FAILED".equals(status) || "SKIPPED_TOO_LONG".equals(status)) {
+                    return paragraph.getBusinessTypePrediction().getMessage();
+                }
+            }
+        }
+        return "请查看分析记录中的段落级识别状态";
+    }
+
+    private int failureCode(ContractCompareResponse detail) {
+        boolean invalidInput = false;
+        if (detail.getChanges() == null) return CommonConstants.FAIL;
+        for (ClauseChange change : detail.getChanges()) {
+            if (change == null || change.getChangedParagraphs() == null) continue;
+            for (ContractCompareResponse.ChangedParagraph paragraph : change.getChangedParagraphs()) {
+                if (paragraph == null || paragraph.getBusinessTypePrediction() == null) continue;
+                String errorCode = paragraph.getBusinessTypePrediction().getErrorCode();
+                if ("INDEX_UNAVAILABLE".equals(errorCode)
+                        || "EMBEDDING_UNAVAILABLE".equals(errorCode)) {
+                    return CommonConstants.SERVICE_UNAVAILABLE;
+                }
+                if ("INVALID_INPUT".equals(errorCode) || "EMPTY_INPUT".equals(errorCode)
+                        || "INPUT_TOO_LONG".equals(errorCode)) invalidInput = true;
+            }
+        }
+        return invalidInput ? CommonConstants.BAD_REQUEST : CommonConstants.FAIL;
     }
 
     private int changedParagraphCount(ContractCompareResponse detail) {
@@ -155,6 +255,8 @@ public class ContractChangeAnalysisService {
     private void markFailed(String analysisId, long totalCostMs, RuntimeException failure) {
         try {
             persistenceService.markFailed(analysisId, totalCostMs, errorMessage(failure));
+            log.error("合同分析失败状态已保存, analysisId={}, failureType={}, elapsedMs={}",
+                    analysisId, failure.getClass().getSimpleName(), totalCostMs);
         } catch (RuntimeException logFailure) {
             failure.addSuppressed(logFailure);
             log.error("合同分析失败状态保存失败, analysisId={}", analysisId, logFailure);

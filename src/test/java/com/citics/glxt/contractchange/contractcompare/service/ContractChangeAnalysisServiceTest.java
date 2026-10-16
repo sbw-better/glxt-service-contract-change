@@ -9,6 +9,8 @@ import com.citics.glxt.contractchange.contractcompare.model.ContractCompareReque
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseChange;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseContext;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.BusinessTypePrediction;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangedParagraph;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.PredictionSummary;
 import com.citics.glxt.contractchange.contractcompare.service.extractor.ContractChangeExtractor;
 import com.citics.glxt.contractchange.contractcompare.service.extractor.ContractChangeExtractorRegistry;
@@ -74,7 +76,7 @@ public class ContractChangeAnalysisServiceTest {
             response.setFileChangeTypeCodes(Arrays.asList("04", "19"));
             return null;
         }).when(predictionService).predict(eq(detail), eq(AnalysisType.DOUBLE_VERSION),
-                eq("employee-001"));
+                eq("employee-001"), anyString());
 
         ContractCompareRequest request = request();
         request.setUserId(" employee-001 ");
@@ -101,19 +103,50 @@ public class ContractChangeAnalysisServiceTest {
     }
 
     @Test
-    public void shouldReturnPartialSuccessWhenAnyPredictionFailedOrWasSkipped() {
+    public void shouldReturnFailedWhenAnyPredictionFailedOrWasSkipped() {
         ContractCompareResponse detail = detailWithContext();
+        BusinessTypePrediction failure = new BusinessTypePrediction();
+        failure.setStatus("FAILED");
+        failure.setErrorCode("EMBEDDING_UNAVAILABLE");
+        failure.setMessage("Embedding服务暂不可用，请检查配置");
+        ChangedParagraph failedParagraph = new ChangedParagraph();
+        failedParagraph.setBusinessTypePrediction(failure);
+        detail.getChanges().get(0).setChangedParagraphs(Collections.singletonList(failedParagraph));
         detail.setPredictionSummary(new PredictionSummary(1, 0, 1, 0));
         detail.setFileChangeTypeCodes(Collections.singletonList("04"));
         when(extractor.extract(any(ContractCompareRequest.class))).thenReturn(detail);
 
         ContractChangeAnalysisResponse result = service.analyze(request());
 
-        assertEquals(AnalysisLogStatus.PARTIAL_SUCCESS, result.getAnalysisStatus());
+        assertEquals(AnalysisLogStatus.FAILED, result.getAnalysisStatus());
+        assertEquals(Integer.valueOf(503), result.getFailureCode());
+        assertTrue(result.getFileChangeTypeCodes().isEmpty());
+        assertTrue(result.getFailureReason().contains("调用或识别失败 1 个段落"));
         ArgumentCaptor<AnalysisLogDO> completed = ArgumentCaptor.forClass(AnalysisLogDO.class);
         verify(persistenceService).persistSuccess(completed.capture(), eq(detail),
                 eq(AnalysisType.DOUBLE_VERSION));
-        assertEquals("PARTIAL_SUCCESS", completed.getValue().getStatus());
+        assertEquals("FAILED", completed.getValue().getStatus());
+        assertEquals(result.getFailureReason(), completed.getValue().getErrorMessage());
+        assertEquals(null, completed.getValue().getChangeTypeCodes());
+    }
+
+    @Test
+    public void shouldDetectParagraphFailureWhenSummaryIsMissing() {
+        ContractCompareResponse detail = detailWithContext();
+        BusinessTypePrediction failure = new BusinessTypePrediction();
+        failure.setStatus("FAILED");
+        failure.setErrorCode("INVALID_INPUT");
+        failure.setMessage("类型识别输入不合法");
+        ChangedParagraph failedParagraph = new ChangedParagraph();
+        failedParagraph.setBusinessTypePrediction(failure);
+        detail.getChanges().get(0).setChangedParagraphs(Collections.singletonList(failedParagraph));
+        when(extractor.extract(any(ContractCompareRequest.class))).thenReturn(detail);
+
+        ContractChangeAnalysisResponse result = service.analyze(request());
+
+        assertEquals(AnalysisLogStatus.FAILED, result.getAnalysisStatus());
+        assertEquals(Integer.valueOf(400), result.getFailureCode());
+        assertTrue(result.getFailureReason().contains("调用或识别失败 1 个段落"));
     }
 
     @Test
@@ -143,7 +176,7 @@ public class ContractChangeAnalysisServiceTest {
         verify(extractor).validateRequest(any(ContractCompareRequest.class));
         verify(extractor, never()).extract(any(ContractCompareRequest.class));
         verify(predictionService, never()).predict(any(ContractCompareResponse.class),
-                any(AnalysisType.class), anyString());
+                any(AnalysisType.class), anyString(), anyString());
         verify(persistenceService, never()).markFailed(anyString(), anyLong(), anyString());
     }
 

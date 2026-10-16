@@ -181,7 +181,8 @@ public class ContractParagraphPredictionService {
                 log.warn("合同比对类型识别批次失败, batchSize={}, exception={}",
                         texts.size(), ex.getClass().getSimpleName());
                 String errorCode = ex.getCode() == CommonConstants.SERVICE_UNAVAILABLE
-                        ? "EMBEDDING_UNAVAILABLE" : "INVALID_INPUT";
+                        ? indexFailure(ex) ? "INDEX_UNAVAILABLE" : "EMBEDDING_UNAVAILABLE"
+                        : "INVALID_INPUT";
                 for (int cursor = start; cursor < end; cursor++) {
                     results.set(semanticIndexes.get(cursor),
                             LenientPrediction.failed(errorCode));
@@ -189,6 +190,11 @@ public class ContractParagraphPredictionService {
             }
         }
         return results;
+    }
+
+    private boolean indexFailure(ContractChangeBusinessException failure) {
+        String message = failure.getMessage();
+        return message != null && message.contains("历史段落向量索引");
     }
 
     /** 宽容批量预测的单项结果，不向调用方暴露底层异常。 */

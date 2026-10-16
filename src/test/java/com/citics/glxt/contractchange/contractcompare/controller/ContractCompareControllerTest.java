@@ -65,10 +65,12 @@ public class ContractCompareControllerTest {
     }
 
     @Test
-    public void shouldDescribePartialSuccessWithoutChangingSuccessfulEnvelope() throws Exception {
-        when(analysisService.analyze(any(ContractCompareRequest.class))).thenReturn(
-                new ContractChangeAnalysisResponse("analysis-2", Arrays.asList("04"),
-                        AnalysisLogStatus.PARTIAL_SUCCESS));
+    public void shouldReturnFailureEnvelopeWhenModelPredictionFails() throws Exception {
+        ContractChangeAnalysisResponse failed = new ContractChangeAnalysisResponse("analysis-2",
+                Arrays.asList("04"), AnalysisLogStatus.FAILED);
+        failed.setFailureCode(503);
+        failed.setFailureReason("合同比对失败：业务类型识别未全部完成；示例原因：Embedding服务暂不可用");
+        when(analysisService.analyze(any(ContractCompareRequest.class))).thenReturn(failed);
 
         mockMvc.perform(post("/service/contract-compare/compare")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -76,10 +78,10 @@ public class ContractCompareControllerTest {
                         "\"analysisType\":\"DOUBLE_VERSION\"," +
                         "\"oldFileGetPath\":\"/old.docx\",\"newFileGetPath\":\"/new.docx\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.message").value(
-                        "合同基础比对已完成，部分业务类型未识别"))
-                .andExpect(jsonPath("$.data.analysisStatus").value("PARTIAL_SUCCESS"));
+                .andExpect(jsonPath("$.code").value(503))
+                .andExpect(jsonPath("$.message").value(failed.getFailureReason()))
+                .andExpect(jsonPath("$.data.analysisStatus").value("FAILED"))
+                .andExpect(jsonPath("$.data.failureReason").value(failed.getFailureReason()));
     }
 
     @Test

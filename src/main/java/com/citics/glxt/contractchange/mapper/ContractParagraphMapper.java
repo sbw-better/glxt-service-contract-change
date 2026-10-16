@@ -28,7 +28,7 @@ public interface ContractParagraphMapper {
     /** 判断是否为空库；失效历史不计入有效样本容量。 */
     int countAllParagraphs();
 
-    /** 加载指定模型版本和维度下的全部有效样本。 */
+    /** 加载指定模型版本的全部有效样本；保留维度参数兼容调用方，维度由索引服务逐行校验。 */
     List<ContractParagraphDO> selectActiveParagraphs(@Param("modelVersion") String modelVersion,
                                                      @Param("vectorDim") Integer vectorDim);
 

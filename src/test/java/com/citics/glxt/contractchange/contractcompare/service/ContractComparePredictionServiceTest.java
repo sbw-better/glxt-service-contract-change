@@ -155,6 +155,8 @@ public class ContractComparePredictionServiceTest {
         service.predict(response, AnalysisType.DOUBLE_VERSION, "u1");
 
         assertEquals("FAILED", paragraph(response).getBusinessTypePrediction().getStatus());
+        assertEquals("EMBEDDING_UNAVAILABLE",
+                paragraph(response).getBusinessTypePrediction().getErrorCode());
         assertTrue(paragraph(response).getBusinessTypePrediction().getMessage()
                 .contains("Embedding服务暂不可用"));
         assertNull(paragraph(response).getBusinessTypePrediction().getMaxSimilarity());

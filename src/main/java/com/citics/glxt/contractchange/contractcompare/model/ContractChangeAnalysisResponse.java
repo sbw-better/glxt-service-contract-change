@@ -14,6 +14,10 @@ public class ContractChangeAnalysisResponse implements Serializable {
     @JsonInclude(JsonInclude.Include.ALWAYS)
     private List<String> fileChangeTypeCodes = Collections.<String>emptyList();
     private AnalysisLogStatus analysisStatus;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String failureReason;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Integer failureCode;
 
     public String getAnalysisId() {
         return analysisId;
@@ -40,6 +44,11 @@ public class ContractChangeAnalysisResponse implements Serializable {
     public void setAnalysisStatus(AnalysisLogStatus analysisStatus) {
         this.analysisStatus = analysisStatus;
     }
+
+    public String getFailureReason() { return failureReason; }
+    public void setFailureReason(String failureReason) { this.failureReason = failureReason; }
+    public Integer getFailureCode() { return failureCode; }
+    public void setFailureCode(Integer failureCode) { this.failureCode = failureCode; }
 
     public ContractChangeAnalysisResponse() {
     }

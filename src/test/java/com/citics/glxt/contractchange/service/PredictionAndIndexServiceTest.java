@@ -5,6 +5,7 @@ import com.citics.glxt.contractchange.domain.ContractParagraphDO;
 import com.citics.glxt.contractchange.embedding.EmbeddingClient;
 import com.citics.glxt.contractchange.mapper.ContractParagraphMapper;
 import com.citics.glxt.contractchange.model.EmbeddingBatchResult;
+import com.citics.glxt.contractchange.model.IndexStatusResponse;
 import com.citics.glxt.contractchange.model.PredictionResponse;
 import com.citics.glxt.contractchange.util.HashUtils;
 import com.citics.glxt.contractchange.util.VectorCodec;
@@ -220,6 +221,23 @@ public class PredictionAndIndexServiceTest {
         assertEquals("DEGRADED", brokenIndex.reload().getStatus());
         assertEquals(0, brokenIndex.status().getSampleCount());
         assertEquals(1, brokenIndex.status().getErrorCount());
+    }
+
+    @Test
+    public void shouldReportEnabledRowsWithWrongVectorDimensionAsLoadErrors() {
+        ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
+        ContractParagraphDO wrongDimension = paragraph(
+                31L, "维度错误样本", "TYPE_DIMENSION", new float[]{1F, 0F, 0F});
+        wrongDimension.setVectorDim(4);
+        when(mapper.selectActiveParagraphs("test-v1", 3))
+                .thenReturn(Collections.singletonList(wrongDimension));
+        ParagraphVectorIndexService index = new ParagraphVectorIndexService(mapper, properties);
+
+        IndexStatusResponse result = index.reload();
+
+        assertEquals("DEGRADED", result.getStatus());
+        assertEquals(0, result.getSampleCount());
+        assertEquals(1, result.getErrorCount());
     }
 
     /** 构造与查询向量 {@code [1, 0, 0]} 具有指定余弦相似度的单位向量。 */

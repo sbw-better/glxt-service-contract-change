@@ -80,12 +80,11 @@
         UPDATE TPIF_HTDLYB SET SFSX=0 WHERE MODEL_VERSION=#{modelVersion} AND SFSX=1
     </update>
 
-    <!-- 应用启动/手工重载时，只加载当前模型版本和向量维度的数据。 -->
+    <!-- 重载时读取当前模型版本的全部启用行；向量维度在Java逐行校验，以便记录具体坏行ID和原因。 -->
     <select id="selectActiveParagraphs" resultMap="ContractParagraphResultMap">
         SELECT <include refid="AllColumns"/>
         FROM TPIF_HTDLYB
         WHERE MODEL_VERSION = #{modelVersion}
-          AND VECTOR_DIM = #{vectorDim}
           AND SFSX = 1
         ORDER BY ID
     </select>

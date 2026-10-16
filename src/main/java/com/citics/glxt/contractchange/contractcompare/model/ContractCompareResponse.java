@@ -102,6 +102,9 @@ public class ContractCompareResponse implements Serializable {
         private List<com.citics.glxt.contractchange.model.PredictionReference> references;
         @JsonInclude(JsonInclude.Include.NON_NULL)
         private String message;
+        /** 机器可读失败原因，用于稳定分类和排查；成功时为空。 */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private String errorCode;
     }
 
     /** 变化段落内一处具体文字变化。 */

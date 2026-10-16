@@ -113,41 +113,50 @@ public class ParagraphVectorIndexService {
             dimension=control.getVectorDim(); modelVersion=control.getModelVersion();
             modelName=control.getModelName(); revision=control.getRevision();
         }
-        log.info("历史段落向量索引加载开始, modelVersion={}, dimension={}", modelVersion, dimension);
+        String logOperationId = operationId == null ? "startup" : operationId;
+        log.info("历史段落向量索引加载开始, operationId={}, modelVersion={}, dimension={}",
+                logOperationId, modelVersion, dimension);
         List<ContractParagraphDO> rows;
-        int filteredRecords;
         try {
             rows = mapper.selectActiveParagraphs(modelVersion, dimension);
-            filteredRecords=Math.max(0,mapper.countActiveParagraphs(modelVersion)-rows.size());
         } catch (RuntimeException ex) {
             // 首次加载失败不能伪装成正常空库；已有可用快照时仍继续保留旧快照。
             if (current.get().getSamples().isEmpty() || !snapshotCompatible(current.get())) {
                 current.set(VectorIndexSnapshot.loadFailed());
             }
-            log.error("历史段落向量索引查询失败, modelVersion={}, dimension={}, elapsedMs={}",
-                    modelVersion, dimension, System.currentTimeMillis() - started, ex);
+            log.error("历史段落向量索引查询失败, operationId={}, modelVersion={}, dimension={}, elapsedMs={}",
+                    logOperationId, modelVersion, dimension, System.currentTimeMillis() - started, ex);
             throw ex;
         }
         // samples供语义相似度遍历；hashIndex供完全相同段落快速命中。
         List<ParagraphVectorSample> samples = new ArrayList<ParagraphVectorSample>(rows.size());
         Map<String, ParagraphVectorSample> hashIndex = new HashMap<String, ParagraphVectorSample>();
-        int errors = filteredRecords;
+        int errors = 0;
         for (ContractParagraphDO row : rows) {
+            String stage = "正文与标签校验";
             try {
                 String normalized = ContractTextNormalizer.normalize(row.getOriginalText());
                 String canonicalCodes = ChangeTypeCodes.canonicalize(row.getChangeTypeCodes());
-                if (normalized.isEmpty()
-                        || normalized.length() > properties.getSearch().getMaxParagraphLength()
-                        || !Objects.equals(normalized, row.getNormalizedText())
-                        || !Objects.equals(HashUtils.sha256(normalized), row.getTextHash())
-                        || !Objects.equals(canonicalCodes, row.getChangeTypeCodes())
-                        || !Objects.equals(modelVersion, row.getModelVersion())
-                        || !Objects.equals(dimension, row.getVectorDim())
-                        || !Integer.valueOf(1).equals(row.getEnabled())
-                        || hashIndex.containsKey(row.getTextHash())) {
-                    throw new IllegalArgumentException("历史样本正文、标签、Hash或模型身份异常");
-                }
+                if (normalized.isEmpty()) throw new IllegalArgumentException("规范化正文为空");
+                if (normalized.length() > properties.getSearch().getMaxParagraphLength())
+                    throw new IllegalArgumentException("规范化正文超过当前长度上限");
+                if (!Objects.equals(normalized, row.getNormalizedText()))
+                    throw new IllegalArgumentException("规范化正文与数据库字段不一致");
+                if (!Objects.equals(HashUtils.sha256(normalized), row.getTextHash()))
+                    throw new IllegalArgumentException("正文Hash校验失败");
+                if (!Objects.equals(canonicalCodes, row.getChangeTypeCodes()))
+                    throw new IllegalArgumentException("变更类型编码不规范或无效");
+                if (!Objects.equals(modelVersion, row.getModelVersion()))
+                    throw new IllegalArgumentException("模型版本与当前索引不一致");
+                if (!Objects.equals(dimension, row.getVectorDim()))
+                    throw new IllegalArgumentException("向量维度与当前模型配置不一致");
+                if (!Integer.valueOf(1).equals(row.getEnabled()))
+                    throw new IllegalArgumentException("样本未启用");
+                if (hashIndex.containsKey(row.getTextHash()))
+                    throw new IllegalArgumentException("同一模型版本下存在重复正文Hash");
+                stage = "向量JSON解码";
                 float[] vector = VectorCodec.decode(row.getVectorData(), dimension);
+                stage = "向量归一化";
                 VectorUtils.normalize(vector);
                 ParagraphVectorSample sample = new ParagraphVectorSample(row.getId(), row.getOriginalText(),
                         row.getTextHash(),
@@ -156,7 +165,10 @@ public class ParagraphVectorIndexService {
                 hashIndex.put(sample.getTextHash(), sample);
             } catch (RuntimeException ex) {
                 errors++;
-                log.error("历史段落向量加载失败, sampleId={}, errorType={}", row.getId(), ex.getClass().getSimpleName());
+                // 只记录样本主键、校验阶段和异常说明，不记录合同正文或向量CLOB。
+                log.error("历史段落向量加载失败, operationId={}, sampleId={}, stage={}, errorType={}, reason={}",
+                        logOperationId, row.getId(), stage, ex.getClass().getSimpleName(),
+                        ex.getMessage());
             }
         }
         String status;
@@ -176,8 +188,9 @@ public class ParagraphVectorIndexService {
         // 新索引完整建好后再整体替换，切换动作很短，不会影响正在执行的预测。
         current.set(replacement);
         if (expectedSize!=null && store!=null) store.complete(operationId);
-        log.info("历史段落向量索引加载完成, status={}, dbRowCount={}, sampleCount={}, errorCount={}, elapsedMs={}",
-                status, rows.size(), samples.size(), errors, System.currentTimeMillis() - started);
+        log.info("历史段落向量索引加载完成, operationId={}, status={}, dbRowCount={}, sampleCount={}, errorCount={}, elapsedMs={}",
+                logOperationId, status, rows.size(), samples.size(), errors,
+                System.currentTimeMillis() - started);
         return status(replacement);
     }
 

@@ -40,22 +40,34 @@ public class ContractComparePredictionService {
     }
 
     public void predict(ContractCompareResponse response, AnalysisType analysisType, String userId) {
+        predict(response, analysisType, userId, "n/a");
+    }
+
+    public void predict(ContractCompareResponse response, AnalysisType analysisType, String userId,
+                        String analysisId) {
         long started = System.currentTimeMillis();
-        List<Target> targets = targets(response);
+        List<Target> targets = targets(response, analysisType);
         Map<String, List<Target>> primaryGroups = new LinkedHashMap<String, List<Target>>();
         for (Target target : targets) {
             String base = ContractTextNormalizer.normalize(target.baseText);
             if (base.isEmpty()) {
+                log.error("段落业务类型识别输入为空, analysisId={}, paragraphId={}, clauseNo={}, reason={}",
+                        analysisId, target.paragraphId, target.change.getClauseNo(),
+                        "没有可用于类型识别的段落内容");
                 target.paragraph.setBusinessTypePrediction(failed(target.primaryScope,
-                        "没有可用于类型识别的段落内容", "FAILED", false, base));
+                        "没有可用于类型识别的段落内容", "FAILED", false, base, "EMPTY_INPUT"));
             } else if (base.length() > maxLength()) {
+                log.error("段落业务类型识别未执行, analysisId={}, paragraphId={}, clauseNo={}, textLength={}, maxLength={}, reason={}",
+                        analysisId, target.paragraphId, target.change.getClauseNo(),
+                        base.length(), maxLength(), "段落超过类型识别字符上限");
                 target.paragraph.setBusinessTypePrediction(failed(target.primaryScope,
-                        "段落超过类型识别字符上限", "SKIPPED_TOO_LONG", false, base));
+                        "段落超过类型识别字符上限", "SKIPPED_TOO_LONG", false, base,
+                        "INPUT_TOO_LONG"));
             } else {
                 addGroup(primaryGroups, base, target);
             }
         }
-        applyPredictions(primaryGroups, userId, false);
+        applyPredictions(primaryGroups, userId, false, analysisId);
 
         Map<String, List<Target>> fallbackGroups = new LinkedHashMap<String, List<Target>>();
         for (Target target : targets) {
@@ -69,7 +81,7 @@ public class ContractComparePredictionService {
                 addGroup(fallbackGroups, context, target);
             }
         }
-        applyPredictions(fallbackGroups, userId, true);
+        applyPredictions(fallbackGroups, userId, true, analysisId);
 
         int matched = 0;
         int noMatch = 0;
@@ -101,8 +113,8 @@ public class ContractComparePredictionService {
             ensureWarnings(response).add("有" + skippedTooLong
                     + "个变化段落超过类型识别字符上限，未调用模型，请人工复核");
         }
-        log.info("合同比对业务类型识别完成, analysisType={}, total={}, matched={}, contextFallbackMatched={}, noMatch={}, failed={}, skippedTooLong={}, elapsedMs={}",
-                analysisType, targets.size(), matched, fallbackMatched, noMatch, failed,
+        log.info("合同比对业务类型识别完成, analysisId={}, analysisType={}, total={}, matched={}, contextFallbackMatched={}, noMatch={}, failed={}, skippedTooLong={}, elapsedMs={}",
+                analysisId, analysisType, targets.size(), matched, fallbackMatched, noMatch, failed,
                 skippedTooLong,
                 System.currentTimeMillis() - started);
     }
@@ -129,7 +141,7 @@ public class ContractComparePredictionService {
     }
 
     private void applyPredictions(Map<String, List<Target>> groups, String userId,
-                                  boolean contextFallback) {
+                                  boolean contextFallback, String analysisId) {
         if (groups.isEmpty()) {
             return;
         }
@@ -139,10 +151,13 @@ public class ContractComparePredictionService {
             LenientPrediction item = results.get(index);
             for (Target target : groups.get(texts.get(index))) {
                 if (!item.isSuccess()) {
+                    log.error("段落业务类型识别调用失败, analysisId={}, paragraphId={}, clauseNo={}, errorCode={}, reason={}",
+                            analysisId, target.paragraphId, target.change.getClauseNo(),
+                            item.getErrorCode(), predictionFailureMessage(item.getErrorCode()));
                     target.paragraph.setBusinessTypePrediction(failed(
                             contextFallback ? target.contextScope : target.primaryScope,
                             predictionFailureMessage(item.getErrorCode()), "FAILED",
-                            contextFallback, texts.get(index)));
+                            contextFallback, texts.get(index), item.getErrorCode()));
                     continue;
                 }
                 PredictionResponse prediction = item.getPrediction();
@@ -194,7 +209,8 @@ public class ContractComparePredictionService {
     }
 
     private BusinessTypePrediction failed(String scope, String message, String status,
-                                           boolean fallbackUsed, String predictionText) {
+                                           boolean fallbackUsed, String predictionText,
+                                           String errorCode) {
         BusinessTypePrediction result = new BusinessTypePrediction();
         result.setStatus(status);
         result.setInputScope(scope);
@@ -204,22 +220,26 @@ public class ContractComparePredictionService {
         result.setChangeTypes(Collections.<ChangeTypePrediction>emptyList());
         result.setReferences(Collections.emptyList());
         result.setMessage(message);
+        result.setErrorCode(errorCode);
         return result;
     }
 
-    private List<Target> targets(ContractCompareResponse response) {
+    private List<Target> targets(ContractCompareResponse response, AnalysisType analysisType) {
         List<Target> result = new ArrayList<Target>();
         if (response.getChanges() == null) {
             return result;
         }
         for (ClauseChange change : response.getChanges()) {
+            if (change == null) continue;
             if (change.getChangedParagraphs() == null) {
                 continue;
             }
             for (ChangedParagraph paragraph : change.getChangedParagraphs()) {
+                if (paragraph == null) continue;
                 boolean oldSide = paragraph.getParagraphChangeType() == ChangeType.DELETED;
                 String text = oldSide ? paragraph.getOldContent() : paragraph.getNewContent();
                 result.add(new Target(change, paragraph, text,
+                        analysisType.name() + "-" + (result.size() + 1),
                         oldSide ? "OLD_PARAGRAPH" : "NEW_PARAGRAPH",
                         oldSide ? "OLD_CONTEXT" : "NEW_CONTEXT"));
             }
@@ -339,14 +359,17 @@ public class ContractComparePredictionService {
         private final String baseText;
         private final String primaryScope;
         private final String contextScope;
+        private final String paragraphId;
 
         private Target(ClauseChange change, ChangedParagraph paragraph, String baseText,
+                       String paragraphId,
                        String primaryScope, String contextScope) {
             this.change = change;
             this.paragraph = paragraph;
             this.baseText = baseText;
             this.primaryScope = primaryScope;
             this.contextScope = contextScope;
+            this.paragraphId = paragraphId;
         }
     }
 }

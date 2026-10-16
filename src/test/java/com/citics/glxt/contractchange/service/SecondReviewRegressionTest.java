@@ -36,8 +36,8 @@ public class SecondReviewRegressionTest {
 
     @Test public void wrongDimensionRowsMustNotBeReportedAsNormalEmptyLibrary() {
         ContractParagraphMapper mapper=mock(ContractParagraphMapper.class);
-        when(mapper.selectActiveParagraphs("v1",3)).thenReturn(Collections.emptyList());
-        when(mapper.countActiveParagraphs("v1")).thenReturn(1);
+        ContractParagraphDO wrongDimension=row(); wrongDimension.setVectorDim(2);
+        when(mapper.selectActiveParagraphs("v1",3)).thenReturn(Collections.singletonList(wrongDimension));
         ParagraphVectorIndexService index=new ParagraphVectorIndexService(mapper,properties());
         index.reload();
         assertEquals("DEGRADED",index.status().getStatus());
