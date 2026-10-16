@@ -123,11 +123,18 @@ public class SampleLibraryRebuildTest {
         expectCode(409,() -> service.importExcel(excel("新增条款","71"),"u"));
         verifyZeroInteractions(embedding,persistence);
     }
-    @Test public void corruptedHistoricalHashRejected() throws Exception {
-        ContractParagraphDO bad=row("历史条款","49","old-v1"); bad.setTextHash("wrong");
+    @Test public void historicalDerivedTextAndHashRecomputedFromOriginal() throws Exception {
+        ContractParagraphDO bad=row("历史条款","49","old-v1");
+        bad.setNormalizedText("stale"); bad.setTextHash("wrong");
         when(paragraphs.selectAllActiveParagraphs()).thenReturn(Collections.singletonList(bad));
-        expectCode(409,() -> service.importExcel(excel("新增条款","71"),"u"));
-        verifyZeroInteractions(embedding,persistence);
+        service.importExcel(excel("新增条款","71"),"u");
+        ArgumentCaptor<List<ContractParagraphDO>> saved=ArgumentCaptor.forClass(List.class);
+        verify(persistence).saveAll(saved.capture());
+        ContractParagraphDO historical=saved.getValue().stream()
+                .filter(value -> "历史条款".equals(value.getOriginalText())).findFirst().get();
+        assertEquals(ContractTextNormalizer.normalize("历史条款"),historical.getNormalizedText());
+        assertEquals(HashUtils.sha256(historical.getNormalizedText()),historical.getTextHash());
+        verify(embedding,times(2)).embed(anyList(),anyString());
     }
     @Test public void mergedCapacityIncludesHistoryNotPhysicalRows() throws Exception {
         properties.getImportConfig().setMaxTotalSamples(1);
@@ -140,6 +147,20 @@ public class SampleLibraryRebuildTest {
         expectCode(503,() -> service.importExcel(excel("新增条款","71"),"u"));
         assertEquals("IDLE",control.getOperationStatus()); assertEquals("old-v1",control.getModelVersion());
         assertNull(control.getOperationId());
+        verify(persistence,never()).saveAll(anyList());
+    }
+    @Test public void releaseFailureDoesNotMaskOriginalRebuildFailure() throws Exception {
+        when(embedding.embed(anyList(),anyString())).thenReturn(new EmbeddingBatchResult(3,
+                Collections.singletonList(new float[]{1,0,0}))).thenThrow(new IllegalStateException("model failed"));
+        doThrow(new IllegalStateException("release failed")).when(library).release(anyString());
+        try {
+            service.importExcel(excel("新增条款","71"),"u");
+            fail("应保留原始模型失败");
+        } catch (ContractChangeBusinessException ex) {
+            assertEquals(503,ex.getCode());
+            assertTrue(ex.getMessage().contains("模型向量化"));
+            assertFalse(ex.getMessage().contains("release failed"));
+        }
         verify(persistence,never()).saveAll(anyList());
     }
     @Test public void indexFailureKeepsCommittedStateAndReloadDoesNotEmbedAgain() throws Exception {

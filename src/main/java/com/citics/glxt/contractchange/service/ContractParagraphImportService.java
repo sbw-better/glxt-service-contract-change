@@ -20,6 +20,7 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.beans.BeanUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -96,10 +97,19 @@ public class ContractParagraphImportService {
 
     ImportResponse importPrepared(ParsedExcel parsed, String userId,
             com.citics.glxt.contractchange.domain.SampleLibraryControlDO source, SampleLibraryStore store) {
+        ContractChangeProperties.Embedding snapshot=new ContractChangeProperties.Embedding();
+        BeanUtils.copyProperties(properties.getEmbedding(),snapshot);
+        return importPrepared(parsed,userId,source,store,snapshot);
+    }
+
+    ImportResponse importPrepared(ParsedExcel parsed,String userId,
+            com.citics.glxt.contractchange.domain.SampleLibraryControlDO source,SampleLibraryStore store,
+            ContractChangeProperties.Embedding embeddingSnapshot) {
         long started = System.currentTimeMillis();
+        String operationId=source==null ? "legacy" : source.getOperationId();
         if (!parsed.errors.isEmpty()) {
-            log.warn("历史样本导入校验失败, totalRows={}, skipped={}, errorCount={}, elapsedMs={}",
-                    parsed.totalRows, parsed.skipped, parsed.errors.size(), System.currentTimeMillis() - started);
+            log.warn("历史样本导入校验失败, operationId={}, totalRows={}, skipped={}, errorCount={}, elapsedMs={}",
+                    operationId,parsed.totalRows, parsed.skipped, parsed.errors.size(), System.currentTimeMillis() - started);
             return failed(parsed);
         }
 
@@ -107,12 +117,12 @@ public class ContractParagraphImportService {
         List<PreparedRow> updateRows = new ArrayList<PreparedRow>();
         int skipped = parsed.skipped;
         int reactivated = 0;
-        Map<String, ContractParagraphDO> existingByHash = loadExisting(parsed.rows);
+        Map<String, ContractParagraphDO> existingByHash = loadExisting(parsed.rows,embeddingSnapshot);
         for (PreparedRow row : parsed.rows.values()) {
             ContractParagraphDO existing = existingByHash.get(row.textHash);
             if (existing == null) {
                 newRows.add(row);
-            } else if (isCurrentActiveRecord(existing, row.changeTypeCodes)) {
+            } else if (isCurrentActiveRecord(existing, row.changeTypeCodes,embeddingSnapshot)) {
                 skipped++;
             } else if (existing.getChangeTypeCodes().equals(row.changeTypeCodes)) {
                 // 查重已限定同版本；这里只重新启用同标签停用记录。
@@ -121,48 +131,55 @@ public class ContractParagraphImportService {
                 if (!Integer.valueOf(1).equals(existing.getEnabled())) reactivated++;
             } else {
                 // 只记录 Hash，不在日志中暴露合同正文。
-                log.warn("历史样本导入发现数据库标签冲突, row={}, textHash={}",
-                        row.rowNumber, row.textHash);
+                log.warn("历史样本导入发现数据库标签冲突, operationId={}, row={}, textHash={}",
+                        operationId,row.rowNumber, row.textHash);
                 parsed.errors.add(new ImportErrorItem(row.rowNumber,
                         "数据库已存在相同段落，但变更类型编码不同"));
             }
         }
         if (!parsed.errors.isEmpty()) {
-            log.warn("历史样本导入冲突终止, totalRows={}, skipped={}, conflictCount={}, elapsedMs={}",
-                    parsed.totalRows, skipped, parsed.errors.size(), System.currentTimeMillis() - started);
+            log.warn("历史样本导入冲突终止, operationId={}, totalRows={}, skipped={}, conflictCount={}, elapsedMs={}",
+                    operationId,parsed.totalRows, skipped, parsed.errors.size(), System.currentTimeMillis() - started);
             return new ImportResponse(false, parsed.totalRows, 0, 0, skipped, false, parsed.errors);
         }
 
-        enforceTotalSampleLimit(newRows.size() + reactivated);
+        enforceTotalSampleLimit(newRows.size() + reactivated,embeddingSnapshot);
         List<PreparedRow> changedRows = new ArrayList<PreparedRow>(newRows.size() + updateRows.size());
         changedRows.addAll(newRows);
         changedRows.addAll(updateRows);
-        log.info("历史样本导入准备向量化, newCount={}, updateCount={}, skipped={}",
-                newRows.size(), updateRows.size(), skipped);
+        log.info("历史样本导入准备向量化, operationId={}, newCount={}, updateCount={}, skipped={}, modelVersion={}, dimension={}",
+                operationId,newRows.size(), updateRows.size(), skipped,embeddingSnapshot.getModelVersion(),embeddingSnapshot.getDimension());
         // 先生成本批全部向量。这里失败时数据库还没有开始写入，不会留下不完整数据。
-        embed(changedRows, userId);
+        embed(changedRows, userId, operationId, embeddingSnapshot);
+        assertEmbeddingIdentity(embeddingSnapshot,operationId,"提交前");
         List<ContractParagraphDO> paragraphs = new ArrayList<ContractParagraphDO>(changedRows.size());
         for (PreparedRow row : changedRows) {
-            paragraphs.add(toDO(row));
+            paragraphs.add(toDO(row,embeddingSnapshot));
         }
         // saveAll使用一个完整事务；方法正常返回，说明本批数据库操作已经全部提交。
+        log.info("历史样本增量数据库提交开始, operationId={}, insertCount={}, updateCount={}",
+                operationId,newRows.size(),updateRows.size());
         if (store != null) {
-            store.commitIncremental(paragraphs, source, properties.getEmbedding());
+            store.commitIncremental(paragraphs, source, embeddingSnapshot);
         } else if (!paragraphs.isEmpty()) {
             persistenceService.saveAll(paragraphs);
         }
+        log.info("历史样本增量数据库提交完成, operationId={}, persistedCount={}",operationId,paragraphs.size());
 
         boolean indexReloaded = true;
         try {
             // 数据提交后重新读取Oracle，让刚导入的样本可以立即参与后续预测。
+            log.info("历史样本增量索引刷新开始, operationId={}",operationId);
             if (source == null) indexService.reload();
             else indexService.reloadForOperation(source.getOperationId(), null);
+            log.info("历史样本增量索引刷新完成, operationId={}",operationId);
         } catch (RuntimeException ex) {
             indexReloaded = false;
-            log.error("历史样本已入库，但内存索引刷新失败", ex);
+            log.error("历史样本已入库，但内存索引刷新失败, operationId={}, exceptionType={}",
+                    operationId,ex.getClass().getSimpleName());
         }
-        log.info("历史样本导入完成, totalRows={}, inserted={}, updated={}, skipped={}, indexReloaded={}, elapsedMs={}",
-                parsed.totalRows, newRows.size(), updateRows.size(), skipped, indexReloaded,
+        log.info("历史样本导入完成, operationId={}, totalRows={}, inserted={}, updated={}, skipped={}, indexReloaded={}, elapsedMs={}",
+                operationId,parsed.totalRows, newRows.size(), updateRows.size(), skipped, indexReloaded,
                 System.currentTimeMillis() - started);
         return new ImportResponse(true, parsed.totalRows, newRows.size(), updateRows.size(), skipped,
                 indexReloaded, Collections.<ImportErrorItem>emptyList());
@@ -236,33 +253,64 @@ public class ContractParagraphImportService {
 
     /** 按配置的批量大小生成全部待新增样本向量，任一批次失败即终止导入。 */
     void embed(List<PreparedRow> rows, String userId) {
-        int batchSize = Math.max(1, properties.getEmbedding().getBatchSize());
+        ContractChangeProperties.Embedding snapshot=new ContractChangeProperties.Embedding();
+        BeanUtils.copyProperties(properties.getEmbedding(),snapshot);
+        embed(rows,userId,"legacy",snapshot);
+    }
+
+    void embed(List<PreparedRow> rows,String userId,String operationId,
+               ContractChangeProperties.Embedding snapshot) {
+        int batchSize = Math.max(1, snapshot.getBatchSize());
         for (int start = 0; start < rows.size(); start += batchSize) {
             int end = Math.min(start + batchSize, rows.size());
-            log.debug("历史样本分批向量化, batchStart={}, batchEnd={}, total={}", start, end, rows.size());
+            assertEmbeddingIdentity(snapshot,operationId,"batch="+(start/batchSize+1)+"开始前");
+            long batchStarted=System.currentTimeMillis();
+            log.info("历史样本向量化批次开始, operationId={}, batch={}, batchCount={}, batchSize={}, totalSamples={}, modelVersion={}, dimension={}",
+                    operationId,start/batchSize+1,(rows.size()+batchSize-1)/batchSize,end-start,rows.size(),
+                    snapshot.getModelVersion(),snapshot.getDimension());
             List<String> texts = new ArrayList<String>(end - start);
             for (int i = start; i < end; i++) {
                 texts.add(rows.get(i).normalizedText);
             }
-            EmbeddingBatchResult result = embeddingClient.embed(texts, userId);
-            if (result == null || result.getVectors() == null || result.getDimension() != properties.getEmbedding().getDimension()
+            EmbeddingBatchResult result;
+            try {
+                result=embeddingClient.embed(texts,userId);
+            } catch (RuntimeException ex) {
+                log.error("历史样本向量化批次失败, operationId={}, batch={}, batchSize={}, exceptionType={}, elapsedMs={}",
+                        operationId,start/batchSize+1,end-start,ex.getClass().getSimpleName(),System.currentTimeMillis()-batchStarted);
+                throw ex;
+            }
+            assertEmbeddingIdentity(snapshot,operationId,"batch="+(start/batchSize+1)+"返回后");
+            if (result == null || result.getVectors() == null || result.getDimension() != snapshot.getDimension()
                     || result.getVectors().size() != texts.size()) {
+                log.error("历史样本向量化批次返回结构无效, operationId={}, batch={}, expectedCount={}, actualCount={}, expectedDimension={}, actualDimension={}",
+                        operationId,start/batchSize+1,texts.size(),result==null || result.getVectors()==null ? null : result.getVectors().size(),
+                        snapshot.getDimension(),result==null ? null : result.getDimension());
                 throw new ContractChangeBusinessException("Embedding批量结果不完整");
             }
             for (int i = start; i < end; i++) {
                 float[] vector = result.getVectors().get(i - start);
-                if (vector == null || vector.length != properties.getEmbedding().getDimension())
+                if (vector == null || vector.length != snapshot.getDimension()) {
+                    log.error("历史样本向量维度校验失败, operationId={}, batch={}, vectorOffset={}, expectedDimension={}, actualDimension={}",
+                            operationId,start/batchSize+1,i-start,snapshot.getDimension(),vector==null ? null : vector.length);
                     throw new ContractChangeBusinessException("Embedding向量维度不正确");
+                }
                 VectorCodec.encode(vector); // 在归一化前检查所有数字有限。
                 vector = vector.clone();
                 com.citics.glxt.contractchange.util.VectorUtils.normalize(vector);
                 rows.get(i).vector = vector;
             }
+            log.info("历史样本向量化批次完成, operationId={}, batch={}, batchSize={}, elapsedMs={}",
+                    operationId,start/batchSize+1,end-start,System.currentTimeMillis()-batchStarted);
         }
     }
 
     /** 将校验完成的临时行转换为可持久化对象，并把向量编码为CLOB JSON数字数组。 */
     ContractParagraphDO toDO(PreparedRow row) {
+        return toDO(row,properties.getEmbedding());
+    }
+
+    ContractParagraphDO toDO(PreparedRow row,ContractChangeProperties.Embedding embedding) {
         ContractParagraphDO value = new ContractParagraphDO();
         value.setId(row.existingId);
         value.setOriginalText(row.originalText);
@@ -270,10 +318,22 @@ public class ContractParagraphImportService {
         value.setTextHash(row.textHash);
         value.setChangeTypeCodes(row.changeTypeCodes);
         value.setVectorData(VectorCodec.encode(row.vector));
-        value.setVectorDim(properties.getEmbedding().getDimension());
-        value.setModelVersion(properties.getEmbedding().getModelVersion());
+        value.setVectorDim(embedding.getDimension());
+        value.setModelVersion(embedding.getModelVersion());
         value.setEnabled(1);
         return value;
+    }
+
+    private void assertEmbeddingIdentity(ContractChangeProperties.Embedding snapshot,String operationId,String stage) {
+        ContractChangeProperties.Embedding current=properties.getEmbedding();
+        if (!java.util.Objects.equals(snapshot.getUrl(),current.getUrl())
+                || !java.util.Objects.equals(snapshot.getModelName(),current.getModelName())
+                || !java.util.Objects.equals(snapshot.getModelVersion(),current.getModelVersion())
+                || snapshot.getDimension()!=current.getDimension()) {
+            log.error("样本导入期间Embedding配置发生变化, operationId={}, stage={}, expectedModelVersion={}, actualModelVersion={}, expectedDimension={}, actualDimension={}",
+                    operationId,stage,snapshot.getModelVersion(),current.getModelVersion(),snapshot.getDimension(),current.getDimension());
+            throw new ContractChangeBusinessException(409,"导入期间Embedding模型或接口配置发生变化，请使用同一配置重新导入");
+        }
     }
 
     /** 同包测试输入校验；生产导入由主备SFTP加载，并独立校验20MB上限。 */
@@ -309,18 +369,19 @@ public class ContractParagraphImportService {
     }
 
     /** 分批查询全部Hash，避免逐行访问Oracle，并规避Oracle IN列表长度限制。 */
-    private Map<String, ContractParagraphDO> loadExisting(Map<String, PreparedRow> rows) {
+    private Map<String, ContractParagraphDO> loadExisting(Map<String, PreparedRow> rows,
+                                                           ContractChangeProperties.Embedding embedding) {
         List<String> hashes = new ArrayList<String>(rows.keySet());
         Map<String, ContractParagraphDO> result = new HashMap<String, ContractParagraphDO>();
         final int queryBatchSize = 500;
         for (int start = 0; start < hashes.size(); start += queryBatchSize) {
             int end = Math.min(start + queryBatchSize, hashes.size());
             List<ContractParagraphDO> existing = mapper.selectByTextHashes(hashes.subList(start, end),
-                    properties.getEmbedding().getModelVersion());
+                    embedding.getModelVersion());
             for (ContractParagraphDO paragraph : existing) {
                 if (paragraph == null
-                        || !properties.getEmbedding().getModelVersion().equals(paragraph.getModelVersion())
-                        || !Integer.valueOf(properties.getEmbedding().getDimension()).equals(paragraph.getVectorDim())
+                        || !embedding.getModelVersion().equals(paragraph.getModelVersion())
+                        || !Integer.valueOf(embedding.getDimension()).equals(paragraph.getVectorDim())
                         || !(Integer.valueOf(0).equals(paragraph.getEnabled()) || Integer.valueOf(1).equals(paragraph.getEnabled()))
                         || !hashes.contains(paragraph.getTextHash())
                         || result.containsKey(paragraph.getTextHash())) {
@@ -340,19 +401,20 @@ public class ContractParagraphImportService {
     }
 
     /** 当前模型、当前维度、有效且标签相同才属于可幂等跳过的完整重复记录。 */
-    private boolean isCurrentActiveRecord(ContractParagraphDO existing, String changeTypeCodes) {
+    private boolean isCurrentActiveRecord(ContractParagraphDO existing,String changeTypeCodes,
+                                          ContractChangeProperties.Embedding embedding) {
         return Integer.valueOf(1).equals(existing.getEnabled())
                 && changeTypeCodes.equals(existing.getChangeTypeCodes())
-                && properties.getEmbedding().getModelVersion().equals(existing.getModelVersion())
-                && Integer.valueOf(properties.getEmbedding().getDimension()).equals(existing.getVectorDim());
+                && embedding.getModelVersion().equals(existing.getModelVersion())
+                && Integer.valueOf(embedding.getDimension()).equals(existing.getVectorDim());
     }
 
     /** 新增和停用重新启用均占有效容量，历史失效版本不占容量。 */
-    private void enforceTotalSampleLimit(int newCount) {
+    private void enforceTotalSampleLimit(int newCount,ContractChangeProperties.Embedding embedding) {
         if (newCount == 0) {
             return;
         }
-        int currentCount = mapper.countActiveParagraphs(properties.getEmbedding().getModelVersion());
+        int currentCount = mapper.countActiveParagraphs(embedding.getModelVersion());
         int limit = properties.getImportConfig().getMaxTotalSamples();
         if ((long) currentCount + newCount > limit) {
             throw new ContractChangeBusinessException("历史样本总数不能超过" + limit

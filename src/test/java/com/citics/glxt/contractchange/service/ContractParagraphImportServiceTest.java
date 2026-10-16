@@ -1,6 +1,7 @@
 package com.citics.glxt.contractchange.service;
 
 import com.citics.glxt.contractchange.config.ContractChangeProperties;
+import com.citics.glxt.contractchange.common.exception.ContractChangeBusinessException;
 import com.citics.glxt.contractchange.domain.ContractParagraphDO;
 import com.citics.glxt.contractchange.embedding.EmbeddingClient;
 import com.citics.glxt.contractchange.mapper.ContractParagraphMapper;
@@ -21,6 +22,7 @@ import java.util.Collections;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -75,6 +77,25 @@ public class ContractParagraphImportServiceTest {
         ContractParagraphDO saved = captor.getValue().get(0);
         assertEquals("TYPE01;TYPE02", saved.getChangeTypeCodes());
         assertEquals("[1.0,0.0,0.0]", saved.getVectorData());
+    }
+
+    @Test
+    public void shouldAbortBeforePersistenceWhenModelConfigurationChangesDuringEmbedding() throws Exception {
+        when(mapper.selectByTextHashes(anyList(), anyString())).thenReturn(Collections.emptyList());
+        when(mapper.countActiveParagraphs(anyString())).thenReturn(0);
+        when(embeddingClient.embed(anyList(), anyString())).thenAnswer(invocation -> {
+            properties.getEmbedding().setModelVersion("changed-v2");
+            return new EmbeddingBatchResult(3,Collections.singletonList(new float[]{1F,0F,0F}));
+        });
+
+        try {
+            service.importExcel(excel(new String[][]{{"历史段落A", "TYPE01"}}),"test-user");
+            fail("配置变化时必须终止导入");
+        } catch (ContractChangeBusinessException expected) {
+            assertEquals(409,expected.getCode());
+        }
+
+        verify(persistenceService,never()).saveAll(anyList());
     }
 
     /** 停用记录使用Excel重新导入时更新原行并重新启用，不触发唯一Hash冲突。 */
