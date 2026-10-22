@@ -1,0 +1,606 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.citics.glxt.contractchange.contractquery.mapper.TpifCpwdkMapper">
+  <resultMap id="BaseResultMap" type="com.citics.glxt.contractchange.contractquery.domain.TpifCpwdk">
+    <id column="ID" jdbcType="NUMERIC" property="id" />
+    <result column="BM" jdbcType="VARCHAR" property="bm" />
+    <result column="WBID" jdbcType="VARCHAR" property="wbid" />
+    <result column="GLLX" jdbcType="NUMERIC" property="gllx" />
+    <result column="GLID" jdbcType="NUMERIC" property="glid" />
+    <result column="WDFL" jdbcType="NUMERIC" property="wdfl" />
+    <result column="CPWDMX" jdbcType="NUMERIC" property="cpwdmx" />
+    <result column="WDMC" jdbcType="VARCHAR" property="wdmc" />
+    <result column="FJ" jdbcType="VARCHAR" property="fj" />
+    <result column="WJDX" jdbcType="NUMERIC" property="wjdx" />
+    <result column="WDYSTJ" jdbcType="NUMERIC" property="wdystj" />
+    <result column="BBH" jdbcType="VARCHAR" property="bbh" />
+    <result column="QSRQ" jdbcType="NUMERIC" property="qsrq" />
+    <result column="SXRQ" jdbcType="NUMERIC" property="sxrq" />
+    <result column="JZSXRQ" jdbcType="NUMERIC" property="jzsxrq" />
+    <result column="SCRQ" jdbcType="NUMERIC" property="scrq" />
+    <result column="XGRQ" jdbcType="NUMERIC" property="xgrq" />
+    <result column="SCRY" jdbcType="NUMERIC" property="scry" />
+    <result column="ZHXGR" jdbcType="NUMERIC" property="zhxgr" />
+    <result column="SFYX" jdbcType="NUMERIC" property="sfyx" />
+    <result column="WDGS" jdbcType="NUMERIC" property="wdgs" />
+    <result column="XZWDSJ" jdbcType="TIMESTAMP" property="xzwdsj" />
+    <result column="HTBH" jdbcType="VARCHAR" property="htbh" />
+    <result column="BZ" jdbcType="VARCHAR" property="bz" />
+    <result column="WDLY" jdbcType="NUMERIC" property="wdly" />
+    <result column="MBID" jdbcType="NUMERIC" property="mbid" />
+    <result column="TZXZ" jdbcType="VARCHAR" property="tzxz" />
+    <result column="TZYH" jdbcType="VARCHAR" property="tzyh" />
+    <result column="CJINSTID" jdbcType="NUMERIC" property="cjinstid" />
+    <result column="FGINSTID" jdbcType="NUMERIC" property="fginstid" />
+    <result column="GLJG" jdbcType="NUMERIC" property="gljg" />
+    <result column="PBBH" jdbcType="NUMERIC" property="pbbh" />
+    <result column="SBBH" jdbcType="NUMERIC" property="sbbh" />
+    <result column="LCLX" jdbcType="NUMERIC" property="lclx" />
+    <result column="YWLX" jdbcType="VARCHAR" property="ywlx" />
+    <result column="WDSFDWZS" jdbcType="NUMERIC" property="wdsfdwzs" />
+    <result column="LOGID" jdbcType="NUMERIC" property="logid" />
+    <result column="TZBD" jdbcType="NUMERIC" property="tzbd" />
+    <result column="PXRQ" jdbcType="NUMERIC" property="pxrq" />
+  </resultMap>
+  <resultMap extends="BaseResultMap" id="ResultMapWithBLOBs" type="com.citics.glxt.contractchange.contractquery.domain.TpifCpwdk">
+    <result column="WDMS" jdbcType="CLOB" property="wdms" />
+    <result column="WDMSDYY" jdbcType="CLOB" property="wdmsdyy" />
+  </resultMap>
+  <sql id="Base_Column_List">
+    ID, BM, WBID, GLLX, GLID, WDFL, CPWDMX, WDMC, FJ, WJDX, WDYSTJ, BBH, QSRQ, SXRQ, 
+    JZSXRQ, SCRQ, XGRQ, SCRY, ZHXGR, SFYX, WDGS, XZWDSJ, HTBH, BZ, WDLY, MBID, TZXZ, 
+    TZYH, CJINSTID, FGINSTID, GLJG, PBBH, SBBH, LCLX, YWLX, WDSFDWZS, LOGID, TZBD, PXRQ
+  </sql>
+  <sql id="Blob_Column_List">
+    WDMS, WDMSDYY
+  </sql>
+  <select id="selectByPrimaryKey" parameterType="java.lang.Long" resultMap="ResultMapWithBLOBs">
+    select 
+    <include refid="Base_Column_List" />
+    ,
+    <include refid="Blob_Column_List" />
+    from TPIF_CPWDK
+    where ID = #{id,jdbcType=NUMERIC}
+  </select>
+  <delete id="deleteByPrimaryKey" parameterType="java.lang.Long">
+    delete from TPIF_CPWDK
+    where ID = #{id,jdbcType=NUMERIC}
+  </delete>
+  <insert id="insert" parameterType="com.citics.glxt.contractchange.contractquery.domain.TpifCpwdk">
+    insert into TPIF_CPWDK (ID, BM, WBID, 
+      GLLX, GLID, WDFL, CPWDMX, 
+      WDMC, FJ, WJDX, WDYSTJ, 
+      BBH, QSRQ, SXRQ, JZSXRQ, 
+      SCRQ, XGRQ, SCRY, ZHXGR, 
+      SFYX, WDGS, XZWDSJ, 
+      HTBH, BZ, WDLY, MBID, 
+      TZXZ, TZYH, CJINSTID, 
+      FGINSTID, GLJG, PBBH, 
+      SBBH, LCLX, YWLX, WDSFDWZS, 
+      LOGID, TZBD, PXRQ, 
+      WDMS, WDMSDYY)
+    values (#{id,jdbcType=NUMERIC}, #{bm,jdbcType=VARCHAR}, #{wbid,jdbcType=VARCHAR}, 
+      #{gllx,jdbcType=NUMERIC}, #{glid,jdbcType=NUMERIC}, #{wdfl,jdbcType=NUMERIC}, #{cpwdmx,jdbcType=NUMERIC}, 
+      #{wdmc,jdbcType=VARCHAR}, #{fj,jdbcType=VARCHAR}, #{wjdx,jdbcType=NUMERIC}, #{wdystj,jdbcType=NUMERIC}, 
+      #{bbh,jdbcType=VARCHAR}, #{qsrq,jdbcType=NUMERIC}, #{sxrq,jdbcType=NUMERIC}, #{jzsxrq,jdbcType=NUMERIC}, 
+      #{scrq,jdbcType=NUMERIC}, #{xgrq,jdbcType=NUMERIC}, #{scry,jdbcType=NUMERIC}, #{zhxgr,jdbcType=NUMERIC}, 
+      #{sfyx,jdbcType=NUMERIC}, #{wdgs,jdbcType=NUMERIC}, #{xzwdsj,jdbcType=TIMESTAMP}, 
+      #{htbh,jdbcType=VARCHAR}, #{bz,jdbcType=VARCHAR}, #{wdly,jdbcType=NUMERIC}, #{mbid,jdbcType=NUMERIC}, 
+      #{tzxz,jdbcType=VARCHAR}, #{tzyh,jdbcType=VARCHAR}, #{cjinstid,jdbcType=NUMERIC}, 
+      #{fginstid,jdbcType=NUMERIC}, #{gljg,jdbcType=NUMERIC}, #{pbbh,jdbcType=NUMERIC}, 
+      #{sbbh,jdbcType=NUMERIC}, #{lclx,jdbcType=NUMERIC}, #{ywlx,jdbcType=VARCHAR}, #{wdsfdwzs,jdbcType=NUMERIC}, 
+      #{logid,jdbcType=NUMERIC}, #{tzbd,jdbcType=NUMERIC}, #{pxrq,jdbcType=NUMERIC}, 
+      #{wdms,jdbcType=CLOB}, #{wdmsdyy,jdbcType=CLOB})
+  </insert>
+  <insert id="insertSelective" parameterType="com.citics.glxt.contractchange.contractquery.domain.TpifCpwdk">
+    insert into TPIF_CPWDK
+    <trim prefix="(" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        ID,
+      </if>
+      <if test="bm != null">
+        BM,
+      </if>
+      <if test="wbid != null">
+        WBID,
+      </if>
+      <if test="gllx != null">
+        GLLX,
+      </if>
+      <if test="glid != null">
+        GLID,
+      </if>
+      <if test="wdfl != null">
+        WDFL,
+      </if>
+      <if test="cpwdmx != null">
+        CPWDMX,
+      </if>
+      <if test="wdmc != null">
+        WDMC,
+      </if>
+      <if test="fj != null">
+        FJ,
+      </if>
+      <if test="wjdx != null">
+        WJDX,
+      </if>
+      <if test="wdystj != null">
+        WDYSTJ,
+      </if>
+      <if test="bbh != null">
+        BBH,
+      </if>
+      <if test="qsrq != null">
+        QSRQ,
+      </if>
+      <if test="sxrq != null">
+        SXRQ,
+      </if>
+      <if test="jzsxrq != null">
+        JZSXRQ,
+      </if>
+      <if test="scrq != null">
+        SCRQ,
+      </if>
+      <if test="xgrq != null">
+        XGRQ,
+      </if>
+      <if test="scry != null">
+        SCRY,
+      </if>
+      <if test="zhxgr != null">
+        ZHXGR,
+      </if>
+      <if test="sfyx != null">
+        SFYX,
+      </if>
+      <if test="wdgs != null">
+        WDGS,
+      </if>
+      <if test="xzwdsj != null">
+        XZWDSJ,
+      </if>
+      <if test="htbh != null">
+        HTBH,
+      </if>
+      <if test="bz != null">
+        BZ,
+      </if>
+      <if test="wdly != null">
+        WDLY,
+      </if>
+      <if test="mbid != null">
+        MBID,
+      </if>
+      <if test="tzxz != null">
+        TZXZ,
+      </if>
+      <if test="tzyh != null">
+        TZYH,
+      </if>
+      <if test="cjinstid != null">
+        CJINSTID,
+      </if>
+      <if test="fginstid != null">
+        FGINSTID,
+      </if>
+      <if test="gljg != null">
+        GLJG,
+      </if>
+      <if test="pbbh != null">
+        PBBH,
+      </if>
+      <if test="sbbh != null">
+        SBBH,
+      </if>
+      <if test="lclx != null">
+        LCLX,
+      </if>
+      <if test="ywlx != null">
+        YWLX,
+      </if>
+      <if test="wdsfdwzs != null">
+        WDSFDWZS,
+      </if>
+      <if test="logid != null">
+        LOGID,
+      </if>
+      <if test="tzbd != null">
+        TZBD,
+      </if>
+      <if test="pxrq != null">
+        PXRQ,
+      </if>
+      <if test="wdms != null">
+        WDMS,
+      </if>
+      <if test="wdmsdyy != null">
+        WDMSDYY,
+      </if>
+    </trim>
+    <trim prefix="values (" suffix=")" suffixOverrides=",">
+      <if test="id != null">
+        #{id,jdbcType=NUMERIC},
+      </if>
+      <if test="bm != null">
+        #{bm,jdbcType=VARCHAR},
+      </if>
+      <if test="wbid != null">
+        #{wbid,jdbcType=VARCHAR},
+      </if>
+      <if test="gllx != null">
+        #{gllx,jdbcType=NUMERIC},
+      </if>
+      <if test="glid != null">
+        #{glid,jdbcType=NUMERIC},
+      </if>
+      <if test="wdfl != null">
+        #{wdfl,jdbcType=NUMERIC},
+      </if>
+      <if test="cpwdmx != null">
+        #{cpwdmx,jdbcType=NUMERIC},
+      </if>
+      <if test="wdmc != null">
+        #{wdmc,jdbcType=VARCHAR},
+      </if>
+      <if test="fj != null">
+        #{fj,jdbcType=VARCHAR},
+      </if>
+      <if test="wjdx != null">
+        #{wjdx,jdbcType=NUMERIC},
+      </if>
+      <if test="wdystj != null">
+        #{wdystj,jdbcType=NUMERIC},
+      </if>
+      <if test="bbh != null">
+        #{bbh,jdbcType=VARCHAR},
+      </if>
+      <if test="qsrq != null">
+        #{qsrq,jdbcType=NUMERIC},
+      </if>
+      <if test="sxrq != null">
+        #{sxrq,jdbcType=NUMERIC},
+      </if>
+      <if test="jzsxrq != null">
+        #{jzsxrq,jdbcType=NUMERIC},
+      </if>
+      <if test="scrq != null">
+        #{scrq,jdbcType=NUMERIC},
+      </if>
+      <if test="xgrq != null">
+        #{xgrq,jdbcType=NUMERIC},
+      </if>
+      <if test="scry != null">
+        #{scry,jdbcType=NUMERIC},
+      </if>
+      <if test="zhxgr != null">
+        #{zhxgr,jdbcType=NUMERIC},
+      </if>
+      <if test="sfyx != null">
+        #{sfyx,jdbcType=NUMERIC},
+      </if>
+      <if test="wdgs != null">
+        #{wdgs,jdbcType=NUMERIC},
+      </if>
+      <if test="xzwdsj != null">
+        #{xzwdsj,jdbcType=TIMESTAMP},
+      </if>
+      <if test="htbh != null">
+        #{htbh,jdbcType=VARCHAR},
+      </if>
+      <if test="bz != null">
+        #{bz,jdbcType=VARCHAR},
+      </if>
+      <if test="wdly != null">
+        #{wdly,jdbcType=NUMERIC},
+      </if>
+      <if test="mbid != null">
+        #{mbid,jdbcType=NUMERIC},
+      </if>
+      <if test="tzxz != null">
+        #{tzxz,jdbcType=VARCHAR},
+      </if>
+      <if test="tzyh != null">
+        #{tzyh,jdbcType=VARCHAR},
+      </if>
+      <if test="cjinstid != null">
+        #{cjinstid,jdbcType=NUMERIC},
+      </if>
+      <if test="fginstid != null">
+        #{fginstid,jdbcType=NUMERIC},
+      </if>
+      <if test="gljg != null">
+        #{gljg,jdbcType=NUMERIC},
+      </if>
+      <if test="pbbh != null">
+        #{pbbh,jdbcType=NUMERIC},
+      </if>
+      <if test="sbbh != null">
+        #{sbbh,jdbcType=NUMERIC},
+      </if>
+      <if test="lclx != null">
+        #{lclx,jdbcType=NUMERIC},
+      </if>
+      <if test="ywlx != null">
+        #{ywlx,jdbcType=VARCHAR},
+      </if>
+      <if test="wdsfdwzs != null">
+        #{wdsfdwzs,jdbcType=NUMERIC},
+      </if>
+      <if test="logid != null">
+        #{logid,jdbcType=NUMERIC},
+      </if>
+      <if test="tzbd != null">
+        #{tzbd,jdbcType=NUMERIC},
+      </if>
+      <if test="pxrq != null">
+        #{pxrq,jdbcType=NUMERIC},
+      </if>
+      <if test="wdms != null">
+        #{wdms,jdbcType=CLOB},
+      </if>
+      <if test="wdmsdyy != null">
+        #{wdmsdyy,jdbcType=CLOB},
+      </if>
+    </trim>
+  </insert>
+  <update id="updateByPrimaryKeySelective" parameterType="com.citics.glxt.contractchange.contractquery.domain.TpifCpwdk">
+    update TPIF_CPWDK
+    <set>
+      <if test="bm != null">
+        BM = #{bm,jdbcType=VARCHAR},
+      </if>
+      <if test="wbid != null">
+        WBID = #{wbid,jdbcType=VARCHAR},
+      </if>
+      <if test="gllx != null">
+        GLLX = #{gllx,jdbcType=NUMERIC},
+      </if>
+      <if test="glid != null">
+        GLID = #{glid,jdbcType=NUMERIC},
+      </if>
+      <if test="wdfl != null">
+        WDFL = #{wdfl,jdbcType=NUMERIC},
+      </if>
+      <if test="cpwdmx != null">
+        CPWDMX = #{cpwdmx,jdbcType=NUMERIC},
+      </if>
+      <if test="wdmc != null">
+        WDMC = #{wdmc,jdbcType=VARCHAR},
+      </if>
+      <if test="fj != null">
+        FJ = #{fj,jdbcType=VARCHAR},
+      </if>
+      <if test="wjdx != null">
+        WJDX = #{wjdx,jdbcType=NUMERIC},
+      </if>
+      <if test="wdystj != null">
+        WDYSTJ = #{wdystj,jdbcType=NUMERIC},
+      </if>
+      <if test="bbh != null">
+        BBH = #{bbh,jdbcType=VARCHAR},
+      </if>
+      <if test="qsrq != null">
+        QSRQ = #{qsrq,jdbcType=NUMERIC},
+      </if>
+      <if test="sxrq != null">
+        SXRQ = #{sxrq,jdbcType=NUMERIC},
+      </if>
+      <if test="jzsxrq != null">
+        JZSXRQ = #{jzsxrq,jdbcType=NUMERIC},
+      </if>
+      <if test="scrq != null">
+        SCRQ = #{scrq,jdbcType=NUMERIC},
+      </if>
+      <if test="xgrq != null">
+        XGRQ = #{xgrq,jdbcType=NUMERIC},
+      </if>
+      <if test="scry != null">
+        SCRY = #{scry,jdbcType=NUMERIC},
+      </if>
+      <if test="zhxgr != null">
+        ZHXGR = #{zhxgr,jdbcType=NUMERIC},
+      </if>
+      <if test="sfyx != null">
+        SFYX = #{sfyx,jdbcType=NUMERIC},
+      </if>
+      <if test="wdgs != null">
+        WDGS = #{wdgs,jdbcType=NUMERIC},
+      </if>
+      <if test="xzwdsj != null">
+        XZWDSJ = #{xzwdsj,jdbcType=TIMESTAMP},
+      </if>
+      <if test="htbh != null">
+        HTBH = #{htbh,jdbcType=VARCHAR},
+      </if>
+      <if test="bz != null">
+        BZ = #{bz,jdbcType=VARCHAR},
+      </if>
+      <if test="wdly != null">
+        WDLY = #{wdly,jdbcType=NUMERIC},
+      </if>
+      <if test="mbid != null">
+        MBID = #{mbid,jdbcType=NUMERIC},
+      </if>
+      <if test="tzxz != null">
+        TZXZ = #{tzxz,jdbcType=VARCHAR},
+      </if>
+      <if test="tzyh != null">
+        TZYH = #{tzyh,jdbcType=VARCHAR},
+      </if>
+      <if test="cjinstid != null">
+        CJINSTID = #{cjinstid,jdbcType=NUMERIC},
+      </if>
+      <if test="fginstid != null">
+        FGINSTID = #{fginstid,jdbcType=NUMERIC},
+      </if>
+      <if test="gljg != null">
+        GLJG = #{gljg,jdbcType=NUMERIC},
+      </if>
+      <if test="pbbh != null">
+        PBBH = #{pbbh,jdbcType=NUMERIC},
+      </if>
+      <if test="sbbh != null">
+        SBBH = #{sbbh,jdbcType=NUMERIC},
+      </if>
+      <if test="lclx != null">
+        LCLX = #{lclx,jdbcType=NUMERIC},
+      </if>
+      <if test="ywlx != null">
+        YWLX = #{ywlx,jdbcType=VARCHAR},
+      </if>
+      <if test="wdsfdwzs != null">
+        WDSFDWZS = #{wdsfdwzs,jdbcType=NUMERIC},
+      </if>
+      <if test="logid != null">
+        LOGID = #{logid,jdbcType=NUMERIC},
+      </if>
+      <if test="tzbd != null">
+        TZBD = #{tzbd,jdbcType=NUMERIC},
+      </if>
+      <if test="pxrq != null">
+        PXRQ = #{pxrq,jdbcType=NUMERIC},
+      </if>
+      <if test="wdms != null">
+        WDMS = #{wdms,jdbcType=CLOB},
+      </if>
+      <if test="wdmsdyy != null">
+        WDMSDYY = #{wdmsdyy,jdbcType=CLOB},
+      </if>
+    </set>
+    where ID = #{id,jdbcType=NUMERIC}
+  </update>
+  <update id="updateByPrimaryKeyWithBLOBs" parameterType="com.citics.glxt.contractchange.contractquery.domain.TpifCpwdk">
+    update TPIF_CPWDK
+    set BM = #{bm,jdbcType=VARCHAR},
+      WBID = #{wbid,jdbcType=VARCHAR},
+      GLLX = #{gllx,jdbcType=NUMERIC},
+      GLID = #{glid,jdbcType=NUMERIC},
+      WDFL = #{wdfl,jdbcType=NUMERIC},
+      CPWDMX = #{cpwdmx,jdbcType=NUMERIC},
+      WDMC = #{wdmc,jdbcType=VARCHAR},
+      FJ = #{fj,jdbcType=VARCHAR},
+      WJDX = #{wjdx,jdbcType=NUMERIC},
+      WDYSTJ = #{wdystj,jdbcType=NUMERIC},
+      BBH = #{bbh,jdbcType=VARCHAR},
+      QSRQ = #{qsrq,jdbcType=NUMERIC},
+      SXRQ = #{sxrq,jdbcType=NUMERIC},
+      JZSXRQ = #{jzsxrq,jdbcType=NUMERIC},
+      SCRQ = #{scrq,jdbcType=NUMERIC},
+      XGRQ = #{xgrq,jdbcType=NUMERIC},
+      SCRY = #{scry,jdbcType=NUMERIC},
+      ZHXGR = #{zhxgr,jdbcType=NUMERIC},
+      SFYX = #{sfyx,jdbcType=NUMERIC},
+      WDGS = #{wdgs,jdbcType=NUMERIC},
+      XZWDSJ = #{xzwdsj,jdbcType=TIMESTAMP},
+      HTBH = #{htbh,jdbcType=VARCHAR},
+      BZ = #{bz,jdbcType=VARCHAR},
+      WDLY = #{wdly,jdbcType=NUMERIC},
+      MBID = #{mbid,jdbcType=NUMERIC},
+      TZXZ = #{tzxz,jdbcType=VARCHAR},
+      TZYH = #{tzyh,jdbcType=VARCHAR},
+      CJINSTID = #{cjinstid,jdbcType=NUMERIC},
+      FGINSTID = #{fginstid,jdbcType=NUMERIC},
+      GLJG = #{gljg,jdbcType=NUMERIC},
+      PBBH = #{pbbh,jdbcType=NUMERIC},
+      SBBH = #{sbbh,jdbcType=NUMERIC},
+      LCLX = #{lclx,jdbcType=NUMERIC},
+      YWLX = #{ywlx,jdbcType=VARCHAR},
+      WDSFDWZS = #{wdsfdwzs,jdbcType=NUMERIC},
+      LOGID = #{logid,jdbcType=NUMERIC},
+      TZBD = #{tzbd,jdbcType=NUMERIC},
+      PXRQ = #{pxrq,jdbcType=NUMERIC},
+      WDMS = #{wdms,jdbcType=CLOB},
+      WDMSDYY = #{wdmsdyy,jdbcType=CLOB}
+    where ID = #{id,jdbcType=NUMERIC}
+  </update>
+  <update id="updateByPrimaryKey" parameterType="com.citics.glxt.contractchange.contractquery.domain.TpifCpwdk">
+    update TPIF_CPWDK
+    set BM = #{bm,jdbcType=VARCHAR},
+      WBID = #{wbid,jdbcType=VARCHAR},
+      GLLX = #{gllx,jdbcType=NUMERIC},
+      GLID = #{glid,jdbcType=NUMERIC},
+      WDFL = #{wdfl,jdbcType=NUMERIC},
+      CPWDMX = #{cpwdmx,jdbcType=NUMERIC},
+      WDMC = #{wdmc,jdbcType=VARCHAR},
+      FJ = #{fj,jdbcType=VARCHAR},
+      WJDX = #{wjdx,jdbcType=NUMERIC},
+      WDYSTJ = #{wdystj,jdbcType=NUMERIC},
+      BBH = #{bbh,jdbcType=VARCHAR},
+      QSRQ = #{qsrq,jdbcType=NUMERIC},
+      SXRQ = #{sxrq,jdbcType=NUMERIC},
+      JZSXRQ = #{jzsxrq,jdbcType=NUMERIC},
+      SCRQ = #{scrq,jdbcType=NUMERIC},
+      XGRQ = #{xgrq,jdbcType=NUMERIC},
+      SCRY = #{scry,jdbcType=NUMERIC},
+      ZHXGR = #{zhxgr,jdbcType=NUMERIC},
+      SFYX = #{sfyx,jdbcType=NUMERIC},
+      WDGS = #{wdgs,jdbcType=NUMERIC},
+      XZWDSJ = #{xzwdsj,jdbcType=TIMESTAMP},
+      HTBH = #{htbh,jdbcType=VARCHAR},
+      BZ = #{bz,jdbcType=VARCHAR},
+      WDLY = #{wdly,jdbcType=NUMERIC},
+      MBID = #{mbid,jdbcType=NUMERIC},
+      TZXZ = #{tzxz,jdbcType=VARCHAR},
+      TZYH = #{tzyh,jdbcType=VARCHAR},
+      CJINSTID = #{cjinstid,jdbcType=NUMERIC},
+      FGINSTID = #{fginstid,jdbcType=NUMERIC},
+      GLJG = #{gljg,jdbcType=NUMERIC},
+      PBBH = #{pbbh,jdbcType=NUMERIC},
+      SBBH = #{sbbh,jdbcType=NUMERIC},
+      LCLX = #{lclx,jdbcType=NUMERIC},
+      YWLX = #{ywlx,jdbcType=VARCHAR},
+      WDSFDWZS = #{wdsfdwzs,jdbcType=NUMERIC},
+      LOGID = #{logid,jdbcType=NUMERIC},
+      TZBD = #{tzbd,jdbcType=NUMERIC},
+      PXRQ = #{pxrq,jdbcType=NUMERIC}
+    where ID = #{id,jdbcType=NUMERIC}
+  </update>
+
+  <!-- 合同文档查询结果与表实体分离，避免将关联产品信息映射到文档实体。 -->
+  <resultMap id="ContractInfoMap" type="com.citics.glxt.contractchange.contractquery.model.ContractInfo">
+    <id column="FILE_ID" property="fileId" />
+    <result column="PRODUCT_CODE" property="productCode" />
+    <result column="PRODUCT_NAME" property="productName" />
+    <result column="CONTRACT_VERSION" property="contractVersion" />
+    <result column="FILE_NAME" property="fileName" />
+    <result column="CATEGORY_CODE" property="categoryCode" />
+    <result column="EFFECTIVE_DATE" property="effectiveDate" />
+    <result column="UPDATED_AT" property="updatedAt" />
+  </resultMap>
+
+  <!-- SXRQ/SCRQ 为 NUMBER(8) 的 YYYYMMDD；生效日为空时使用上传日期筛选。 -->
+  <select id="selectContracts" resultMap="ContractInfoMap">
+    SELECT wd.id AS FILE_ID,
+           cp.cpdm AS PRODUCT_CODE,
+           cp.cpqc AS PRODUCT_NAME,
+           wd.pbbh || '-' || wd.sbbh AS CONTRACT_VERSION,
+           wd.fj AS FILE_NAME,
+           wd.wdfl AS CATEGORY_CODE,
+           TO_DATE(TO_CHAR(wd.sxrq, 'FM00000000'), 'YYYYMMDD') AS EFFECTIVE_DATE,
+           wd.xzwdsj AS UPDATED_AT
+    FROM tpif_cpwdk wd
+    JOIN tpif_cpdm cp ON wd.glid = cp.id
+    WHERE wd.wdfl IN (106, 108)
+      AND wd.sfyx = 1
+      AND cp.glr = #{managerId}
+      AND TO_DATE(TO_CHAR(NVL(wd.sxrq, wd.scrq), 'FM00000000'), 'YYYYMMDD')
+          BETWEEN #{startDate} AND #{endDate}
+  </select>
+
+  <!-- 下载前必须再次校验文件归属；此处的分类和有效状态与接口一返回范围一致。 -->
+  <select id="selectOwnedContractsForDownload" resultMap="BaseResultMap">
+    SELECT wd.id,
+           wd.fj
+    FROM tpif_cpwdk wd
+    JOIN tpif_cpdm cp ON wd.glid = cp.id
+    WHERE wd.id IN
+    <foreach collection="fileIds" item="fileId" open="(" separator="," close=")">
+      #{fileId}
+    </foreach>
+      AND cp.glr = #{managerId}
+      AND wd.wdfl IN (106, 108)
+      AND wd.sfyx = 1
+  </select>
+</mapper>

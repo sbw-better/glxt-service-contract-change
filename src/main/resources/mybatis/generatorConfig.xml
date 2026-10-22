@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE generatorConfiguration
+        PUBLIC "-//mybatis.org//DTD MyBatis Generator Configuration 1.0//EN"
+        "http://mybatis.org/dtd/mybatis-generator-config_1_0.dtd">
+<generatorConfiguration>
+    <!-- 引入配置文件 -->
+    <!-- <properties resource="application-test.yml" />-->
+
+    <!-- 数据库驱动-->
+    <!-- 如果pom.xml文件中的org.mybatis.generator插件配置了数据库驱动依赖，则该处不用配置 -->
+    <!-- <classPathEntry location=""/> -->
+
+    <context id="MyBatisTables" targetRuntime="MyBatis3" defaultModelType="flat">
+
+        <!-- 生成的POJO实现java.io.Serializable接口 -->
+        <plugin type="org.mybatis.generator.plugins.SerializablePlugin"></plugin>
+
+        <!-- 注意以下标签的顺序： -->
+        <commentGenerator>
+            <!-- 是否自动去除注释中的日期 -->
+            <property name="suppressDate" value="true"/>
+            <!-- 是否去除自动生成的注释 true：是 ； false:否 -->
+            <property name="suppressAllComments" value="true"/>
+        </commentGenerator>
+
+        <!--数据库连接URL，用户名、密码 -->
+        <jdbcConnection driverClass="oracle.jdbc.driver.OracleDriver" connectionURL="jdbc:oracle:thin:@10.23.124.151:1521:FREEPDB1"
+                        userId="GLXT" password="Glxt123456">
+        </jdbcConnection>
+
+        <!-- 类型转换 -->
+        <!-- 是否使用Integer， false可自动转化以下类型（Long, Integer, Short, etc.） -->
+        <javaTypeResolver>
+            <property name="forceIntegers" value="true"/>
+        </javaTypeResolver>
+
+        <!-- 生成模型(实体)的包名和位置-->
+        <javaModelGenerator targetPackage="com.citics.glxt.contractchange.contractquery.domain" targetProject="src/main/java">
+            <!-- 是否在当前路径下新加一层schema,eg: fase路径com.oop.eksp.user.model， true:com.oop.eksp.user.model.[schemaName]-->
+            <property name="enableSubPackages" value="true"/>
+            <!-- 是否针对string类型的字段在set的时候进行trim调用 -->
+            <property name="trimStrings" value="true"/>
+        </javaModelGenerator>
+
+        <!-- 生成映射文件的包名和位置-->
+        <sqlMapGenerator targetPackage="mybatis.mapper.contractquery" targetProject="src/main/resources">
+            <property name="enableSubPackages" value="true"/>
+        </sqlMapGenerator>
+
+        <!-- 生成DAO的包名和位置-->
+        <javaClientGenerator type="XMLMAPPER" targetPackage="com.citics.glxt.contractchange.contractquery.mapper" targetProject="src/main/java">
+            <property name="enableSubPackages" value="true"/>
+        </javaClientGenerator>
+
+        <!-- 要生成的表 tableName是数据库中的表名或视图名 domainObjectName是实体类名 -->
+        <table tableName="TPIF_CPWDK" domainObjectName="TpifCpwdk" enableCountByExample="false" enableUpdateByExample="false" enableDeleteByExample="false"
+               enableSelectByExample="false" selectByExampleQueryId="false"></table>
+        <table tableName="TPIF_CPDM" domainObjectName="TpifCpdm" enableCountByExample="false" enableUpdateByExample="false" enableDeleteByExample="false"
+               enableSelectByExample="false" selectByExampleQueryId="false"></table>
+
+    </context>
+</generatorConfiguration>

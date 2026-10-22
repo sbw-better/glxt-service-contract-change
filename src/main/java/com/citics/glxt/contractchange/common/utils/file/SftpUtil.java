@@ -174,4 +174,9 @@ public class SftpUtil {
     public InputStream download(String filename) throws SftpException {
         return sftp.get(filename);
     }
+
+    public void download(String src, String dst) throws SftpException {
+        sftp.get(src, dst, (SftpProgressMonitor)null, 0);
+    }
+
 }
