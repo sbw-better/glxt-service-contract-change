@@ -25,6 +25,7 @@ import org.springframework.web.client.RestTemplate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 公司内网统一 Embedding 网关客户端。
@@ -81,6 +82,13 @@ public class HttpEmbeddingClient implements EmbeddingClient {
                 return new EmbeddingBatchResult(properties.getDimension(), vectors);
             } catch (HttpClientErrorException ex) {
                 int status = ex.getStatusCode().value();
+                String responseBody = ex.getResponseBodyAsString();
+                if (isQuotaExceeded(responseBody)) {
+                    log.warn("Embedding模型额度超限, status={}, count={}, attempt={}, providerCode={}",
+                            status, texts.size(), attempt + 1, safeErrorMetadata(responseBody));
+                    throw new EmbeddingQuotaExceededException(
+                            "Embedding模型额度已超限，请检查模型平台额度或计费状态后重试", ex);
+                }
                 log.warn("Embedding网关请求被拒绝, status={}, count={}, attempt={}",
                         status, texts.size(), attempt + 1);
                 throw unavailable(clientErrorMessage(status, ex), ex);
@@ -220,6 +228,34 @@ public class HttpEmbeddingClient implements EmbeddingClient {
         }
         String hint=safeErrorMetadata(ex.getResponseBodyAsString());
         return hint.isEmpty() ? message : message+"（网关错误信息："+hint+"）";
+    }
+
+    /** 额度错误可能以普通文本或 JSON 错误字段返回；只识别明确的额度耗尽措辞。 */
+    private boolean isQuotaExceeded(String responseBody) {
+        if (responseBody == null || responseBody.trim().isEmpty()) {
+            return false;
+        }
+        String normalized = responseBody.toLowerCase(Locale.ROOT)
+                .replace('_', ' ')
+                .replace('-', ' ');
+        return normalized.contains("quota exceeded")
+                || normalized.contains("exceeded your current quota")
+                || normalized.contains("insufficient quota")
+                || normalized.contains("insufficient balance")
+                || normalized.contains("billing limit")
+                || normalized.contains("billing hard limit")
+                || normalized.contains("exceeded the maximum amount")
+                || normalized.contains("no remaining quota")
+                || normalized.contains("out of quota")
+                || normalized.contains("daily token limit exceeded")
+                || normalized.contains("额度已超")
+                || normalized.contains("额度不足")
+                || normalized.contains("额度用尽")
+                || normalized.contains("配额用尽")
+                || normalized.contains("余额不足")
+                || normalized.contains("超出额度")
+                || normalized.contains("配额不足")
+                || normalized.contains("配额超");
     }
 
     /** 只提取错误码、类型和参数名；不透出可能回显输入文本的网关错误正文。 */

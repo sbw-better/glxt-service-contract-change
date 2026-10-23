@@ -222,7 +222,8 @@ public class ContractChangeAnalysisService {
                 if (paragraph == null || paragraph.getBusinessTypePrediction() == null) continue;
                 String errorCode = paragraph.getBusinessTypePrediction().getErrorCode();
                 if ("INDEX_UNAVAILABLE".equals(errorCode)
-                        || "EMBEDDING_UNAVAILABLE".equals(errorCode)) {
+                        || "EMBEDDING_UNAVAILABLE".equals(errorCode)
+                        || "EMBEDDING_QUOTA_EXCEEDED".equals(errorCode)) {
                     return CommonConstants.SERVICE_UNAVAILABLE;
                 }
                 if ("INVALID_INPUT".equals(errorCode) || "EMPTY_INPUT".equals(errorCode)

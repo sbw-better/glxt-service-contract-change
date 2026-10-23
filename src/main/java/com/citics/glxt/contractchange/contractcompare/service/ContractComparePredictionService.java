@@ -176,6 +176,9 @@ public class ContractComparePredictionService {
         if ("EMBEDDING_UNAVAILABLE".equals(errorCode)) {
             return "Embedding服务暂不可用，请检查网关地址、API Key、模型名称和网络";
         }
+        if ("EMBEDDING_QUOTA_EXCEEDED".equals(errorCode)) {
+            return "Embedding模型额度已超限，请检查模型平台额度或计费状态后重试";
+        }
         if ("INVALID_INPUT".equals(errorCode)) {
             return "类型识别输入不合法";
         }

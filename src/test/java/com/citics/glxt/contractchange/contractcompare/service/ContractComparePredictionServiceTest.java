@@ -166,6 +166,22 @@ public class ContractComparePredictionServiceTest {
     }
 
     @Test
+    public void shouldShowSpecificQuotaExceededMessage() {
+        when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
+                .thenReturn(Collections.singletonList(
+                        LenientPrediction.failed("EMBEDDING_QUOTA_EXCEEDED")));
+        ContractCompareResponse response = response(ChangeType.ADDED,
+                null, "新增风险揭示。", new ClauseContext(null, "新增风险揭示。"));
+
+        service.predict(response, AnalysisType.DOUBLE_VERSION, "u1");
+
+        assertEquals("EMBEDDING_QUOTA_EXCEEDED",
+                paragraph(response).getBusinessTypePrediction().getErrorCode());
+        assertTrue(paragraph(response).getBusinessTypePrediction().getMessage()
+                .contains("额度已超限"));
+    }
+
+    @Test
     public void shouldExposeFallbackFailureConsistently() {
         when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
                 .thenReturn(Collections.singletonList(LenientPrediction.success(noMatch())))

@@ -108,6 +108,65 @@ public class HttpEmbeddingClientTest {
     }
 
     @Test
+    public void shouldIdentifyQuotaExceeded429SeparatelyFromGenericRateLimit() {
+        HttpEmbeddingClient client = client(3, 2);
+        MockRestServiceServer server = server(client);
+        server.expect(once(), requestTo("http://model/embedding/v1/embeddings"))
+                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS)
+                        .body("quota exceeded"));
+
+        try {
+            client.embed(Collections.singletonList("测试段落"), "employee-001");
+            fail("额度超限应抛出专用异常");
+        } catch (EmbeddingQuotaExceededException expected) {
+            assertEquals(503, expected.getCode());
+            assertTrue(expected.getMessage().contains("额度已超限"));
+        }
+        server.verify();
+    }
+
+    @Test
+    public void shouldRecognizeStructuredAndLocalizedQuotaMessages() {
+        assertQuotaResponse("{\"error\":{\"message\":\"You exceeded the maximum amount\","
+                + "\"code\":\"billing_limit\",\"type\":\"insufficient_quota\"}}");
+        assertQuotaResponse("{\"message\":\"本日额度用尽，余额不足\"}");
+        assertQuotaResponse("out_of_quota");
+    }
+
+    @Test
+    public void shouldKeepOrdinary429AsRateLimitAndNeverLeakResponseBody() {
+        HttpEmbeddingClient client = client(3, 0);
+        MockRestServiceServer server = server(client);
+        server.expect(once(), requestTo("http://model/embedding/v1/embeddings"))
+                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS)
+                        .body("{\"error\":{\"message\":\"rate limit for sensitive text\","
+                                + "\"code\":\"rate_limit_exceeded\"}}"));
+        try {
+            client.embed(Collections.singletonList("测试段落"), "employee-001");
+            fail("普通429应失败");
+        } catch (ContractChangeBusinessException ex) {
+            assertTrue(!(ex instanceof EmbeddingQuotaExceededException));
+            assertTrue(ex.getMessage().contains("请求过于频繁"));
+            assertTrue(!ex.getMessage().contains("sensitive text"));
+        }
+        server.verify();
+    }
+
+    private void assertQuotaResponse(String body) {
+        HttpEmbeddingClient client = client(3, 2);
+        MockRestServiceServer server = server(client);
+        server.expect(once(), requestTo("http://model/embedding/v1/embeddings"))
+                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS).body(body));
+        try {
+            client.embed(Collections.singletonList("测试段落"), "employee-001");
+            fail("额度错误应抛出专用异常");
+        } catch (EmbeddingQuotaExceededException expected) {
+            assertEquals(503, expected.getCode());
+        }
+        server.verify();
+    }
+
+    @Test
     public void shouldRetryServerErrorOnce() {
         HttpEmbeddingClient client = client(3, 1);
         MockRestServiceServer server = server(client);

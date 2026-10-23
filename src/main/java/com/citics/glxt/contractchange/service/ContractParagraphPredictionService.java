@@ -4,6 +4,7 @@ import com.citics.glxt.contractchange.common.exception.ContractChangeBusinessExc
 import com.citics.glxt.contractchange.common.constants.CommonConstants;
 import com.citics.glxt.contractchange.config.ContractChangeProperties;
 import com.citics.glxt.contractchange.embedding.EmbeddingClient;
+import com.citics.glxt.contractchange.embedding.EmbeddingQuotaExceededException;
 import com.citics.glxt.contractchange.model.ChangeTypePrediction;
 import com.citics.glxt.contractchange.model.EmbeddingBatchResult;
 import com.citics.glxt.contractchange.model.IndexStatusResponse;
@@ -180,7 +181,9 @@ public class ContractParagraphPredictionService {
             } catch (ContractChangeBusinessException ex) {
                 log.warn("合同比对类型识别批次失败, batchSize={}, exception={}",
                         texts.size(), ex.getClass().getSimpleName());
-                String errorCode = ex.getCode() == CommonConstants.SERVICE_UNAVAILABLE
+                String errorCode = ex instanceof EmbeddingQuotaExceededException
+                        ? "EMBEDDING_QUOTA_EXCEEDED"
+                        : ex.getCode() == CommonConstants.SERVICE_UNAVAILABLE
                         ? indexFailure(ex) ? "INDEX_UNAVAILABLE" : "EMBEDDING_UNAVAILABLE"
                         : "INVALID_INPUT";
                 for (int cursor = start; cursor < end; cursor++) {

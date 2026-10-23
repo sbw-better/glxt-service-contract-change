@@ -131,6 +131,26 @@ public class ContractChangeAnalysisServiceTest {
     }
 
     @Test
+    public void shouldReturnSpecificQuotaFailureAsServiceUnavailable() {
+        ContractCompareResponse detail = detailWithContext();
+        BusinessTypePrediction failure = new BusinessTypePrediction();
+        failure.setStatus("FAILED");
+        failure.setErrorCode("EMBEDDING_QUOTA_EXCEEDED");
+        failure.setMessage("Embedding模型额度已超限，请检查模型平台额度或计费状态后重试");
+        ChangedParagraph failedParagraph = new ChangedParagraph();
+        failedParagraph.setBusinessTypePrediction(failure);
+        detail.getChanges().get(0).setChangedParagraphs(Collections.singletonList(failedParagraph));
+        detail.setPredictionSummary(new PredictionSummary(0, 0, 1, 0));
+        when(extractor.extract(any(ContractCompareRequest.class))).thenReturn(detail);
+
+        ContractChangeAnalysisResponse result = service.analyze(request());
+
+        assertEquals(AnalysisLogStatus.FAILED, result.getAnalysisStatus());
+        assertEquals(Integer.valueOf(503), result.getFailureCode());
+        assertTrue(result.getFailureReason().contains("Embedding模型额度已超限"));
+    }
+
+    @Test
     public void shouldDetectParagraphFailureWhenSummaryIsMissing() {
         ContractCompareResponse detail = detailWithContext();
         BusinessTypePrediction failure = new BusinessTypePrediction();

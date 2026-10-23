@@ -5,6 +5,7 @@ import com.citics.glxt.contractchange.common.exception.ContractChangeBusinessExc
 import com.citics.glxt.contractchange.config.ContractChangeProperties;
 import com.citics.glxt.contractchange.domain.ContractParagraphDO;
 import com.citics.glxt.contractchange.embedding.EmbeddingClient;
+import com.citics.glxt.contractchange.embedding.EmbeddingQuotaExceededException;
 import com.citics.glxt.contractchange.mapper.ContractParagraphMapper;
 import com.citics.glxt.contractchange.model.EmbeddingBatchResult;
 import com.citics.glxt.contractchange.model.PredictionResponse;
@@ -102,6 +103,20 @@ public class BatchPredictionServiceTest {
 
         assertEquals("EMBEDDING_UNAVAILABLE", responses.get(0).getErrorCode());
         assertEquals("SEMANTIC", responses.get(1).getPrediction().getMatchType());
+    }
+
+    @Test
+    public void shouldPreserveQuotaExceededAsSpecificLenientErrorCode() {
+        EmbeddingClient client = mock(EmbeddingClient.class);
+        when(client.embed(anyList(), eq("employee-001")))
+                .thenThrow(new EmbeddingQuotaExceededException("Embedding模型额度已超限", null));
+        ContractParagraphPredictionService service =
+                new ContractParagraphPredictionService(indexService, client, properties);
+
+        List<LenientPrediction> responses = service.predictBatchLenient(
+                Collections.singletonList("新段落"), "employee-001");
+
+        assertEquals("EMBEDDING_QUOTA_EXCEEDED", responses.get(0).getErrorCode());
     }
 
     @Test
