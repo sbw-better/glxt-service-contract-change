@@ -15,6 +15,7 @@ import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRespo
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeType;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangedParagraph;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseChange;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** 从补充协议、征询意见函或协商函中按确定性规则提取变更条款。 */
+@Slf4j
 @Service
 public class ChangeDocumentExtractionService {
     private static final Pattern COMMON_HEADING = Pattern.compile(
@@ -55,10 +57,12 @@ public class ChangeDocumentExtractionService {
     public ContractCompareResponse extract(byte[] bytes) {
         Document document = asposeCompareService.load(bytes);
         List<TextBlock> blocks = readBlocks(document);
+        log.info("变更文档解析开始，文本块数={}", blocks.size());
         if (blocks.isEmpty()) {
             throw new ContractChangeBusinessException("变更函中未读取到可解析文本");
         }
         List<Integer> headingIndexes = headingIndexes(blocks);
+        log.info("变更文档标题识别完成，识别标题数={}", headingIndexes.size());
         if (headingIndexes.isEmpty()) {
             throw new ContractChangeBusinessException("变更函中未识别到变更条款标题");
         }
@@ -74,6 +78,7 @@ public class ChangeDocumentExtractionService {
             changes.add(extractChange(changes.size() + 1, blocks.get(headingIndex).text,
                     segment, warnings));
         }
+        log.info("变更文档解析完成，变更数={}，警告数={}", changes.size(), warnings.size());
         return new ContractCompareResponse(changes.size(), changes, warnings);
     }
 
@@ -172,6 +177,8 @@ public class ChangeDocumentExtractionService {
         if (oldContent == null && newContent == null) {
             warnings.add("第" + sequence + "个变更标题后的内容为空，请人工复核");
         }
+        log.info("变更条款提取完成，序号={}，类型={}，区块数={}，变更前字符数={}，变更后字符数={}",
+                sequence, type, segment.size(), length(oldContent), length(newContent));
 
         ClauseChange change = new ClauseChange();
         String targetReference = targetReference(heading);
@@ -292,9 +299,22 @@ public class ChangeDocumentExtractionService {
             if (!quoted.closed) {
                 warnings.add("第" + sequence + "个变更后内容的双引号未闭合，请人工复核");
             }
+            log.debug("第{}个变更条款的变更后内容按引号范围提取，块数={}，字符数={}",
+                    sequence, blocks.size(), quoted.text.length());
             return quoted.text;
         }
-        return blocks.isEmpty() ? "" : blocks.get(0).text;
+        // 没有引号时，变更后文本可能跨多个段落/表格块；保留整个区块，避免只取首段造成静默截断。
+        String content = join(blocks);
+        if (blocks.size() > 1) {
+            warnings.add("第" + sequence + "个变更后内容未使用引号且跨多个文本块，已合并全部内容，请人工复核区块边界");
+        }
+        log.debug("第{}个变更条款的变更后内容未识别到引号，合并文本块数={}，字符数={}",
+                sequence, blocks.size(), content.length());
+        return content;
+    }
+
+    private int length(String value) {
+        return value == null ? 0 : value.length();
     }
 
     private QuotedContent quotedContent(List<TextBlock> blocks) {

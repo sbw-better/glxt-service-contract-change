@@ -195,6 +195,32 @@ public class ChangeDocumentExtractionServiceTest {
     }
 
     @Test
+    public void shouldKeepAllUnquotedNewContentBlocksAfterMarker() throws Exception {
+        ContractCompareResponse response = service.extract(document(
+                "1、《基金合同》第二条“合同金额”约定如下：",
+                "合同金额为100万元。上述内容变更如下：合同金额调整为120万元。",
+                "调整后的金额自本协议生效日起适用。",
+                "相关计算口径保持不变。"));
+
+        assertEquals("合同金额调整为120万元。\n调整后的金额自本协议生效日起适用。\n相关计算口径保持不变。",
+                response.getChanges().get(0).getChangedParagraphs().get(0).getNewContent());
+        assertTrue(response.getWarnings().stream()
+                .anyMatch(warning -> warning.contains("未使用引号且跨多个文本块")));
+    }
+
+    @Test
+    public void shouldKeepSingleUnquotedNewContentBlockWithoutBoundaryWarning() throws Exception {
+        ContractCompareResponse response = service.extract(document(
+                "1、《基金合同》第二条“合同金额”约定如下：",
+                "合同金额为100万元。上述内容变更如下：合同金额调整为120万元。"));
+
+        assertEquals("合同金额调整为120万元。",
+                response.getChanges().get(0).getChangedParagraphs().get(0).getNewContent());
+        assertFalse(response.getWarnings().stream()
+                .anyMatch(warning -> warning.contains("未使用引号且跨多个文本块")));
+    }
+
+    @Test
     public void shouldExtractQuotedContentAcrossParagraphsAndHeadingWithPrefix()
             throws Exception {
         ContractCompareResponse response = service.extract(document(
