@@ -255,6 +255,9 @@ public class ContractComparePredictionService {
                 if (paragraph == null) continue;
                 boolean oldSide = paragraph.getParagraphChangeType() == ChangeType.DELETED;
                 String text = oldSide ? paragraph.getOldContent() : paragraph.getNewContent();
+                if (analysisType == AnalysisType.CHANGE_DOCUMENT) {
+                    text = stripChangeBoundaryQuotes(text);
+                }
                 result.add(new Target(change, paragraph, text,
                         analysisType.name() + "-" + (result.size() + 1),
                         oldSide ? "OLD_PARAGRAPH" : "NEW_PARAGRAPH",
@@ -262,6 +265,26 @@ public class ContractComparePredictionService {
             }
         }
         return result;
+    }
+
+    /**
+     * 变更函提取时，成对包住整段的双引号是变更内容边界标记，不应影响内容匹配。
+     * 只去掉首尾匹配的一对引号；正文内部引号以及非变更函文本保持原样。
+     */
+    private String stripChangeBoundaryQuotes(String text) {
+        if (text == null) {
+            return null;
+        }
+        String value = text.trim();
+        if (value.length() < 2) {
+            return text;
+        }
+        char opening = value.charAt(0);
+        char closing = value.charAt(value.length() - 1);
+        boolean paired = (opening == '“' && closing == '”')
+                || (opening == '"' && closing == '"')
+                || (opening == '＂' && closing == '＂');
+        return paired ? value.substring(1, value.length() - 1).trim() : text;
     }
 
     private String boundedContext(Target target, AnalysisType analysisType) {

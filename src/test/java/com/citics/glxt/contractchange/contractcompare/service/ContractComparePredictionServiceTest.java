@@ -309,7 +309,7 @@ public class ContractComparePredictionServiceTest {
     public void shouldNotRetryChangeDocumentPredictionWithClauseContext() {
         when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
                 .thenReturn(Collections.singletonList(LenientPrediction.success(noMatch())));
-        ChangedParagraph changed = paragraph(ChangeType.MODIFIED, "旧金额", "新金额");
+        ChangedParagraph changed = paragraph(ChangeType.MODIFIED, "旧金额", "“新“金额””");
         ClauseChange change = new ClauseChange();
         change.setClauseTitle("合同金额");
         change.setSourceHeading("1、《基金合同》第二条约定如下");
@@ -324,7 +324,10 @@ public class ContractComparePredictionServiceTest {
         ArgumentCaptor<List<String>> captor = ArgumentCaptor.forClass(List.class);
         verify(paragraphService).predictBatchLenient(captor.capture(), eq("u1"));
         verify(paragraphService, times(1)).predictBatchLenient(anyList(), eq("u1"));
-        assertEquals(Collections.singletonList("新金额"), captor.getValue());
+        assertEquals(Collections.singletonList("新“金额”"), captor.getValue());
+        assertEquals("“新“金额””", changed.getNewContent());
+        assertEquals("新“金额”",
+                changed.getBusinessTypePrediction().getPredictionText());
         assertEquals("NO_RELIABLE_MATCH", changed.getBusinessTypePrediction().getStatus());
         assertEquals("NEW_PARAGRAPH", changed.getBusinessTypePrediction().getInputScope());
         assertFalse(changed.getBusinessTypePrediction().isFallbackUsed());
