@@ -262,8 +262,18 @@ public class ContractComparePredictionService {
     }
 
     private String boundedContext(Target target, AnalysisType analysisType) {
-        String heading = join(target.change.getClauseNo(), target.change.getClauseTitle(),
-                target.change.getSourceHeading(), target.change.getTargetClauseReference());
+        String heading;
+        if (analysisType == AnalysisType.CHANGE_DOCUMENT) {
+            // 变更函中 sourceHeading 和 clauseTitle 往往已包含目标条款提示，重复拼接会
+            // 把同一标题及“变更”语义反复送入兜底模型。优先使用规范的目标条款引用。
+            heading = ContractTextNormalizer.normalize(target.change.getTargetClauseReference());
+            if (heading.isEmpty()) {
+                heading = join(target.change.getClauseNo(), target.change.getClauseTitle());
+            }
+        } else {
+            heading = join(target.change.getClauseNo(), target.change.getClauseTitle(),
+                    target.change.getSourceHeading(), target.change.getTargetClauseReference());
+        }
         String full = "";
         if (target.change.getContext() != null) {
             full = "OLD_CONTEXT".equals(target.contextScope)

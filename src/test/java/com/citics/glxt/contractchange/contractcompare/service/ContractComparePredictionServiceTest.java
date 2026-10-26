@@ -306,7 +306,7 @@ public class ContractComparePredictionServiceTest {
     }
 
     @Test
-    public void shouldComposeChangeDocumentFallbackFromHeadingTargetAndNewContent() {
+    public void shouldComposeChangeDocumentFallbackFromTargetReferenceAndNewContentOnly() {
         when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
                 .thenReturn(Collections.singletonList(LenientPrediction.success(noMatch())))
                 .thenReturn(Collections.singletonList(
@@ -326,8 +326,9 @@ public class ContractComparePredictionServiceTest {
         ArgumentCaptor<List<String>> captor = ArgumentCaptor.forClass(List.class);
         verify(paragraphService, times(2)).predictBatchLenient(captor.capture(), eq("u1"));
         String fallbackInput = captor.getAllValues().get(1).get(0);
-        assertTrue(fallbackInput.contains("1、《基金合同》第二条约定如下"));
         assertTrue(fallbackInput.contains("《基金合同》第二条"));
+        assertFalse(fallbackInput.contains("1、《基金合同》第二条约定如下"));
+        assertFalse(fallbackInput.contains("合同金额"));
         assertTrue(fallbackInput.contains("新金额"));
         assertEquals("NEW_CONTEXT", changed.getBusinessTypePrediction().getInputScope());
     }
