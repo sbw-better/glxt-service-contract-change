@@ -247,17 +247,24 @@ public class ContractParagraphPredictionService {
         }
         if ("NOT_READY".equals(indexStatus.getStatus()) || "LOAD_FAILED".equals(indexStatus.getStatus())
                 || indexStatus.getSampleCount() == 0) {
+            log.warn("语义预测因历史向量索引不可用而终止, status={}, sampleCount={}, semanticCount={}",
+                    indexStatus.getStatus(), indexStatus.getSampleCount(), semanticIndexes.size());
             throw new ContractChangeBusinessException(CommonConstants.SERVICE_UNAVAILABLE,
                     "历史段落向量索引不可用，当前状态=" + indexStatus.getStatus());
         }
 
         int batchSize = effectiveBatchSize();
+        int batchCount = (semanticIndexes.size() + batchSize - 1) / batchSize;
         for (int start = 0; start < semanticIndexes.size(); start += batchSize) {
             int end = Math.min(start + batchSize, semanticIndexes.size());
             List<String> batchTexts = new ArrayList<String>(end - start);
             for (int i = start; i < end; i++) {
                 batchTexts.add(normalizedParagraphs.get(semanticIndexes.get(i)));
             }
+            long batchStarted = System.currentTimeMillis();
+            log.info("语义预测Embedding批次开始, batch={}, batchCount={}, batchSize={}, dimension={}",
+                    start / batchSize + 1, batchCount, batchTexts.size(),
+                    properties.getEmbedding().getDimension());
             EmbeddingBatchResult embedded = embeddingClient.embed(batchTexts, userId);
             if (embedded == null || embedded.getVectors() == null
                     || embedded.getVectors().size() != batchTexts.size()) {
@@ -269,6 +276,9 @@ public class ContractParagraphPredictionService {
                 float[] vector = embedded.getVectors().get(i - start);
                 responses.set(responseIndex, predictFromVector(vector));
             }
+            log.info("语义预测Embedding批次完成, batch={}, batchCount={}, batchSize={}, elapsedMs={}",
+                    start / batchSize + 1, batchCount, batchTexts.size(),
+                    System.currentTimeMillis() - batchStarted);
         }
     }
 

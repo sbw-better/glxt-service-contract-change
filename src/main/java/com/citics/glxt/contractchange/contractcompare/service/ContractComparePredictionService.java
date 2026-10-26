@@ -46,6 +46,7 @@ public class ContractComparePredictionService {
     public void predict(ContractCompareResponse response, AnalysisType analysisType, String userId,
                         String analysisId) {
         long started = System.currentTimeMillis();
+        // 删除段落使用旧文本，其余变化使用新文本；相同规范化文本合并为一次预测请求。
         List<Target> targets = targets(response, analysisType);
         Map<String, List<Target>> primaryGroups = new LinkedHashMap<String, List<Target>>();
         for (Target target : targets) {
@@ -67,8 +68,11 @@ public class ContractComparePredictionService {
                 addGroup(primaryGroups, base, target);
             }
         }
+        log.info("合同比对预测输入整理完成, analysisId={}, analysisType={}, targetCount={}, primaryUniqueCount={}",
+                analysisId, analysisType, targets.size(), primaryGroups.size());
         applyPredictions(primaryGroups, userId, false, analysisId);
 
+        // 主文本没有可靠匹配时才使用条款标题和邻近上下文重试语义判断；兜底结果会降为候选级。
         Map<String, List<Target>> fallbackGroups = new LinkedHashMap<String, List<Target>>();
         for (Target target : targets) {
             BusinessTypePrediction current = target.paragraph.getBusinessTypePrediction();
@@ -81,6 +85,8 @@ public class ContractComparePredictionService {
                 addGroup(fallbackGroups, context, target);
             }
         }
+        log.info("合同比对上下文兜底整理完成, analysisId={}, fallbackUniqueCount={}",
+                analysisId, fallbackGroups.size());
         applyPredictions(fallbackGroups, userId, true, analysisId);
 
         int matched = 0;
@@ -105,6 +111,7 @@ public class ContractComparePredictionService {
         }
         response.setPredictionSummary(new PredictionSummary(
                 matched, noMatch, failed, skippedTooLong));
+        // 只有可靠匹配的段落参与文件级聚合；未匹配、失败和超长段落贡献空类型集合。
         response.setFileChangeTypeCodes(aggregateFileChangeTypes(targets));
         if (failed > 0) {
             ensureWarnings(response).add("有" + failed + "个变化段落未完成业务类型识别，请人工复核");

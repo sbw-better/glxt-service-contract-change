@@ -74,6 +74,7 @@ public class SampleLibraryImportService {
     }
 
     private Object importParsed(ParsedExcel parsed,String userId,String id,long started) {
+        // Excel有行级错误时直接返回校验结果，避免占用样本库并触发任何模型调用。
         if (!parsed.errors.isEmpty()) {
             log.warn("历史样本导入校验失败, operationId={}, totalRows={}, uniqueRows={}, errorCount={}, elapsedMs={}",
                     id,parsed.totalRows,parsed.rows.size(),parsed.errors.size(),System.currentTimeMillis()-started);
@@ -94,6 +95,7 @@ public class SampleLibraryImportService {
         RuntimeException primaryFailure=null;
         String stage="准备样本";
         try {
+            // 模型版本未变化时只向量化增量；版本变化时合并当前有效样本并全量重建，防止索引混用模型版本。
             if (source.getModelVersion()==null || source.getModelVersion().equals(properties.getEmbedding().getModelVersion())) {
                 stage="增量导入";
                 log.info("历史样本导入选择增量流程, operationId={}, sourceCount={}",id,parsed.rows.size());

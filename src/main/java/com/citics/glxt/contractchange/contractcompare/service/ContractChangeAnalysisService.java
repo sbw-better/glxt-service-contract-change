@@ -61,18 +61,27 @@ public class ContractChangeAnalysisService {
         String analysisId = newAnalysisId();
         persistenceService.createProcessing(processingLog(
                 analysisId, request, analysisType, userId));
+        log.info("合同分析开始, analysisId={}, analysisType={}, instId={}, modelVersion={}",
+                analysisId, analysisType, request.getInstId(), properties.getEmbedding().getModelVersion());
 
         try {
+            // 第一阶段：按分析类型读取文件并计算条款/段落差异，不调用Embedding模型。
             long compareStart = System.nanoTime();
             ContractCompareResponse detail = extractor.extract(request);
             long compareCostMs = elapsedMillis(compareStart);
             if (detail == null) {
                 throw new ContractChangeBusinessException("合同分析结果不能为空");
             }
+            log.info("合同差异提取完成, analysisId={}, analysisType={}, changedParagraphs={}, warningCount={}, elapsedMs={}",
+                    analysisId, analysisType, changedParagraphCount(detail),
+                    detail.getWarnings() == null ? 0 : detail.getWarnings().size(), compareCostMs);
 
+            // 第二阶段：对变化段落做历史库精确/语义匹配并汇总文件级变更类型。
             long predictStart = System.nanoTime();
             predictionService.predict(detail, analysisType, userId, analysisId);
             long predictCostMs = elapsedMillis(predictStart);
+            log.info("合同业务类型识别阶段完成, analysisId={}, analysisType={}, elapsedMs={}",
+                    analysisId, analysisType, predictCostMs);
 
             AnalysisLogStatus finalStatus = finalStatus(detail);
             String failureReason = finalStatus == AnalysisLogStatus.FAILED
@@ -86,6 +95,8 @@ public class ContractChangeAnalysisService {
             }
             finalLog.setResultJson(serialize(detail));
             persistenceService.persistSuccess(finalLog, detail, analysisType);
+            log.info("合同分析结果留痕完成, analysisId={}, status={}, totalCostMs={}, compareCostMs={}, predictCostMs={}",
+                    analysisId, finalStatus, finalLog.getTotalCostMs(), compareCostMs, predictCostMs);
 
             List<String> codes = finalStatus == AnalysisLogStatus.FAILED
                     || detail.getFileChangeTypeCodes() == null
@@ -95,8 +106,8 @@ public class ContractChangeAnalysisService {
             if (finalStatus == AnalysisLogStatus.FAILED) {
                 result.setFailureReason(failureReason);
                 result.setFailureCode(failureCode(detail));
-                log.error("合同分析未完整完成, analysisId={}, analysisType={}, status={}, reason={}, elapsedMs={}",
-                        analysisId, analysisType, finalStatus, failureReason,
+                log.error("合同分析未完整完成, analysisId={}, analysisType={}, status={}, failureCode={}, reason={}, elapsedMs={}",
+                        analysisId, analysisType, finalStatus, result.getFailureCode(), failureReason,
                         elapsedMillis(totalStart));
             } else {
                 log.info("合同分析完成, analysisId={}, analysisType={}, status={}, changedParagraphs={}, elapsedMs={}",

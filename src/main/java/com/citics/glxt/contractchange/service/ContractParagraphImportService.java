@@ -113,6 +113,7 @@ public class ContractParagraphImportService {
             return failed(parsed);
         }
 
+        // 先按规范化正文Hash与现有样本对账：完全相同则跳过，同标签停用记录则重启用，标签冲突则整批拒绝。
         List<PreparedRow> newRows = new ArrayList<PreparedRow>();
         List<PreparedRow> updateRows = new ArrayList<PreparedRow>();
         int skipped = parsed.skipped;
@@ -143,6 +144,7 @@ public class ContractParagraphImportService {
             return new ImportResponse(false, parsed.totalRows, 0, 0, skipped, false, parsed.errors);
         }
 
+        // 只对新增/需更新段落生成新向量；所有模型调用完成后才进入数据库事务。
         enforceTotalSampleLimit(newRows.size() + reactivated,embeddingSnapshot);
         List<PreparedRow> changedRows = new ArrayList<PreparedRow>(newRows.size() + updateRows.size());
         changedRows.addAll(newRows);
@@ -200,6 +202,7 @@ public class ContractParagraphImportService {
      * 此阶段不调用模型、不写数据库。
      */
     private ParsedExcel parse(byte[] bytes) {
+        // 解析阶段仅做表头、行数、段落、类型编码和文件内重复/冲突校验，不写数据库、不调用模型。
         ParsedExcel result = new ParsedExcel();
         DataFormatter formatter = new DataFormatter();
         try (InputStream input = new java.io.ByteArrayInputStream(bytes); XSSFWorkbook workbook = new XSSFWorkbook(input)) {
