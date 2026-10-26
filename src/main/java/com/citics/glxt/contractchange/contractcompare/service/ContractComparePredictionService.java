@@ -43,6 +43,7 @@ public class ContractComparePredictionService {
         predict(response, analysisType, userId, "n/a");
     }
 
+    /** 将差异结果中的变化段落批量识别、必要时补充上下文兜底，并生成文件级类型集合和统计。 */
     public void predict(ContractCompareResponse response, AnalysisType analysisType, String userId,
                         String analysisId) {
         long started = System.currentTimeMillis();
@@ -126,6 +127,7 @@ public class ContractComparePredictionService {
                 System.currentTimeMillis() - started);
     }
 
+    /** 按段落投票规则汇总文件级类型；非MATCHED段落传入空投票，不能贡献类别。 */
     private List<String> aggregateFileChangeTypes(List<Target> targets) {
         List<String> paragraphs = new ArrayList<String>();
         List<List<ChangeTypePrediction>> changeTypes =
@@ -147,6 +149,7 @@ public class ContractComparePredictionService {
         return changeTypeAggregator.aggregateChangeTypes(paragraphs, changeTypes);
     }
 
+    /** 批量调用预测服务，并把每个去重文本的识别结果回填到对应变化段落。 */
     private void applyPredictions(Map<String, List<Target>> groups, String userId,
                                   boolean contextFallback, String analysisId) {
         if (groups.isEmpty()) {
@@ -234,6 +237,7 @@ public class ContractComparePredictionService {
         return result;
     }
 
+    /** 将条款差异展开为预测目标，并按增删方向选用新文本或旧文本。 */
     private List<Target> targets(ContractCompareResponse response, AnalysisType analysisType) {
         List<Target> result = new ArrayList<Target>();
         if (response.getChanges() == null) {

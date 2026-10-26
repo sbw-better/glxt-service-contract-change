@@ -51,6 +51,7 @@ public class ChangeDocumentExtractionService {
         this.comparisonEngine = comparisonEngine;
     }
 
+    /** 读取Word段落/表格，按变更条款标题切分区块，再识别变更动作和目标合同文本。 */
     public ContractCompareResponse extract(byte[] bytes) {
         Document document = asposeCompareService.load(bytes);
         List<TextBlock> blocks = readBlocks(document);
@@ -76,6 +77,7 @@ public class ChangeDocumentExtractionService {
         return new ContractCompareResponse(changes.size(), changes, warnings);
     }
 
+    /** 按文档顺序提取段落和表格文本，保留块顺序供标题切段及正文归并使用。 */
     private List<TextBlock> readBlocks(Document document) {
         try {
             document.updateListLabels();
@@ -136,6 +138,7 @@ public class ChangeDocumentExtractionService {
         return text.toString();
     }
 
+    /** 返回符合变更条款标题规则的块位置；后续每个标题到下一标题构成一个处理区块。 */
     private List<Integer> headingIndexes(List<TextBlock> blocks) {
         List<Integer> indexes = new ArrayList<Integer>();
         for (int index = 0; index < blocks.size(); index++) {

@@ -30,6 +30,7 @@ import java.util.Map;
 /** 使用 Aspose.Words 加载最终稿并生成文档 Revision。 */
 @Service
 public class AsposeCompareService {
+    /** 比较两份最终版DOCX并收集Aspose Revision定位信号；不在此处生成业务类型。 */
     public ComparisonResult compare(byte[] oldBytes, byte[] newBytes) {
         Document oldDocument = load(oldBytes);
         Document newDocument = load(newBytes);
@@ -65,6 +66,7 @@ public class AsposeCompareService {
         }
     }
 
+    /** 校验DOCX格式、拒绝加密文件，并接受已有修订以得到稳定的最终文本视图。 */
     private Document loadFinalDocument(byte[] bytes) throws Exception {
         FileFormatInfo format = FileFormatUtil.detectFileFormat(new ByteArrayInputStream(bytes));
         if (format.isEncrypted()) {

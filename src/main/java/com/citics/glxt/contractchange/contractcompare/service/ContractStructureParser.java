@@ -37,6 +37,7 @@ public class ContractStructureParser {
     private static final Pattern SIGNATURE_START = Pattern.compile(
             "^(?:（?以下无正文|签署页|签字|盖章|甲方[：:]|乙方[：:]|法定代表人[：:]).*$");
 
+    /** 将Aspose文档按标题编号恢复为父子条款树，供条款匹配和变化段落切分使用。 */
     public Parsed parse(com.aspose.words.Document document) throws Exception {
         document.updateListLabels();
         Map<Paragraph, Integer> paragraphIndexes = paragraphIndexes(document);

@@ -29,6 +29,7 @@ public class ContractChangeExtractorRegistry {
         }
     }
 
+    /** 按请求的分析类型选择策略；编排服务随后只调用该策略完成差异提取。 */
     public ContractChangeExtractor get(AnalysisType type) {
         if (type == null) {
             throw new ContractChangeBusinessException("分析类型不能为空");

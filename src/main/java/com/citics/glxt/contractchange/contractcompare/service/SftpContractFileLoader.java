@@ -38,6 +38,7 @@ public class SftpContractFileLoader {
         this.properties = properties;
     }
 
+    /** 下载DOCX合同，主SFTP失败时自动尝试备用SFTP，并校验文件格式后返回字节。 */
     public byte[] load(String path) {
         return load(path, false);
     }
@@ -51,6 +52,7 @@ public class SftpContractFileLoader {
         return load(path, true);
     }
 
+    /** 执行主备站点读取；路径只用于下载，不应写入业务日志。 */
     private byte[] load(String path, boolean excel) {
         if (!StringUtils.hasText(path)) {
             throw new ContractChangeBusinessException("合同文件路径不能为空");

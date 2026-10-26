@@ -40,11 +40,13 @@ public class AnalysisResultPersistenceService {
         this.matchLogMapper = matchLogMapper;
     }
 
+    /** 独立事务创建PROCESSING主记录，保证后续文件读取或预测失败仍有分析记录可追踪。 */
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public void createProcessing(AnalysisLogDO log) {
         requireOneRow(analysisLogMapper.insertLog(log), "创建合同分析主记录失败");
     }
 
+    /** 在同一事务保存主状态、逐段分析结果和证据引用，任一写入失败则整体回滚。 */
     @Transactional(rollbackFor = Exception.class)
     public void persistSuccess(AnalysisLogDO finalLog, ContractCompareResponse response,
                                AnalysisType analysisType) {
@@ -70,6 +72,7 @@ public class AnalysisResultPersistenceService {
         requireOneRow(analysisLogMapper.updateLog(finalLog), "更新合同分析主记录失败");
     }
 
+    /** 失败兜底使用独立事务更新主记录，避免主流程事务回滚时丢失失败状态。 */
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public void markFailed(String analysisId, long totalCostMs, String errorMessage) {
         AnalysisLogDO log = new AnalysisLogDO();

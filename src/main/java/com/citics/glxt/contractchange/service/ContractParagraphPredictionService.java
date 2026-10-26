@@ -64,6 +64,7 @@ public class ContractParagraphPredictionService {
     /**
      * 按输入顺序批量预测多个段落。精确命中不调用模型，其余段落按网关上限分批生成向量。
      */
+    /** 严格批量预测入口；输入不合法、索引不可用或模型失败时抛出异常，由直接预测接口返回错误。 */
     public List<PredictionResponse> predictBatch(List<String> paragraphs, String userId) {
         indexService.beginPrediction();
         try { return predictBatchPinned(paragraphs,userId); }
@@ -106,6 +107,7 @@ public class ContractParagraphPredictionService {
      * 集成到合同比对流程时使用的宽容批量预测。一个模型批次失败时只标记该批输入，
      * 不丢失其他批次和Hash精确命中的结果。
      */
+    /** 合同比对专用宽容入口：把索引/模型错误转成逐项失败结果，供编排层汇总并决定整体FAILED。 */
     public List<LenientPrediction> predictBatchLenient(List<String> paragraphs, String userId) {
         try { indexService.beginPrediction(); }
         catch (ContractChangeBusinessException ex) {
@@ -234,6 +236,7 @@ public class ContractParagraphPredictionService {
     }
 
     /** 对未精确命中的段落检查索引状态，并按最多16条一批调用模型。 */
+    /** 对精确Hash未命中的文本分批向量化，并将每个向量送入同一内存索引执行近邻预测。 */
     private void predictSemanticBatches(List<String> normalizedParagraphs,
                                         List<Integer> semanticIndexes,
                                         List<PredictionResponse> responses,
@@ -283,6 +286,7 @@ public class ContractParagraphPredictionService {
     }
 
     /** 使用已归一化向量执行内存检索，并复用单段预测的阈值与投票规则。 */
+    /** 检索TopK历史近邻，按最低相似度过滤后进入加权投票；没有可靠近邻时保留证据但不返回类型。 */
     private PredictionResponse predictFromVector(float[] vector) {
         List<ParagraphSearchResult> allMatches = indexService.search(vector,
                 properties.getSearch().getRetrieveTopK());

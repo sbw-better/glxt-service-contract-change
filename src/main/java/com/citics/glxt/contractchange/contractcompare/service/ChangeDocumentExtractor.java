@@ -32,6 +32,7 @@ public class ChangeDocumentExtractor implements ContractChangeExtractor {
         }
     }
 
+    /** 变更函策略：读取单份文件后交给规则抽取器识别变更条款及替换/增删内容。 */
     @Override
     public ContractCompareResponse extract(ContractCompareRequest request) {
         return extractionService.extract(fileLoader.load(request.getChangeFileGetPath()));

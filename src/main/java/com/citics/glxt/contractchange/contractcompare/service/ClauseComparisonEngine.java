@@ -44,6 +44,7 @@ public class ClauseComparisonEngine {
         this.properties = properties;
     }
 
+    /** 编排条款配对、Word修订定位、差异合并，并附加无法可靠定位或细分时的复核警告。 */
     public Analysis analyze(Parsed oldContract, Parsed newContract, List<RevisionSignal> revisions) {
         MatchResult matches = match(oldContract, newContract);
         LocationResult locations = locate(revisions, oldContract, newContract);
@@ -66,6 +67,7 @@ public class ClauseComparisonEngine {
         return new Analysis(changes, warnings);
     }
 
+    /** 依次使用完整内容、唯一标题和模糊相似度配对条款；无法唯一判断的配对留作新增/删除。 */
     MatchResult match(Parsed oldContract, Parsed newContract) {
         Set<Clause> oldRemaining = identitySet(oldContract.getClauses());
         Set<Clause> newRemaining = identitySet(newContract.getClauses());
@@ -78,6 +80,7 @@ public class ClauseComparisonEngine {
         return new MatchResult(matches, oldRemaining, newRemaining, warnings);
     }
 
+    /** 将配对条款差异和未配对条款组合成有序的新增、删除、修改结果。 */
     List<ClauseChange> merge(Parsed oldContract, Parsed newContract, MatchResult matchResult) {
         List<RankedChange> ranked = new ArrayList<RankedChange>();
         for (Map.Entry<Clause, Clause> entry : matchResult.getMatches().entrySet()) {

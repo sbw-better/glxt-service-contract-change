@@ -45,12 +45,15 @@ public class DoubleVersionChangeExtractor implements ContractChangeExtractor {
         }
     }
 
+    /** 双版本策略：读取前后合同、应用Word修订、解析结构，再计算条款和段落差异。 */
     @Override
     public ContractCompareResponse extract(ContractCompareRequest request) {
+        // SFTP读取和Aspose修订比较先生成“修订后的前后文档”及修订定位信号。
         byte[] oldBytes = fileLoader.load(request.getOldFileGetPath());
         byte[] newBytes = fileLoader.load(request.getNewFileGetPath());
         ComparisonResult compared = asposeCompareService.compare(oldBytes, newBytes);
         try {
+            // 解析器负责恢复合同层级；比较引擎负责匹配前后条款并生成变化段落。
             Parsed oldContract = structureParser.parse(compared.getOldDocument());
             Parsed newContract = structureParser.parse(compared.getNewDocument());
             Analysis analysis = comparisonEngine.analyze(
