@@ -8,6 +8,8 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -41,6 +43,16 @@ public class GlobalExceptionHandler {
     public ContractChangeResult<Void> handleMissingHeader(MissingRequestHeaderException ex) {
         String message = ex.getHeaderName() + "请求头不能为空";
         log.warn("请求头缺失, header={}", ex.getHeaderName());
+        return ContractChangeResult.of(CommonConstants.BAD_REQUEST, message, null);
+    }
+
+    /** 处理缺失必填查询参数或参数格式错误。 */
+    @ExceptionHandler({MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
+    public ContractChangeResult<Void> handleInvalidRequestParameter(Exception ex) {
+        String message = ex instanceof MissingServletRequestParameterException
+                ? ((MissingServletRequestParameterException) ex).getParameterName() + "参数不能为空"
+                : "请求参数格式不正确";
+        log.warn("请求参数错误, message={}", message);
         return ContractChangeResult.of(CommonConstants.BAD_REQUEST, message, null);
     }
 

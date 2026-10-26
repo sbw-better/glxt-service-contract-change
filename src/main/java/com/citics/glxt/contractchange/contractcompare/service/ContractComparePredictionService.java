@@ -43,7 +43,7 @@ public class ContractComparePredictionService {
         predict(response, analysisType, userId, "n/a");
     }
 
-    /** 将差异结果中的变化段落批量识别、必要时补充上下文兜底，并生成文件级类型集合和统计。 */
+    /** 将变化段落批量识别；仅双版本比较在主文本无可靠匹配时补充上下文兜底。 */
     public void predict(ContractCompareResponse response, AnalysisType analysisType, String userId,
                         String analysisId) {
         long started = System.currentTimeMillis();
@@ -73,17 +73,20 @@ public class ContractComparePredictionService {
                 analysisId, analysisType, targets.size(), primaryGroups.size());
         applyPredictions(primaryGroups, userId, false, analysisId);
 
-        // 主文本没有可靠匹配时才使用条款标题和邻近上下文重试语义判断；兜底结果会降为候选级。
+        // 双版本 diff 的单侧片段可能缺少语义，允许补充条款上下文；变更函提取的就是完整变更块，
+        // 再拼条款上下文容易把条款主题误当成变更类型依据，因此无可靠匹配时保留未匹配状态。
         Map<String, List<Target>> fallbackGroups = new LinkedHashMap<String, List<Target>>();
-        for (Target target : targets) {
-            BusinessTypePrediction current = target.paragraph.getBusinessTypePrediction();
-            if (current == null || !"NO_RELIABLE_MATCH".equals(current.getStatus())) {
-                continue;
-            }
-            String context = boundedContext(target, analysisType);
-            if (!context.isEmpty()
-                    && !context.equals(ContractTextNormalizer.normalize(target.baseText))) {
-                addGroup(fallbackGroups, context, target);
+        if (analysisType == AnalysisType.DOUBLE_VERSION) {
+            for (Target target : targets) {
+                BusinessTypePrediction current = target.paragraph.getBusinessTypePrediction();
+                if (current == null || !"NO_RELIABLE_MATCH".equals(current.getStatus())) {
+                    continue;
+                }
+                String context = boundedContext(target, analysisType);
+                if (!context.isEmpty()
+                        && !context.equals(ContractTextNormalizer.normalize(target.baseText))) {
+                    addGroup(fallbackGroups, context, target);
+                }
             }
         }
         log.info("合同比对上下文兜底整理完成, analysisId={}, fallbackUniqueCount={}",
@@ -262,18 +265,8 @@ public class ContractComparePredictionService {
     }
 
     private String boundedContext(Target target, AnalysisType analysisType) {
-        String heading;
-        if (analysisType == AnalysisType.CHANGE_DOCUMENT) {
-            // 变更函中 sourceHeading 和 clauseTitle 往往已包含目标条款提示，重复拼接会
-            // 把同一标题及“变更”语义反复送入兜底模型。优先使用规范的目标条款引用。
-            heading = ContractTextNormalizer.normalize(target.change.getTargetClauseReference());
-            if (heading.isEmpty()) {
-                heading = join(target.change.getClauseNo(), target.change.getClauseTitle());
-            }
-        } else {
-            heading = join(target.change.getClauseNo(), target.change.getClauseTitle(),
-                    target.change.getSourceHeading(), target.change.getTargetClauseReference());
-        }
+        String heading = join(target.change.getClauseNo(), target.change.getClauseTitle(),
+                target.change.getSourceHeading(), target.change.getTargetClauseReference());
         String full = "";
         if (target.change.getContext() != null) {
             full = "OLD_CONTEXT".equals(target.contextScope)
