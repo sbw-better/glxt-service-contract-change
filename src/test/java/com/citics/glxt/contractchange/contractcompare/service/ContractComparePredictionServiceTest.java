@@ -306,9 +306,11 @@ public class ContractComparePredictionServiceTest {
     }
 
     @Test
-    public void shouldNotRetryChangeDocumentPredictionWithClauseContext() {
+    public void shouldRetryChangeDocumentWithTargetClauseContextAfterNoMatch() {
         when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
-                .thenReturn(Collections.singletonList(LenientPrediction.success(noMatch())));
+                .thenReturn(Collections.singletonList(LenientPrediction.success(noMatch())))
+                .thenReturn(Collections.singletonList(
+                        LenientPrediction.success(candidateMatch())));
         ChangedParagraph changed = paragraph(ChangeType.MODIFIED, "旧金额", "“新“金额””");
         ClauseChange change = new ClauseChange();
         change.setClauseTitle("合同金额");
@@ -322,15 +324,22 @@ public class ContractComparePredictionServiceTest {
         service.predict(response, AnalysisType.CHANGE_DOCUMENT, "u1");
 
         ArgumentCaptor<List<String>> captor = ArgumentCaptor.forClass(List.class);
-        verify(paragraphService).predictBatchLenient(captor.capture(), eq("u1"));
-        verify(paragraphService, times(1)).predictBatchLenient(anyList(), eq("u1"));
-        assertEquals(Collections.singletonList("新“金额”"), captor.getValue());
+        verify(paragraphService, times(2)).predictBatchLenient(captor.capture(), eq("u1"));
+        assertEquals(Collections.singletonList("新“金额”"), captor.getAllValues().get(0));
+        assertEquals(Collections.singletonList("《基金合同》第二条 新“金额”"),
+                captor.getAllValues().get(1));
         assertEquals("“新“金额””", changed.getNewContent());
-        assertEquals("新“金额”",
-                changed.getBusinessTypePrediction().getPredictionText());
-        assertEquals("NO_RELIABLE_MATCH", changed.getBusinessTypePrediction().getStatus());
-        assertEquals("NEW_PARAGRAPH", changed.getBusinessTypePrediction().getInputScope());
-        assertFalse(changed.getBusinessTypePrediction().isFallbackUsed());
+        assertTrue(changed.getBusinessTypePrediction().getPredictionText()
+                .contains("《基金合同》第二条"));
+        assertTrue(changed.getBusinessTypePrediction().getPredictionText().contains("新“金额”"));
+        assertFalse(changed.getBusinessTypePrediction().getPredictionText()
+                .contains("1、《基金合同》第二条约定如下"));
+        assertFalse(changed.getBusinessTypePrediction().getPredictionText().contains("合同金额"));
+        assertEquals("MATCHED", changed.getBusinessTypePrediction().getStatus());
+        assertEquals("NEW_CONTEXT", changed.getBusinessTypePrediction().getInputScope());
+        assertTrue(changed.getBusinessTypePrediction().isFallbackUsed());
+        assertEquals("CANDIDATE",
+                changed.getBusinessTypePrediction().getChangeTypes().get(0).getLevel());
         assertTrue(response.getFileChangeTypeCodes().isEmpty());
     }
 
