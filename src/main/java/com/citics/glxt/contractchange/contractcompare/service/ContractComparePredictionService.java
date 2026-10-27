@@ -80,7 +80,7 @@ public class ContractComparePredictionService {
             if (current == null || !"NO_RELIABLE_MATCH".equals(current.getStatus())) {
                 continue;
             }
-            String context = boundedContext(target, analysisType);
+            String context = boundedContext(target, analysisType, analysisId);
             if (!context.isEmpty()
                     && !context.equals(ContractTextNormalizer.normalize(target.baseText))) {
                 addGroup(fallbackGroups, context, target);
@@ -284,7 +284,7 @@ public class ContractComparePredictionService {
         return paired ? value.substring(1, value.length() - 1).trim() : text;
     }
 
-    private String boundedContext(Target target, AnalysisType analysisType) {
+    private String boundedContext(Target target, AnalysisType analysisType, String analysisId) {
         String heading;
         if (analysisType == AnalysisType.CHANGE_DOCUMENT) {
             // 变更函标题字段常常彼此重复，优先使用目标条款引用作为唯一标题。
@@ -293,7 +293,15 @@ public class ContractComparePredictionService {
                 heading = join(target.change.getClauseNo(), target.change.getClauseTitle());
             }
         } else {
-            heading = join(target.change.getClauseNo(), target.change.getClauseTitle(),
+            String clauseNo = target.change.getClauseNo();
+            String normalizedBase = ContractTextNormalizer.normalize(target.baseText);
+            if (hasLeadingClauseNo(normalizedBase, clauseNo)) {
+                // Aspose/差异引擎可能已把编号保留在目标段落正文里；标题再拼一次会污染兜底输入。
+                log.debug("双版本上下文兜底省略正文已有的条款编号, analysisId={}, paragraphId={}, clauseNo={}, baseLength={}",
+                        analysisId, target.paragraphId, clauseNo, normalizedBase.length());
+                clauseNo = null;
+            }
+            heading = join(clauseNo, target.change.getClauseTitle(),
                     target.change.getSourceHeading(), target.change.getTargetClauseReference());
         }
         String full = "";
@@ -306,6 +314,22 @@ public class ContractComparePredictionService {
             full = "";
         }
         return targetFocusedContext(heading, target.baseText, full);
+    }
+
+    /** 只有编号在目标文本中构成独立前缀时才视为重复，避免把“第二条款”等正文误判为编号。 */
+    private boolean hasLeadingClauseNo(String normalizedBase, String clauseNo) {
+        String normalizedClauseNo = ContractTextNormalizer.normalize(clauseNo);
+        if (normalizedBase.isEmpty() || normalizedClauseNo.isEmpty()
+                || !normalizedBase.startsWith(normalizedClauseNo)) {
+            return false;
+        }
+        if (normalizedBase.length() == normalizedClauseNo.length()) {
+            return true;
+        }
+        char next = normalizedBase.charAt(normalizedClauseNo.length());
+        char last = normalizedClauseNo.charAt(normalizedClauseNo.length() - 1);
+        return Character.isWhitespace(next) || "、，,：:；;。．.）)]】".indexOf(next) >= 0
+                || "）)]】、，,：:；;。．.".indexOf(last) >= 0;
     }
 
     /**

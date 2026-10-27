@@ -1,12 +1,18 @@
 package com.citics.glxt.contractchange.common.exception;
 
 import com.citics.glxt.contractchange.common.constants.CommonConstants;
+import lombok.Getter;
 
 /** 合同段落变更类型识别服务中可安全返回给调用方的预期业务异常。 */
+@Getter
 public class ContractChangeBusinessException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
-    /** 对外响应业务码。 */
+    /** 对外响应业务码。
+     * -- GETTER --
+     *
+     * @return 对外响应业务码
+     */
     private final int code;
 
     /** 创建一个 400 业务异常。 */
@@ -20,8 +26,4 @@ public class ContractChangeBusinessException extends RuntimeException {
         this.code = code;
     }
 
-    /** @return 对外响应业务码 */
-    public int getCode() {
-        return code;
-    }
 }

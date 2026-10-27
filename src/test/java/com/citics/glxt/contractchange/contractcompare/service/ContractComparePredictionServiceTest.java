@@ -306,6 +306,30 @@ public class ContractComparePredictionServiceTest {
     }
 
     @Test
+    public void shouldNotRepeatClauseNumberAlreadyAtStartOfDeletedParagraphFallback() {
+        when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
+                .thenReturn(Collections.singletonList(LenientPrediction.success(noMatch())))
+                .thenReturn(Collections.singletonList(
+                        LenientPrediction.success(candidateMatch())));
+        String deletedText = "（4） 管理人的法定代表人、执行事务合伙人发生变更的";
+        ContractCompareResponse response = response(ChangeType.DELETED, deletedText, null,
+                new ClauseContext(deletedText + " 及时书面通知基金托管人。", null));
+        response.getChanges().get(0).setClauseNo("（4）");
+        response.getChanges().get(0).setClauseTitle("");
+
+        service.predict(response, AnalysisType.DOUBLE_VERSION, "u1");
+
+        ArgumentCaptor<List<String>> captor = ArgumentCaptor.forClass(List.class);
+        verify(paragraphService, times(2)).predictBatchLenient(captor.capture(), eq("u1"));
+        String fallbackInput = captor.getAllValues().get(1).get(0);
+        assertTrue(fallbackInput.startsWith(deletedText));
+        assertFalse(fallbackInput.startsWith("（4） （4）"));
+        assertTrue(fallbackInput.contains("及时书面通知基金托管人。"));
+        assertEquals("OLD_CONTEXT", paragraph(response).getBusinessTypePrediction().getInputScope());
+        assertTrue(paragraph(response).getBusinessTypePrediction().isFallbackUsed());
+    }
+
+    @Test
     public void shouldRetryChangeDocumentWithTargetClauseContextAfterNoMatch() {
         when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
                 .thenReturn(Collections.singletonList(LenientPrediction.success(noMatch())))
