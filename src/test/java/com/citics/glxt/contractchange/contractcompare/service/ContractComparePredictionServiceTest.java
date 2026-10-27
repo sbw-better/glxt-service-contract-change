@@ -330,6 +330,55 @@ public class ContractComparePredictionServiceTest {
     }
 
     @Test
+    public void shouldRemoveHeadingPrefixIgnoringWhitespaceAndKeepSourceOrder() {
+        when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
+                .thenReturn(Collections.singletonList(LenientPrediction.success(noMatch())))
+                .thenReturn(Collections.singletonList(LenientPrediction.success(candidateMatch())));
+        ContractCompareResponse response = response(ChangeType.MODIFIED,
+                "旧目标", "目标段落", new ClauseContext(null,
+                        "（二）信息披露义务人\n前置说明\n目标段落\n后续说明"));
+        response.getChanges().get(0).setClauseNo("（二）");
+        response.getChanges().get(0).setClauseTitle("信息披露义务人");
+
+        service.predict(response, AnalysisType.DOUBLE_VERSION, "u1");
+
+        ArgumentCaptor<List<String>> captor = ArgumentCaptor.forClass(List.class);
+        verify(paragraphService, times(2)).predictBatchLenient(captor.capture(), eq("u1"));
+        String fallback = captor.getAllValues().get(1).get(0);
+        assertEquals(1, occurrences(fallback, "信息披露义务人"));
+        assertTrue(fallback.indexOf("前置说明") < fallback.indexOf("目标段落"));
+        assertTrue(fallback.indexOf("目标段落") < fallback.indexOf("后续说明"));
+        assertTrue(fallback.contains("【当前变化段落结束】"));
+    }
+
+    @Test
+    public void shouldNotUseWholeSyntheticFrontMatterAsPredictionContext() {
+        when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
+                .thenReturn(Collections.singletonList(LenientPrediction.success(noMatch())));
+        ContractCompareResponse response = response(ChangeType.ADDED, null, "（2026-1）",
+                new ClauseContext(null, "合同编号：\n基金合同\n承诺书全文\n目 录"));
+        response.getChanges().get(0).setSynthetic(true);
+
+        service.predict(response, AnalysisType.DOUBLE_VERSION, "u1");
+
+        ArgumentCaptor<List<String>> captor = ArgumentCaptor.forClass(List.class);
+        verify(paragraphService, times(1)).predictBatchLenient(captor.capture(), eq("u1"));
+        assertEquals(Collections.singletonList("（2026-1）"), captor.getAllValues().get(0));
+        assertEquals("NO_RELIABLE_MATCH", paragraph(response).getBusinessTypePrediction().getStatus());
+        assertFalse(paragraph(response).getBusinessTypePrediction().isFallbackUsed());
+    }
+
+    private int occurrences(String value, String search) {
+        int count = 0;
+        int from = 0;
+        while ((from = value.indexOf(search, from)) >= 0) {
+            count++;
+            from += search.length();
+        }
+        return count;
+    }
+
+    @Test
     public void shouldRetryChangeDocumentWithTargetClauseContextAfterNoMatch() {
         when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
                 .thenReturn(Collections.singletonList(LenientPrediction.success(noMatch())))

@@ -43,6 +43,17 @@ public class ChangeDocumentExtractionService {
     private static final Pattern TARGET_SUFFIX = Pattern.compile(
             "\\s*(?:中)?(?:增加|新增|删除|修改|变更)?如下约定\\s*[：:]?.*$"
                     + "|\\s*约定如下\\s*[：:]?.*$", Pattern.DOTALL);
+    private static final String ASPOSE_EVALUATION_WATERMARK =
+            "Evaluation Only. Created with Aspose.Words.";
+    private static final String ASPOSE_EVALUATION_TRUNCATION =
+            "This document was truncated here because it was created in the Evaluation Mode.";
+    private static final Pattern EXPLICIT_REPLACEMENT_HEADING = Pattern.compile(
+            ".*(?:变更|修改|调整)\\s*如下(?:约定|内容)?\\s*[：:]?.*", Pattern.DOTALL);
+    private static final Pattern CONTRACT_ARTICLE_REFERENCE = Pattern.compile(
+            ".*第[一二三四五六七八九十百千万〇零两0-9]+条.*", Pattern.DOTALL);
+    private static final Pattern LEADING_PARENTHESIZED_SUBCLAUSE = Pattern.compile(
+            "^[“\\\"＂]?\\s*[（(][一二三四五六七八九十百千万〇零两0-9]+[）)]\\s*.+",
+            Pattern.DOTALL);
 
     private final AsposeCompareService asposeCompareService;
     private final ClauseComparisonEngine comparisonEngine;
@@ -61,6 +72,7 @@ public class ChangeDocumentExtractionService {
         if (blocks.isEmpty()) {
             throw new ContractChangeBusinessException("变更函中未读取到可解析文本");
         }
+        rejectTruncatedEvaluationDocument(blocks);
         List<Integer> headingIndexes = headingIndexes(blocks);
         log.info("变更文档标题识别完成，识别标题数={}", headingIndexes.size());
         if (headingIndexes.isEmpty()) {
@@ -103,12 +115,29 @@ public class ChangeDocumentExtractionService {
                     text = tableText((Table) child);
                 }
                 text = ContractCompareText.cleanDisplayText(text);
+                // Aspose 无许可证运行时会把试用水印插入正文，不能把该标记当成变更函内容。
+                if (text.contains(ASPOSE_EVALUATION_WATERMARK)) {
+                    log.warn("忽略Aspose试用版水印段落，paragraphTextLength={}", text.length());
+                    continue;
+                }
                 if (!text.isEmpty()) {
                     blocks.add(new TextBlock(text));
                 }
             }
         }
         return blocks;
+    }
+
+    /** 试用版会在文档达到段落上限时插入截断标记；不完整内容不能继续产出业务结果。 */
+    private void rejectTruncatedEvaluationDocument(List<TextBlock> blocks) {
+        for (int index = 0; index < blocks.size(); index++) {
+            if (blocks.get(index).text.contains(ASPOSE_EVALUATION_TRUNCATION)) {
+                log.error("变更函被Aspose Evaluation Mode截断，blockIndex={}，blockCount={}",
+                        index, blocks.size());
+                throw new ContractChangeBusinessException(
+                        "变更函解析不完整：Aspose.Words 试用版已截断文档，请配置有效许可证后重试");
+            }
+        }
     }
 
     private String paragraphText(Paragraph paragraph) {
@@ -169,7 +198,7 @@ public class ChangeDocumentExtractionService {
             content = new ExtractedContent(
                     logicalContent(segment, sequence, warnings), null);
         } else {
-            content = modifiedContent(segment, sequence, warnings);
+            content = modifiedContent(heading, segment, sequence, warnings);
         }
 
         String oldContent = emptyToNull(content.oldContent);
@@ -210,7 +239,29 @@ public class ChangeDocumentExtractionService {
                 return ChangeType.MODIFIED;
             }
         }
+        if (isSectionLevelNewSubclause(heading, segment)) {
+            log.info("识别到章节级标题下新增编号条款，按新增内容提取，headingLength={}, blockCount={}",
+                    heading.length(), segment.size());
+            return ChangeType.ADDED;
+        }
         return ChangeType.MODIFIED;
+    }
+
+    /** 章节级“如下约定”后直接给出新的（十二）等编号条款时，按新增子条款处理。 */
+    private boolean isSectionLevelNewSubclause(String heading, List<TextBlock> segment) {
+        if (!heading.contains("《基金合同》")
+                || !heading.contains("如下约定")
+                || heading.contains("增加")
+                || heading.contains("新增")
+                || heading.contains("删除")
+                || heading.contains("变更")
+                || heading.contains("修改")
+                || CONTRACT_ARTICLE_REFERENCE.matcher(heading).matches()
+                || segment.isEmpty()) {
+            return false;
+        }
+        String firstBlock = ContractCompareText.cleanDisplayText(segment.get(0).text);
+        return LEADING_PARENTHESIZED_SUBCLAUSE.matcher(firstBlock).matches();
     }
 
     private boolean hasCombinedAction(String heading) {
@@ -222,7 +273,7 @@ public class ChangeDocumentExtractionService {
                                                     int sequence, List<String> warnings) {
         for (TextBlock block : segment) {
             if (CHANGE_MARKER.matcher(block.text).find()) {
-                return modifiedContent(segment, sequence, warnings);
+                return modifiedContent(heading, segment, sequence, warnings);
             }
         }
         String content = logicalContent(segment, sequence, warnings);
@@ -235,7 +286,7 @@ public class ChangeDocumentExtractionService {
                 : new ExtractedContent(content, null);
     }
 
-    private ExtractedContent modifiedContent(List<TextBlock> segment, int sequence,
+    private ExtractedContent modifiedContent(String heading, List<TextBlock> segment, int sequence,
                                              List<String> warnings) {
         int markerIndex = -1;
         Matcher marker = null;
@@ -249,7 +300,14 @@ public class ChangeDocumentExtractionService {
         }
         if (markerIndex < 0) {
             warnings.add("第" + sequence + "个变更标题未找到“内容变更如下”标记，请人工复核");
-            return new ExtractedContent(logicalContent(segment, sequence, warnings), null);
+            String content = logicalContent(segment, sequence, warnings);
+            if (EXPLICIT_REPLACEMENT_HEADING.matcher(heading).matches()) {
+                // “第X条变更如下约定”后的引文是拟生效的新条文，不能误放到变更前一侧。
+                log.info("变更标题明确指向新条文但缺少前后文分隔标记，按变更后内容保留，sequence={}, contentLength={}",
+                        sequence, content.length());
+                return new ExtractedContent(null, content);
+            }
+            return new ExtractedContent(content, null);
         }
 
         String markerText = segment.get(markerIndex).text;

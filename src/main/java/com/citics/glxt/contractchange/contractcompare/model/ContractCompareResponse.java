@@ -1,6 +1,7 @@
 package com.citics.glxt.contractchange.contractcompare.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.citics.glxt.contractchange.common.serializer.FourDecimalDoubleSerializer;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import lombok.AllArgsConstructor;
@@ -56,6 +57,9 @@ public class ContractCompareResponse implements Serializable {
         private String targetClauseReference;
         @JsonInclude(JsonInclude.Include.NON_NULL)
         private ClauseContext context;
+        /** 内部标记：合成前言/签署节点不得把整段文档内容带入业务类型预测上下文。 */
+        @JsonIgnore
+        private boolean synthetic;
     }
 
     /** CONTEXT模式下返回的完整条款内容。 */

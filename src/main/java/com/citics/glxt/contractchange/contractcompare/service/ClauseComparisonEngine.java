@@ -13,6 +13,7 @@ import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDoc
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.RevisionSignal;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -29,6 +30,7 @@ import java.util.regex.Pattern;
 
 /** 条款匹配、Revision定位和变更聚合。 */
 @Service
+@Slf4j
 public class ClauseComparisonEngine {
     private static final int MAX_DIFF_TOKENS = 2000;
     private static final Pattern SEMANTIC_VALUE = Pattern.compile(
@@ -67,17 +69,173 @@ public class ClauseComparisonEngine {
         return new Analysis(changes, warnings);
     }
 
-    /** 依次使用完整内容、唯一标题和模糊相似度配对条款；无法唯一判断的配对留作新增/删除。 */
+    /** 依次按正文、同父级编号路径、标题和模糊相似度配对；无法可靠判断的保留为新增/删除。 */
     MatchResult match(Parsed oldContract, Parsed newContract) {
         Set<Clause> oldRemaining = identitySet(oldContract.getClauses());
         Set<Clause> newRemaining = identitySet(newContract.getClauses());
         Map<Clause, Clause> matches = new IdentityHashMap<Clause, Clause>();
         List<String> warnings = new ArrayList<String>();
         matchExactContent(oldRemaining, newRemaining, matches);
+        matchUniqueNumberPaths(oldRemaining, newRemaining, matches,
+                oldContract.getClauses(), newContract.getClauses());
+        matchUniqueTitlesWithinParent(oldRemaining, newRemaining, matches);
         matchUniqueTitles(oldRemaining, newRemaining, matches);
         matchFuzzy(oldContract.getClauses(), newContract.getClauses(), oldRemaining,
                 newRemaining, matches, warnings);
+        log.info("合同条款匹配完成, oldClauseCount={}, newClauseCount={}, matchedCount={}, unmatchedOldCount={}, unmatchedNewCount={}, warningCount={}",
+                oldContract.getClauses().size(), newContract.getClauses().size(), matches.size(),
+                oldRemaining.size(), newRemaining.size(), warnings.size());
         return new MatchResult(matches, oldRemaining, newRemaining, warnings);
+    }
+
+    /**
+     * 标题改名时优先用“父级路径 + 编号”作为身份线索。只有编号在对应父级下唯一时才直接配对；
+     * 重复编号则按内容、标题和邻近标题的综合分数消歧，避免全篇范围内误配相同的“8、”。
+     */
+    private void matchUniqueNumberPaths(Set<Clause> oldRemaining, Set<Clause> newRemaining,
+                                        Map<Clause, Clause> matches,
+                                        List<Clause> allOld, List<Clause> allNew) {
+        Map<String, List<Clause>> oldGroups = numberedPathGroups(oldRemaining);
+        Map<String, List<Clause>> newGroups = numberedPathGroups(newRemaining);
+        for (Map.Entry<String, List<Clause>> entry : oldGroups.entrySet()) {
+            List<Clause> oldGroup = entry.getValue();
+            List<Clause> newGroup = newGroups.get(entry.getKey());
+            if (newGroup == null || newGroup.isEmpty()) {
+                continue;
+            }
+            if (oldGroup.size() == 1 && newGroup.size() == 1) {
+                Clause oldClause = oldGroup.get(0);
+                Clause newClause = newGroup.get(0);
+                double candidateScore = score(oldClause, newClause, allOld, allNew);
+                pair(oldClause, newClause, oldRemaining, newRemaining, matches);
+                log.debug("按唯一父级编号路径配对条款, oldOrder={}, newOrder={}, oldNumber={}, newNumber={}, candidateScore={}",
+                        oldClause.getOrder(), newClause.getOrder(), oldClause.getClauseNo(),
+                        newClause.getClauseNo(), candidateScore);
+                continue;
+            }
+            matchDuplicateNumberGroup(oldGroup, newGroup, oldRemaining, newRemaining,
+                    matches, allOld, allNew);
+        }
+    }
+
+    private Map<String, List<Clause>> numberedPathGroups(Set<Clause> clauses) {
+        Map<String, List<Clause>> result = new java.util.LinkedHashMap<String, List<Clause>>();
+        for (Clause clause : clauses) {
+            String number = ContractCompareText.normalize(clause.getClauseNo());
+            if (number.isEmpty()) {
+                continue;
+            }
+            String key = parentPathKey(clause) + "|" + number;
+            List<Clause> group = result.get(key);
+            if (group == null) {
+                group = new ArrayList<Clause>();
+                result.put(key, group);
+            }
+            group.add(clause);
+        }
+        return result;
+    }
+
+    private void matchDuplicateNumberGroup(List<Clause> oldGroup, List<Clause> newGroup,
+                                           Set<Clause> oldRemaining, Set<Clause> newRemaining,
+                                           Map<Clause, Clause> matches,
+                                           List<Clause> allOld, List<Clause> allNew) {
+        List<Candidate> candidates = new ArrayList<Candidate>();
+        for (Clause oldClause : oldGroup) {
+            for (Clause newClause : newGroup) {
+                candidates.add(new Candidate(oldClause, newClause,
+                        score(oldClause, newClause, allOld, allNew)));
+            }
+        }
+        Collections.sort(candidates, Comparator.comparingDouble(Candidate::getScore).reversed());
+        for (Candidate candidate : candidates) {
+            if (!oldRemaining.contains(candidate.oldClause)
+                    || !newRemaining.contains(candidate.newClause)) {
+                continue;
+            }
+            double oldSecond = secondBestForOld(candidate.oldClause, newGroup, allOld, allNew);
+            double newSecond = secondBestForNew(candidate.newClause, oldGroup, allOld, allNew);
+            boolean confident = candidate.score >= Math.max(0.45D,
+                    properties.getMinMatchScore() - 0.15D)
+                    && candidate.score - oldSecond >= Math.max(0.05D,
+                    properties.getAmbiguityMargin() / 2.0D)
+                    && candidate.score - newSecond >= Math.max(0.05D,
+                    properties.getAmbiguityMargin() / 2.0D);
+            if (confident) {
+                pair(candidate.oldClause, candidate.newClause,
+                        oldRemaining, newRemaining, matches);
+                log.debug("按重复编号的局部相似度配对条款, oldOrder={}, newOrder={}, candidateScore={}, oldMargin={}, newMargin={}",
+                        candidate.oldClause.getOrder(), candidate.newClause.getOrder(), candidate.score,
+                        candidate.score - oldSecond, candidate.score - newSecond);
+            } else {
+                log.debug("重复编号候选不够明确，保留为未匹配, oldOrder={}, newOrder={}, candidateScore={}, oldMargin={}, newMargin={}",
+                        candidate.oldClause.getOrder(), candidate.newClause.getOrder(), candidate.score,
+                        candidate.score - oldSecond, candidate.score - newSecond);
+            }
+        }
+    }
+
+    private double secondBestForOld(Clause fixed, List<Clause> candidates,
+                                    List<Clause> allOld, List<Clause> allNew) {
+        double best = 0.0D;
+        for (Clause candidate : candidates) {
+            if (candidate == fixed) {
+                continue;
+            }
+            best = Math.max(best, score(fixed, candidate, allOld, allNew));
+        }
+        return best;
+    }
+
+    private double secondBestForNew(Clause fixed, List<Clause> candidates,
+                                    List<Clause> allOld, List<Clause> allNew) {
+        double best = 0.0D;
+        for (Clause candidate : candidates) {
+            if (candidate == fixed) {
+                continue;
+            }
+            best = Math.max(best, score(candidate, fixed, allOld, allNew));
+        }
+        return best;
+    }
+
+    private String parentPathKey(Clause clause) {
+        List<String> parts = new ArrayList<String>();
+        Clause parent = clause.getParent();
+        while (parent != null) {
+            String number = ContractCompareText.normalize(parent.getClauseNo());
+            String title = ContractCompareText.normalize(parent.getTitle());
+            parts.add(0, number.isEmpty() ? "title:" + title : "number:" + number);
+            parent = parent.getParent();
+        }
+        return String.join("/", parts);
+    }
+
+    /** 同一父级中的唯一标题优先配对，避免全篇同名小节互相抢配。 */
+    private void matchUniqueTitlesWithinParent(Set<Clause> oldRemaining, Set<Clause> newRemaining,
+                                               Map<Clause, Clause> matches) {
+        for (Clause oldClause : new ArrayList<Clause>(oldRemaining)) {
+            String title = ContractCompareText.normalize(oldClause.getTitle());
+            if (title.isEmpty()) {
+                continue;
+            }
+            List<Clause> oldSame = clausesWithTitleAndParent(oldRemaining, title, parentPathKey(oldClause));
+            List<Clause> newSame = clausesWithTitleAndParent(newRemaining, title, parentPathKey(oldClause));
+            if (oldSame.size() == 1 && newSame.size() == 1) {
+                pair(oldSame.get(0), newSame.get(0), oldRemaining, newRemaining, matches);
+            }
+        }
+    }
+
+    private List<Clause> clausesWithTitleAndParent(Set<Clause> clauses, String title, String parentPath) {
+        List<Clause> result = new ArrayList<Clause>();
+        for (Clause clause : clauses) {
+            if (title.equals(ContractCompareText.normalize(clause.getTitle()))
+                    && parentPath.equals(parentPathKey(clause))) {
+                result.add(clause);
+            }
+        }
+        return result;
     }
 
     /** 将配对条款差异和未配对条款组合成有序的新增、删除、修改结果。 */
@@ -142,14 +300,32 @@ public class ClauseComparisonEngine {
             if (oldText.isEmpty()) {
                 continue;
             }
-            List<Clause> candidates = new ArrayList<Clause>();
+            List<Clause> scopedCandidates = new ArrayList<Clause>();
+            List<Clause> allCandidates = new ArrayList<Clause>();
             for (Clause newClause : newRemaining) {
                 if (oldText.equals(ContractCompareText.comparableContent(newClause))) {
-                    candidates.add(newClause);
+                    allCandidates.add(newClause);
+                    if (parentPathKey(oldClause).equals(parentPathKey(newClause))) {
+                        scopedCandidates.add(newClause);
+                    }
                 }
             }
-            if (!candidates.isEmpty()) {
-                pair(oldClause, nearestByOrder(oldClause, candidates), oldRemaining, newRemaining, matches);
+            if (!scopedCandidates.isEmpty()) {
+                pair(oldClause, nearestByOrder(oldClause, scopedCandidates),
+                        oldRemaining, newRemaining, matches);
+                continue;
+            }
+
+            // 相同正文重复出现在不同父级时，不能只按文档顺序跨章节抢配。
+            // 只有全文唯一的正文才允许作为跨父级移动条款的可靠身份线索。
+            int oldOccurrences = 0;
+            for (Clause candidate : oldRemaining) {
+                if (oldText.equals(ContractCompareText.comparableContent(candidate))) {
+                    oldOccurrences++;
+                }
+            }
+            if (oldOccurrences == 1 && allCandidates.size() == 1) {
+                pair(oldClause, allCandidates.get(0), oldRemaining, newRemaining, matches);
             }
         }
     }
@@ -179,15 +355,31 @@ public class ClauseComparisonEngine {
                 candidates.add(new Candidate(oldClause, newClause, score(oldClause, newClause, allOld, allNew)));
             }
             Collections.sort(candidates, Comparator.comparingDouble(Candidate::getScore).reversed());
-            if (candidates.isEmpty() || candidates.get(0).score < properties.getMinMatchScore()) {
+            if (candidates.isEmpty()) {
+                continue;
+            }
+            if (candidates.get(0).score < properties.getMinMatchScore()) {
+                log.debug("模糊条款候选低于阈值，保留为未匹配, oldOrder={}, oldNumber={}, candidateCount={}, topScore={}, threshold={}",
+                        oldClause.getOrder(), oldClause.getClauseNo(), candidates.size(),
+                        candidates.get(0).score, properties.getMinMatchScore());
                 continue;
             }
             double second = candidates.size() < 2 ? 0.0D : candidates.get(1).score;
-            if (candidates.get(0).score - second < properties.getAmbiguityMargin()) {
+            Candidate best = candidates.get(0);
+            double oldMargin = best.score - second;
+            double newSecond = secondBestForNew(best.newClause,
+                    new ArrayList<Clause>(oldRemaining), allOld, allNew);
+            double newMargin = best.score - newSecond;
+            if (oldMargin < properties.getAmbiguityMargin()
+                    || newMargin < properties.getAmbiguityMargin()) {
                 warnings.add("条款匹配存在歧义：修改前位置" + oldClause.getOrder());
+                log.debug("模糊条款候选存在双向歧义，保留为未匹配, oldOrder={}, oldNumber={}, topScore={}, oldSecondScore={}, oldMargin={}, reverseSecondScore={}, reverseMargin={}, requiredMargin={}",
+                        oldClause.getOrder(), oldClause.getClauseNo(), candidates.get(0).score,
+                        second, oldMargin, newSecond, newMargin,
+                        properties.getAmbiguityMargin());
                 continue;
             }
-            accepted.add(candidates.get(0));
+            accepted.add(best);
         }
         Collections.sort(accepted, Comparator.comparingDouble(Candidate::getScore).reversed());
         for (Candidate candidate : accepted) {
@@ -314,6 +506,7 @@ public class ClauseComparisonEngine {
         change.setClauseNo(clause.getClauseNo());
         change.setClauseTitle(clause.getTitle());
         change.setParentClauseNo(clause.getParentClauseNo());
+        change.setSynthetic(clause.isSynthetic());
         return change;
     }
 
@@ -505,44 +698,80 @@ public class ClauseComparisonEngine {
                                                      List<PartSpan> newParts,
                                                      String oldClauseNo, String newClauseNo) {
         int[][] cost = new int[oldParts.size() + 1][newParts.size() + 1];
+        double[][] alignmentSimilarity = new double[oldParts.size() + 1][newParts.size() + 1];
+        byte[][] previousMove = new byte[oldParts.size() + 1][newParts.size() + 1];
+        final byte diagonalMove = 1;
+        final byte deleteMove = 2;
+        final byte insertMove = 3;
         for (int oldIndex = 0; oldIndex <= oldParts.size(); oldIndex++) {
             cost[oldIndex][0] = oldIndex;
+            if (oldIndex > 0) {
+                previousMove[oldIndex][0] = deleteMove;
+            }
         }
         for (int newIndex = 0; newIndex <= newParts.size(); newIndex++) {
             cost[0][newIndex] = newIndex;
+            if (newIndex > 0) {
+                previousMove[0][newIndex] = insertMove;
+            }
         }
         for (int oldIndex = 1; oldIndex <= oldParts.size(); oldIndex++) {
             for (int newIndex = 1; newIndex <= newParts.size(); newIndex++) {
                 boolean equal = partKey(oldParts.get(oldIndex - 1), oldClauseNo)
                         .equals(partKey(newParts.get(newIndex - 1), newClauseNo));
-                int replace = cost[oldIndex - 1][newIndex - 1] + (equal ? 0 : 1);
-                int delete = cost[oldIndex - 1][newIndex] + 1;
-                int insert = cost[oldIndex][newIndex - 1] + 1;
-                cost[oldIndex][newIndex] = Math.min(replace, Math.min(delete, insert));
+                double pairSimilarity = partSimilarity(oldParts.get(oldIndex - 1),
+                        newParts.get(newIndex - 1), oldClauseNo, newClauseNo);
+                int bestCost = cost[oldIndex - 1][newIndex - 1] + (equal ? 0 : 1);
+                double bestSimilarity = alignmentSimilarity[oldIndex - 1][newIndex - 1]
+                        + pairSimilarity;
+                byte bestMove = diagonalMove;
+
+                int deleteCost = cost[oldIndex - 1][newIndex] + 1;
+                double deleteSimilarity = alignmentSimilarity[oldIndex - 1][newIndex];
+                if (isBetterAlignment(deleteCost, deleteSimilarity, bestCost, bestSimilarity)) {
+                    bestCost = deleteCost;
+                    bestSimilarity = deleteSimilarity;
+                    bestMove = deleteMove;
+                }
+
+                int insertCost = cost[oldIndex][newIndex - 1] + 1;
+                double insertSimilarity = alignmentSimilarity[oldIndex][newIndex - 1];
+                if (isBetterAlignment(insertCost, insertSimilarity, bestCost, bestSimilarity)) {
+                    bestCost = insertCost;
+                    bestSimilarity = insertSimilarity;
+                    bestMove = insertMove;
+                }
+                cost[oldIndex][newIndex] = bestCost;
+                alignmentSimilarity[oldIndex][newIndex] = bestSimilarity;
+                previousMove[oldIndex][newIndex] = bestMove;
             }
         }
 
         int oldIndex = oldParts.size();
         int newIndex = newParts.size();
         List<PartEdit> reversed = new ArrayList<PartEdit>();
+        int pairedCount = 0;
+        int insertedCount = 0;
+        int deletedCount = 0;
         while (oldIndex > 0 || newIndex > 0) {
-            if (oldIndex > 0 && newIndex > 0) {
+            byte move = previousMove[oldIndex][newIndex];
+            if (oldIndex > 0 && newIndex > 0 && move == diagonalMove) {
                 PartSpan oldPart = oldParts.get(oldIndex - 1);
                 PartSpan newPart = newParts.get(newIndex - 1);
                 boolean equal = partKey(oldPart, oldClauseNo).equals(partKey(newPart, newClauseNo));
-                int diagonal = cost[oldIndex - 1][newIndex - 1] + (equal ? 0 : 1);
-                if (cost[oldIndex][newIndex] == diagonal) {
-                    reversed.add(new PartEdit(equal ? PartEditType.EQUAL : PartEditType.MODIFIED,
-                            oldPart, newPart));
-                    oldIndex--;
-                    newIndex--;
-                    continue;
-                }
-            }
-            if (newIndex > 0 && cost[oldIndex][newIndex] == cost[oldIndex][newIndex - 1] + 1) {
+                reversed.add(new PartEdit(equal ? PartEditType.EQUAL : PartEditType.MODIFIED,
+                        oldPart, newPart));
+                pairedCount++;
+                oldIndex--;
+                newIndex--;
+            } else if (newIndex > 0 && (oldIndex == 0 || move == insertMove)) {
                 reversed.add(new PartEdit(PartEditType.ADDED, null, newParts.get(--newIndex)));
-            } else {
+                insertedCount++;
+            } else if (oldIndex > 0) {
                 reversed.add(new PartEdit(PartEditType.DELETED, oldParts.get(--oldIndex), null));
+                deletedCount++;
+            } else {
+                throw new IllegalStateException("无法恢复合同段落对齐路径");
             }
         }
         Collections.reverse(reversed);
@@ -552,7 +781,25 @@ public class ClauseComparisonEngine {
                 result.add(toChangedParagraph(edit, oldClauseNo, newClauseNo));
             }
         }
+        if (!result.isEmpty()) {
+            log.debug("条款段落差异对齐完成, oldPartCount={}, newPartCount={}, pairedCount={}, insertedCount={}, deletedCount={}, totalEditCost={}",
+                    oldParts.size(), newParts.size(), pairedCount, insertedCount, deletedCount,
+                    cost[oldParts.size()][newParts.size()]);
+        }
         return result;
+    }
+
+    /** 编辑步数相同时以段落相似度消歧，避免旧标题被并列路径配到新版正文段落。 */
+    private boolean isBetterAlignment(int candidateCost, double candidateSimilarity,
+                                      int currentCost, double currentSimilarity) {
+        return candidateCost < currentCost
+                || candidateCost == currentCost && candidateSimilarity > currentSimilarity + 1.0E-9D;
+    }
+
+    private double partSimilarity(PartSpan oldPart, PartSpan newPart,
+                                  String oldClauseNo, String newClauseNo) {
+        return ContractCompareText.dice(partKey(oldPart, oldClauseNo),
+                partKey(newPart, newClauseNo));
     }
 
     private String partKey(PartSpan part, String clauseNo) {

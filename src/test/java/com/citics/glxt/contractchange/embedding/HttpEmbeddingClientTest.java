@@ -12,6 +12,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
 
+import java.nio.charset.StandardCharsets;
 import java.net.SocketTimeoutException;
 import java.util.Arrays;
 import java.util.Collections;
@@ -156,7 +157,9 @@ public class HttpEmbeddingClientTest {
         HttpEmbeddingClient client = client(3, 2);
         MockRestServiceServer server = server(client);
         server.expect(once(), requestTo("http://model/embedding/v1/embeddings"))
-                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS).body(body));
+                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS)
+                        .contentType(new MediaType("application", "json", StandardCharsets.UTF_8))
+                        .body(body));
         try {
             client.embed(Collections.singletonList("测试段落"), "employee-001");
             fail("额度错误应抛出专用异常");

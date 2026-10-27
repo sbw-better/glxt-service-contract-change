@@ -9,6 +9,7 @@ import com.citics.glxt.contractchange.contractcompare.aspose.AsposeCompareServic
 import com.citics.glxt.contractchange.contractcompare.config.ContractCompareProperties;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeType;
+import com.citics.glxt.contractchange.common.exception.ContractChangeBusinessException;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -113,6 +114,57 @@ public class ChangeDocumentExtractionServiceTest {
                 response.getChanges().get(0).getChangedParagraphs().get(0).getOldContent());
         assertNull(response.getChanges().get(0).getChangedParagraphs().get(0).getNewContent());
         assertFalse(response.getWarnings().isEmpty());
+    }
+
+    @Test
+    public void shouldTreatExplicitChangeAsFollowsHeadingContentAsNewText() throws Exception {
+        ContractCompareResponse response = service.extract(document(
+                "6、《基金合同》第十二节第（四）条变更如下约定：",
+                "“（四）投资限制",
+                "1、根据《运作指引》，本基金应遵循下述投资限制：",
+                "（1）本基金投资于期货和衍生品的比例不得低于80%；”"));
+
+        assertEquals(ChangeType.MODIFIED, response.getChanges().get(0).getChangeType());
+        assertNull(response.getChanges().get(0).getChangedParagraphs().get(0).getOldContent());
+        assertTrue(response.getChanges().get(0).getChangedParagraphs().get(0).getNewContent()
+                .contains("1、根据《运作指引》"));
+        assertFalse(response.getWarnings().isEmpty());
+    }
+
+    @Test
+    public void shouldTreatChapterLevelNumberedProvisionAsAddedInsteadOfOldText() throws Exception {
+        ContractCompareResponse response = service.extract(document(
+                "7、《基金合同》第十二节“基金的投资”如下约定：",
+                "“（十二）本基金主要投资标的基金的投资范围、投资策略如下：",
+                "1、标的基金的投资范围：",
+                "2、标的基金的投资策略：”"));
+
+        assertEquals(ChangeType.ADDED, response.getChanges().get(0).getChangeType());
+        assertNull(response.getChanges().get(0).getChangedParagraphs().get(0).getOldContent());
+        assertTrue(response.getChanges().get(0).getChangedParagraphs().get(0).getNewContent()
+                .contains("（十二）本基金主要投资标的基金"));
+        assertTrue(response.getChanges().get(0).getChangedParagraphs().get(0).getNewContent()
+                .contains("1、标的基金的投资范围"));
+    }
+
+    @Test
+    public void shouldRejectEvaluationModeTruncatedDocumentInsteadOfReturningPartialChanges()
+            throws Exception {
+        Document document = new Document();
+        DocumentBuilder builder = new DocumentBuilder(document);
+        builder.writeln("1、《基金合同》第二条增加如下约定：");
+        for (int index = 0; index < 240; index++) {
+            builder.writeln("新增条款内容段落" + index + "。");
+        }
+
+        try {
+            service.extract(save(document));
+        } catch (ContractChangeBusinessException exception) {
+            assertTrue(exception.getMessage().contains("解析不完整"));
+            assertTrue(exception.getMessage().contains("有效许可证"));
+            return;
+        }
+        throw new AssertionError("应拒绝处理被 Aspose Evaluation Mode 截断的文档");
     }
 
     @Test

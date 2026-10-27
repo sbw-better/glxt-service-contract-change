@@ -305,15 +305,24 @@ public class ContractComparePredictionService {
                     target.change.getSourceHeading(), target.change.getTargetClauseReference());
         }
         String full = "";
-        if (target.change.getContext() != null) {
+        if (!target.change.isSynthetic() && target.change.getContext() != null) {
             full = "OLD_CONTEXT".equals(target.contextScope)
                     ? target.change.getContext().getOldContent()
                     : target.change.getContext().getNewContent();
         }
-        if (analysisType == AnalysisType.CHANGE_DOCUMENT) {
+        if (analysisType == AnalysisType.CHANGE_DOCUMENT || target.change.isSynthetic()) {
             full = "";
+            if (target.change.isSynthetic()) {
+                // 封面、承诺书和签署区没有稳定的条款语义，避免把整块前置内容当作目标段落上下文。
+                heading = "";
+            }
         }
-        return targetFocusedContext(heading, target.baseText, full);
+        String result = targetFocusedContext(heading, target.baseText, full);
+        log.debug("合同比对上下文已裁剪, analysisId={}, paragraphId={}, synthetic={}, baseLength={}, sourceContextLength={}, outputLength={}",
+                analysisId, target.paragraphId, target.change.isSynthetic(),
+                ContractTextNormalizer.normalize(target.baseText).length(),
+                ContractTextNormalizer.normalize(full).length(), result.length());
+        return result;
     }
 
     /** 只有编号在目标文本中构成独立前缀时才视为重复，避免把“第二条款”等正文误判为编号。 */
@@ -356,6 +365,7 @@ public class ContractComparePredictionService {
         if (normalizedFull.isEmpty()) {
             return required;
         }
+        String targetEndMarker = "【当前变化段落结束】";
         int baseAt = normalizedFull.indexOf(base);
         String before;
         String after;
@@ -366,11 +376,12 @@ public class ContractComparePredictionService {
             before = normalizedFull.substring(0, baseAt).trim();
             after = normalizedFull.substring(baseAt + base.length()).trim();
         }
-        if (!normalizedHeading.isEmpty() && before.startsWith(normalizedHeading)) {
-            before = before.substring(normalizedHeading.length()).trim();
+        int headingPrefixEnd = matchingPrefixEndIgnoringWhitespace(before, normalizedHeading);
+        if (headingPrefixEnd >= 0) {
+            before = before.substring(headingPrefixEnd).trim();
         }
 
-        int available = Math.max(0, maxLength() - required.length() - 2);
+        int available = Math.max(0, maxLength() - required.length() - targetEndMarker.length() - 2);
         int beforeBudget = Math.min(before.length(), available / 2);
         int afterBudget = Math.min(after.length(), available - beforeBudget);
         int remaining = available - beforeBudget - afterBudget;
@@ -382,10 +393,36 @@ public class ContractComparePredictionService {
         }
         String selectedBefore = before.substring(before.length() - beforeBudget);
         String selectedAfter = after.substring(0, afterBudget);
+        // 按原文顺序排列，并标记目标段落终点；否则同条款多个变化会折叠成相同输入，且前后文难辨。
         String bounded = ContractTextNormalizer.normalize(
-                join(normalizedHeading, base, selectedBefore, selectedAfter));
+                join(normalizedHeading, selectedBefore, base + targetEndMarker, selectedAfter));
         return bounded.length() <= maxLength()
                 ? bounded : bounded.substring(0, maxLength());
+    }
+
+    /** 返回与标题等价的前缀在原字符串中的结束位置，比较时忽略空格但不丢失原文字符位置。 */
+    private int matchingPrefixEndIgnoringWhitespace(String source, String expectedPrefix) {
+        if (source == null || expectedPrefix == null || expectedPrefix.isEmpty()) {
+            return -1;
+        }
+        String expected = ContractCompareText.normalize(expectedPrefix);
+        int expectedIndex = 0;
+        int sourceIndex = 0;
+        while (sourceIndex < source.length() && expectedIndex < expected.length()) {
+            char current = source.charAt(sourceIndex++);
+            if (Character.isWhitespace(current) || Character.isSpaceChar(current)) {
+                continue;
+            }
+            if (Character.toLowerCase(current) != expected.charAt(expectedIndex++)) {
+                return -1;
+            }
+        }
+        while (sourceIndex < source.length()
+                && (Character.isWhitespace(source.charAt(sourceIndex))
+                || Character.isSpaceChar(source.charAt(sourceIndex)))) {
+            sourceIndex++;
+        }
+        return expectedIndex == expected.length() ? sourceIndex : -1;
     }
 
     private String join(String... values) {

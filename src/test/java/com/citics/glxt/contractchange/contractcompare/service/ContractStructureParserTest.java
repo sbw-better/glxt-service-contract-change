@@ -94,6 +94,122 @@ public class ContractStructureParserTest {
         assertEquals("投资范围", parsed.getClauses().get(1).getTitle());
     }
 
+    @Test
+    public void shouldSkipUnstyledTocAndKeepPrefaceOutOfBodyHierarchy() throws Exception {
+        Document document = new Document();
+        DocumentBuilder builder = new DocumentBuilder(document);
+        builder.writeln("合同编号：TEST-002");
+        builder.writeln("远澜基金合同");
+        builder.writeln("合格投资者承诺书");
+        builder.writeln("投资者承诺内容");
+        builder.writeln("目    录");
+        builder.writeln("一、合同当事人\t4");
+        builder.writeln("一、合同当事人");
+        builder.writeln("合同主体内容。");
+
+        Parsed parsed = new ContractStructureParser().parse(document);
+
+        assertEquals(3, parsed.getClauses().size());
+        assertTrue(parsed.getClauses().get(0).isSynthetic());
+        assertEquals("合同编号：TEST-002", parsed.getClauses().get(0).getTitle());
+        assertEquals(2, parsed.getClauses().get(0).getContentParts().size());
+        assertEquals("合格投资者承诺书", parsed.getClauses().get(1).getTitle());
+        assertTrue(parsed.getClauses().get(1).isSynthetic());
+        assertEquals("一、", parsed.getClauses().get(2).getClauseNo());
+        assertEquals("合同当事人", parsed.getClauses().get(2).getTitle());
+        assertNull(parsed.getClauses().get(2).getParent());
+        for (Clause clause : parsed.getClauses()) {
+            for (String part : clause.getContentParts()) {
+                assertTrue(!part.contains("目    录"));
+                assertTrue(!part.contains("合同当事人\t4"));
+            }
+        }
+    }
+
+    @Test
+    public void shouldIgnoreAsposeEvaluationWatermarkInParsedContractContent() throws Exception {
+        Document document = new Document();
+        DocumentBuilder builder = new DocumentBuilder(document);
+        builder.writeln("Evaluation Only. Created with Aspose.Words. Copyright 2003-2019 Aspose Pty Ltd.");
+        builder.writeln("第二条 合同金额");
+        builder.writeln("合同金额为100万元。");
+
+        Parsed parsed = new ContractStructureParser().parse(document);
+
+        assertEquals(1, parsed.getClauses().size());
+        assertEquals("第二条", parsed.getClauses().get(0).getClauseNo());
+        for (String part : parsed.getClauses().get(0).getContentParts()) {
+            assertTrue(!part.contains("Evaluation Only"));
+        }
+    }
+
+    @Test
+    public void shouldNestSimpleNumberedStepsUnderParenthesizedClauseAndPreserveTableRows() throws Exception {
+        Document document = new Document();
+        DocumentBuilder builder = new DocumentBuilder(document);
+        builder.writeln("二十三、基金财产清算");
+        builder.writeln("（四）基金财产清算程序");
+        builder.writeln("1、对基金资产进行清理和确认；");
+        builder.writeln("2、对基金资产进行估价；");
+        builder.writeln("3、对基金资产进行变现；");
+        builder.startTable();
+        builder.insertCell();
+        builder.write("项目");
+        builder.insertCell();
+        builder.write("金额");
+        builder.endRow();
+        builder.insertCell();
+        builder.write("清算资产");
+        builder.insertCell();
+        builder.write("100万元");
+        builder.endRow();
+        builder.endTable();
+
+        Parsed parsed = new ContractStructureParser().parse(document);
+
+        Clause section = parsed.getClauses().get(0);
+        Clause procedure = parsed.getClauses().get(1);
+        Clause step1 = parsed.getClauses().get(2);
+        Clause step2 = parsed.getClauses().get(3);
+        Clause step3 = parsed.getClauses().get(4);
+        assertEquals("二十三、", section.getClauseNo());
+        assertEquals("（四）", procedure.getClauseNo());
+        assertEquals(procedure, step1.getParent());
+        assertEquals(procedure, step2.getParent());
+        assertEquals(procedure, step3.getParent());
+        assertEquals(3, procedure.getChildren().size());
+        assertEquals(3, step3.getContentParts().size());
+        assertTrue(step3.getContentParts().get(1).contains("项目 | 金额"));
+        assertTrue(step3.getContentParts().get(2).contains("清算资产 | 100万元"));
+    }
+
+    @Test
+    public void shouldResumeOuterNumberingAfterNestedRiskItems() throws Exception {
+        Document document = new Document();
+        DocumentBuilder builder = new DocumentBuilder(document);
+        builder.writeln("二十二、风险揭示");
+        builder.writeln("8、基金投资风险");
+        builder.writeln("（1）市场风险");
+        builder.writeln("市场风险说明。");
+        builder.writeln("（2）流动性风险");
+        builder.writeln("流动性风险说明。");
+        builder.writeln("9、其他特殊风险");
+        builder.writeln("其他风险说明。");
+
+        Parsed parsed = new ContractStructureParser().parse(document);
+
+        Clause section = parsed.getClauses().get(0);
+        Clause investmentRisk = parsed.getClauses().get(1);
+        Clause marketRisk = parsed.getClauses().get(2);
+        Clause liquidityRisk = parsed.getClauses().get(3);
+        Clause otherRisk = parsed.getClauses().get(4);
+        assertEquals("二十二、", section.getClauseNo());
+        assertEquals(section, investmentRisk.getParent());
+        assertEquals(investmentRisk, marketRisk.getParent());
+        assertEquals(investmentRisk, liquidityRisk.getParent());
+        assertEquals(section, otherRisk.getParent());
+    }
+
     private Document tableDocument(String amount) throws Exception {
         Document document = new Document();
         DocumentBuilder builder = new DocumentBuilder(document);
