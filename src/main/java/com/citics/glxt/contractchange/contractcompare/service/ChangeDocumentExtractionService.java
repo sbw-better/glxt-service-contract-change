@@ -43,10 +43,6 @@ public class ChangeDocumentExtractionService {
     private static final Pattern TARGET_SUFFIX = Pattern.compile(
             "\\s*(?:中)?(?:增加|新增|删除|修改|变更)?如下约定\\s*[：:]?.*$"
                     + "|\\s*约定如下\\s*[：:]?.*$", Pattern.DOTALL);
-    private static final String ASPOSE_EVALUATION_WATERMARK =
-            "Evaluation Only. Created with Aspose.Words.";
-    private static final String ASPOSE_EVALUATION_TRUNCATION =
-            "This document was truncated here because it was created in the Evaluation Mode.";
     private static final Pattern EXPLICIT_REPLACEMENT_HEADING = Pattern.compile(
             ".*(?:变更|修改|调整)\\s*如下(?:约定|内容)?\\s*[：:]?.*", Pattern.DOTALL);
     private static final Pattern CONTRACT_ARTICLE_REFERENCE = Pattern.compile(
@@ -72,7 +68,6 @@ public class ChangeDocumentExtractionService {
         if (blocks.isEmpty()) {
             throw new ContractChangeBusinessException("变更函中未读取到可解析文本");
         }
-        rejectTruncatedEvaluationDocument(blocks);
         List<Integer> headingIndexes = headingIndexes(blocks);
         log.info("变更文档标题识别完成，识别标题数={}", headingIndexes.size());
         if (headingIndexes.isEmpty()) {
@@ -115,29 +110,12 @@ public class ChangeDocumentExtractionService {
                     text = tableText((Table) child);
                 }
                 text = ContractCompareText.cleanDisplayText(text);
-                // Aspose 无许可证运行时会把试用水印插入正文，不能把该标记当成变更函内容。
-                if (text.contains(ASPOSE_EVALUATION_WATERMARK)) {
-                    log.warn("忽略Aspose试用版水印段落，paragraphTextLength={}", text.length());
-                    continue;
-                }
                 if (!text.isEmpty()) {
                     blocks.add(new TextBlock(text));
                 }
             }
         }
         return blocks;
-    }
-
-    /** 试用版会在文档达到段落上限时插入截断标记；不完整内容不能继续产出业务结果。 */
-    private void rejectTruncatedEvaluationDocument(List<TextBlock> blocks) {
-        for (int index = 0; index < blocks.size(); index++) {
-            if (blocks.get(index).text.contains(ASPOSE_EVALUATION_TRUNCATION)) {
-                log.error("变更函被Aspose Evaluation Mode截断，blockIndex={}，blockCount={}",
-                        index, blocks.size());
-                throw new ContractChangeBusinessException(
-                        "变更函解析不完整：Aspose.Words 试用版已截断文档，请配置有效许可证后重试");
-            }
-        }
     }
 
     private String paragraphText(Paragraph paragraph) {

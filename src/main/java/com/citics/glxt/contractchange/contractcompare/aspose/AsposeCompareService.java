@@ -18,7 +18,6 @@ import com.citics.glxt.contractchange.common.constants.CommonConstants;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.RevisionSignal;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
@@ -30,10 +29,7 @@ import java.util.Map;
 
 /** 使用 Aspose.Words 加载最终稿并生成文档 Revision。 */
 @Service
-@Slf4j
 public class AsposeCompareService {
-    private static final String EVALUATION_TRUNCATION_MARKER =
-            "This document was truncated here because it was created in the Evaluation Mode.";
     /** 比较两份最终版DOCX并收集Aspose Revision定位信号；不在此处生成业务类型。 */
     public ComparisonResult compare(byte[] oldBytes, byte[] newBytes) {
         Document oldDocument = load(oldBytes);
@@ -81,20 +77,10 @@ public class AsposeCompareService {
             throw new ContractChangeBusinessException("合同文件不是有效的DOCX文件");
         }
         Document document = new Document(new ByteArrayInputStream(bytes));
-        rejectEvaluationTruncation(document);
         if (document.hasRevisions()) {
             document.acceptAllRevisions();
         }
         return document;
-    }
-
-    /** Aspose 试用版会静默截断较长文档；双版本不能基于不完整文本继续产生差异。 */
-    private void rejectEvaluationTruncation(Document document) throws Exception {
-        if (document.getText().contains(EVALUATION_TRUNCATION_MARKER)) {
-            log.error("Aspose Evaluation Mode截断了合同，解析终止");
-            throw new ContractChangeBusinessException(
-                    "合同文件解析不完整：Aspose.Words 试用版已截断文档，请配置有效许可证后重试");
-        }
     }
 
     private List<RevisionSignal> extractSignals(Document compared) {

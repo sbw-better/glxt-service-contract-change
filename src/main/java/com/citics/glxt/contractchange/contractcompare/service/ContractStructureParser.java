@@ -39,8 +39,6 @@ public class ContractStructureParser {
     private static final Pattern CHINESE_NUMBERED_HEADING = Pattern.compile(
             "^\\s*([一二三四五六七八九十百千万〇零两]+[、.．])\\s*(.{1,80})$");
     private static final Pattern TOC_TITLE = Pattern.compile("^目\\s*录$");
-    private static final String ASPOSE_EVALUATION_WATERMARK =
-            "Evaluation Only. Created with Aspose.Words.";
     private static final Pattern TOC_PAGE_SUFFIX = Pattern.compile(".*(?:\\.{2,}|…{2,}|·{3,}|\\s)\\d{1,4}$");
     private static final Pattern SIGNATURE_START = Pattern.compile(
             "^(?:（?以下无正文|签署页|签字|盖章|甲方[：:]|乙方[：:]|法定代表人[：:]).*$");
@@ -55,7 +53,6 @@ public class ContractStructureParser {
         int[] sequence = new int[]{0};
         boolean inTocRegion = false;
         int skippedTocParagraphs = 0;
-        int skippedEvaluationWatermarks = 0;
         int parsedTables = 0;
         int parsedContentParagraphs = 0;
         int parsedTableRows = 0;
@@ -72,12 +69,6 @@ public class ContractStructureParser {
                     String text = ContractCompareText.cleanDisplayText(paragraph.getText());
                     if (text.isEmpty()) {
                         skippedEmptyParagraphs++;
-                        continue;
-                    }
-                    if (text.startsWith(ASPOSE_EVALUATION_WATERMARK)) {
-                        skippedEvaluationWatermarks++;
-                        log.debug("忽略Aspose试用版水印段落, paragraphIndex={}",
-                                paragraphIndexes.get(paragraph));
                         continue;
                     }
                     if (isTocTitle(text)) {
@@ -163,10 +154,10 @@ public class ContractStructureParser {
                 }
             }
         }
-        log.info("合同结构解析完成, clauseCount={}, contentParagraphCount={}, tocParagraphsSkipped={}, emptyParagraphsSkipped={}, evaluationWatermarksSkipped={}, tableCount={}, tableRowCount={}, bodyParagraphNodeCount={}",
+        log.info("合同结构解析完成, clauseCount={}, contentParagraphCount={}, tocParagraphsSkipped={}, emptyParagraphsSkipped={}, tableCount={}, tableRowCount={}, bodyParagraphNodeCount={}",
                 clauses.size(), parsedContentParagraphs, skippedTocParagraphs,
-                skippedEmptyParagraphs, skippedEvaluationWatermarks,
-                parsedTables, parsedTableRows, paragraphIndexes.size());
+                skippedEmptyParagraphs, parsedTables, parsedTableRows,
+                paragraphIndexes.size());
         return new Parsed(clauses);
     }
 

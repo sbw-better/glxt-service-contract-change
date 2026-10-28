@@ -127,23 +127,6 @@ public class ContractStructureParserTest {
     }
 
     @Test
-    public void shouldIgnoreAsposeEvaluationWatermarkInParsedContractContent() throws Exception {
-        Document document = new Document();
-        DocumentBuilder builder = new DocumentBuilder(document);
-        builder.writeln("Evaluation Only. Created with Aspose.Words. Copyright 2003-2019 Aspose Pty Ltd.");
-        builder.writeln("第二条 合同金额");
-        builder.writeln("合同金额为100万元。");
-
-        Parsed parsed = new ContractStructureParser().parse(document);
-
-        assertEquals(1, parsed.getClauses().size());
-        assertEquals("第二条", parsed.getClauses().get(0).getClauseNo());
-        for (String part : parsed.getClauses().get(0).getContentParts()) {
-            assertTrue(!part.contains("Evaluation Only"));
-        }
-    }
-
-    @Test
     public void shouldNestSimpleNumberedStepsUnderParenthesizedClauseAndPreserveTableRows() throws Exception {
         Document document = new Document();
         DocumentBuilder builder = new DocumentBuilder(document);

@@ -9,7 +9,6 @@ import com.citics.glxt.contractchange.contractcompare.aspose.AsposeCompareServic
 import com.citics.glxt.contractchange.contractcompare.config.ContractCompareProperties;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeType;
-import com.citics.glxt.contractchange.common.exception.ContractChangeBusinessException;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -145,26 +144,6 @@ public class ChangeDocumentExtractionServiceTest {
                 .contains("（十二）本基金主要投资标的基金"));
         assertTrue(response.getChanges().get(0).getChangedParagraphs().get(0).getNewContent()
                 .contains("1、标的基金的投资范围"));
-    }
-
-    @Test
-    public void shouldRejectEvaluationModeTruncatedDocumentInsteadOfReturningPartialChanges()
-            throws Exception {
-        Document document = new Document();
-        DocumentBuilder builder = new DocumentBuilder(document);
-        builder.writeln("1、《基金合同》第二条增加如下约定：");
-        for (int index = 0; index < 240; index++) {
-            builder.writeln("新增条款内容段落" + index + "。");
-        }
-
-        try {
-            service.extract(save(document));
-        } catch (ContractChangeBusinessException exception) {
-            assertTrue(exception.getMessage().contains("解析不完整"));
-            assertTrue(exception.getMessage().contains("有效许可证"));
-            return;
-        }
-        throw new AssertionError("应拒绝处理被 Aspose Evaluation Mode 截断的文档");
     }
 
     @Test
