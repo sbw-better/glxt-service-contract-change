@@ -184,6 +184,25 @@ public class ContractStructureParserTest {
     }
 
     @Test
+    public void shouldNestChineseNumberedSubheadingsUnderCurrentClause() throws Exception {
+        Document document = new Document();
+        DocumentBuilder builder = new DocumentBuilder(document);
+        builder.writeln("第二十三、基金财产清算");
+        builder.writeln("（四）基金财产清算程序");
+        builder.writeln("一、清理和确认");
+        builder.writeln("二、估价和变现");
+
+        Parsed parsed = new ContractStructureParser().parse(document);
+
+        Clause procedure = parsed.getClauses().get(1);
+        Clause firstStep = parsed.getClauses().get(2);
+        Clause secondStep = parsed.getClauses().get(3);
+        assertEquals(procedure, firstStep.getParent());
+        assertEquals(procedure, secondStep.getParent());
+        assertEquals(firstStep.getLevel(), secondStep.getLevel());
+    }
+
+    @Test
     public void shouldResumeOuterNumberingAfterNestedRiskItems() throws Exception {
         Document document = new Document();
         DocumentBuilder builder = new DocumentBuilder(document);

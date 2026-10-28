@@ -349,6 +349,8 @@ public class ContractComparePredictionServiceTest {
         assertTrue(fallback.indexOf("前置说明") < fallback.indexOf("目标段落"));
         assertTrue(fallback.indexOf("目标段落") < fallback.indexOf("后续说明"));
         assertTrue(fallback.contains("【当前变化段落结束】"));
+        assertFalse(paragraph(response).getBusinessTypePrediction().getPredictionText()
+                .contains("【当前变化段落结束】"));
     }
 
     @Test

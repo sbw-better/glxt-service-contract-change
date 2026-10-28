@@ -213,7 +213,8 @@ public class ContractStructureParser {
         Matcher chineseNumbered = CHINESE_NUMBERED_HEADING.matcher(text);
         if (chineseNumbered.matches()) {
             return new Heading(chineseNumbered.group(1),
-                    titleFromRemainder(chineseNumbered.group(2)), 1);
+                    titleFromRemainder(chineseNumbered.group(2)),
+                    resolveNumberedLevel(chineseNumbered.group(1), 1, hierarchy));
         }
         Matcher chinese = CHINESE_CLAUSE.matcher(text);
         if (chinese.matches()) {

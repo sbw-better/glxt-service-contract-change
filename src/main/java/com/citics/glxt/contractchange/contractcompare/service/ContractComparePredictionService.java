@@ -203,7 +203,9 @@ public class ContractComparePredictionService {
         result.setStatus(matched ? "MATCHED" : "NO_RELIABLE_MATCH");
         result.setInputScope(scope);
         result.setFallbackUsed(contextFallback);
-        result.setPredictionText(predictionText);
+        // 目标边界标记只用于Embedding输入，不属于合同文本，不回显给调用方。
+        result.setPredictionText(contextFallback
+                ? removeTargetBoundaryMarker(predictionText) : predictionText);
         result.setMatchType(source.getMatchType());
         result.setModelVersion(source.getModelVersion());
         result.setMaxSimilarity(source.getMaxSimilarity());
@@ -228,7 +230,8 @@ public class ContractComparePredictionService {
         result.setStatus(status);
         result.setInputScope(scope);
         result.setFallbackUsed(fallbackUsed);
-        result.setPredictionText(predictionText);
+        result.setPredictionText(fallbackUsed
+                ? removeTargetBoundaryMarker(predictionText) : predictionText);
         result.setModelVersion(properties.getEmbedding().getModelVersion());
         result.setChangeTypes(Collections.<ChangeTypePrediction>emptyList());
         result.setReferences(Collections.emptyList());
@@ -365,7 +368,6 @@ public class ContractComparePredictionService {
         if (normalizedFull.isEmpty()) {
             return required;
         }
-        String targetEndMarker = "【当前变化段落结束】";
         int baseAt = normalizedFull.indexOf(base);
         String before;
         String after;
@@ -381,6 +383,7 @@ public class ContractComparePredictionService {
             before = before.substring(headingPrefixEnd).trim();
         }
 
+        String targetEndMarker = "【当前变化段落结束】";
         int available = Math.max(0, maxLength() - required.length() - targetEndMarker.length() - 2);
         int beforeBudget = Math.min(before.length(), available / 2);
         int afterBudget = Math.min(after.length(), available - beforeBudget);
@@ -398,6 +401,10 @@ public class ContractComparePredictionService {
                 join(normalizedHeading, selectedBefore, base + targetEndMarker, selectedAfter));
         return bounded.length() <= maxLength()
                 ? bounded : bounded.substring(0, maxLength());
+    }
+
+    private String removeTargetBoundaryMarker(String text) {
+        return text == null ? null : text.replace("【当前变化段落结束】", "").trim();
     }
 
     /** 返回与标题等价的前缀在原字符串中的结束位置，比较时忽略空格但不丢失原文字符位置。 */

@@ -24,4 +24,12 @@ public class ContractCompareProperties {
     @DecimalMin("0.0")
     @DecimalMax("1.0")
     private double ambiguityMargin = 0.10D;
+    /** 段落间作为“修改”配对的最低字符相似度；低于该值时拆成删除和新增，避免跨段硬配。 */
+    @DecimalMin("0.0")
+    @DecimalMax("1.0")
+    private double paragraphMinMatchScore = 0.15D;
+    /** 相同父级和编号仍需达到的最低内容分，避免重排后复用编号导致跨主题误配。 */
+    @DecimalMin("0.0")
+    @DecimalMax("1.0")
+    private double numberPathMinMatchScore = 0.20D;
 }

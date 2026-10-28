@@ -72,7 +72,30 @@ public class PredictionAndIndexServiceTest {
         assertEquals("TYPE_A", response.getChangeTypes().get(0).getCode());
         assertEquals("HIGH", response.getChangeTypes().get(0).getLevel());
         assertTrue(response.getChangeTypes().stream()
-                .anyMatch(value -> "TYPE_B".equals(value.getCode()) && "CANDIDATE".equals(value.getLevel())));
+                .noneMatch(value -> "TYPE_B".equals(value.getCode())));
+    }
+
+    @Test
+    public void shouldNotTurnOneModeratelySimilarSampleIntoCertainCandidateByVoteRatio() {
+        double similarity = 0.7772D;
+        ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
+        when(mapper.selectActiveParagraphs("test-v1", 3)).thenReturn(Collections.singletonList(
+                paragraph(135L, "历史中相近但无关的披露段落", "62",
+                        vectorWithSimilarity(similarity))));
+        ParagraphVectorIndexService oneSampleIndex = new ParagraphVectorIndexService(mapper, properties);
+        oneSampleIndex.reload();
+
+        EmbeddingClient client = mock(EmbeddingClient.class);
+        when(client.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(3,
+                Collections.singletonList(new float[]{1F, 0F, 0F})));
+        ContractParagraphPredictionService service =
+                new ContractParagraphPredictionService(oneSampleIndex, client, properties);
+
+        PredictionResponse response = service.predict("基金清算结束后应向委托人披露清算报告", "test-user");
+
+        assertEquals("NO_RELIABLE_MATCH", response.getMatchType());
+        assertTrue(response.getChangeTypes().isEmpty());
+        assertEquals(similarity, response.getMaxSimilarity(), 0.000001D);
     }
 
     /**

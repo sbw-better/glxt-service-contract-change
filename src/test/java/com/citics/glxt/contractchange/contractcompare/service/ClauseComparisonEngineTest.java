@@ -126,6 +126,76 @@ public class ClauseComparisonEngineTest {
     }
 
     @Test
+    public void shouldNotPairUnrelatedParagraphsAsModification() throws Exception {
+        Document oldDocument = new Document();
+        DocumentBuilder oldBuilder = new DocumentBuilder(oldDocument);
+        oldBuilder.writeln("第二十一节 信息披露");
+        oldBuilder.writeln("基金的资产清算情况");
+
+        Document newDocument = new Document();
+        DocumentBuilder newBuilder = new DocumentBuilder(newDocument);
+        newBuilder.writeln("第二十一节 信息披露");
+        newBuilder.writeln("基金管理人应当在每次清算结束后及时向委托人披露清算报告，超过一年无法完成清算的，应当每年至少披露一次清算有关事项。");
+
+        ContractStructureParser parser = new ContractStructureParser();
+        Parsed oldContract = parser.parse(oldDocument);
+        Parsed newContract = parser.parse(newDocument);
+        ClauseComparisonEngine engine = new ClauseComparisonEngine(new ContractCompareProperties());
+        List<ClauseChange> changes = engine.merge(oldContract, newContract,
+                engine.match(oldContract, newContract));
+
+        assertEquals(1, changes.size());
+        List<ChangedParagraph> paragraphs = changes.get(0).getChangedParagraphs();
+        assertEquals(2, paragraphs.size());
+        assertTrue(paragraphs.stream().anyMatch(p -> p.getParagraphChangeType() == ChangeType.DELETED
+                && "基金的资产清算情况".equals(p.getOldContent())));
+        assertTrue(paragraphs.stream().anyMatch(p -> p.getParagraphChangeType() == ChangeType.ADDED
+                && p.getNewContent() != null
+                && p.getNewContent().startsWith("基金管理人应当在每次清算结束后")));
+    }
+
+    @Test
+    public void shouldNotPairOldDisclosureListHeadingWithNewClearingDisclosureBody()
+            throws Exception {
+        String oldHeading = "5、基金的资产负债情况；";
+        String newHeading = "5、清算期间的信息披露";
+        String newBody = "基金管理人应当在每次清算结束后及时向委托人披露清算报告，超过一年无法完成清算的，应当每年至少披露一次清算有关事项。";
+        Document oldDocument = new Document();
+        DocumentBuilder oldBuilder = new DocumentBuilder(oldDocument);
+        oldBuilder.writeln("第十一条 信息披露");
+        oldBuilder.writeln("（三）本基金应披露的基金信息包括：");
+        oldBuilder.writeln(oldHeading);
+
+        Document newDocument = new Document();
+        DocumentBuilder newBuilder = new DocumentBuilder(newDocument);
+        newBuilder.writeln("第十一条 信息披露");
+        newBuilder.writeln("（三）基金的信息披露");
+        newBuilder.writeln(newHeading);
+        newBuilder.writeln(newBody);
+
+        ContractStructureParser parser = new ContractStructureParser();
+        Parsed oldContract = parser.parse(oldDocument);
+        Parsed newContract = parser.parse(newDocument);
+        ClauseComparisonEngine engine = new ClauseComparisonEngine(new ContractCompareProperties());
+        List<ClauseChange> changes = engine.merge(oldContract, newContract,
+                engine.match(oldContract, newContract));
+        assertTrue("低相似度的重用编号旧条款应标为删除",
+                changes.stream().anyMatch(change -> "5".equals(change.getClauseNo())
+                        && change.getChangeType() == ChangeType.DELETED
+                        && change.getChangedParagraphs().stream().anyMatch(paragraph ->
+                        oldHeading.equals(paragraph.getOldContent()))));
+        assertTrue("低相似度的重用编号新条款应标为新增，正文不可与旧标题配对",
+                changes.stream().anyMatch(change -> "5".equals(change.getClauseNo())
+                        && change.getChangeType() == ChangeType.ADDED
+                        && change.getChangedParagraphs().stream().anyMatch(paragraph ->
+                        newBody.equals(paragraph.getNewContent()))));
+        assertFalse("旧披露标题不能与新版清算正文配成替换",
+                changes.stream().flatMap(change -> change.getChangedParagraphs().stream())
+                        .anyMatch(paragraph -> oldHeading.equals(paragraph.getOldContent())
+                                && newBody.equals(paragraph.getNewContent())));
+    }
+
+    @Test
     public void shouldNotCrossMatchDuplicateExactTextAcrossDifferentParents() throws Exception {
         Document oldDocument = new Document();
         DocumentBuilder oldBuilder = new DocumentBuilder(oldDocument);

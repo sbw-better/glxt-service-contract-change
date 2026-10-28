@@ -77,7 +77,7 @@ public class ClauseComparisonEngine {
         List<String> warnings = new ArrayList<String>();
         matchExactContent(oldRemaining, newRemaining, matches);
         matchUniqueNumberPaths(oldRemaining, newRemaining, matches,
-                oldContract.getClauses(), newContract.getClauses());
+                oldContract.getClauses(), newContract.getClauses(), warnings);
         matchUniqueTitlesWithinParent(oldRemaining, newRemaining, matches);
         matchUniqueTitles(oldRemaining, newRemaining, matches);
         matchFuzzy(oldContract.getClauses(), newContract.getClauses(), oldRemaining,
@@ -94,7 +94,8 @@ public class ClauseComparisonEngine {
      */
     private void matchUniqueNumberPaths(Set<Clause> oldRemaining, Set<Clause> newRemaining,
                                         Map<Clause, Clause> matches,
-                                        List<Clause> allOld, List<Clause> allNew) {
+                                        List<Clause> allOld, List<Clause> allNew,
+                                        List<String> warnings) {
         Map<String, List<Clause>> oldGroups = numberedPathGroups(oldRemaining);
         Map<String, List<Clause>> newGroups = numberedPathGroups(newRemaining);
         for (Map.Entry<String, List<Clause>> entry : oldGroups.entrySet()) {
@@ -107,10 +108,19 @@ public class ClauseComparisonEngine {
                 Clause oldClause = oldGroup.get(0);
                 Clause newClause = newGroup.get(0);
                 double candidateScore = score(oldClause, newClause, allOld, allNew);
-                pair(oldClause, newClause, oldRemaining, newRemaining, matches);
-                log.debug("按唯一父级编号路径配对条款, oldOrder={}, newOrder={}, oldNumber={}, newNumber={}, candidateScore={}",
-                        oldClause.getOrder(), newClause.getOrder(), oldClause.getClauseNo(),
-                        newClause.getClauseNo(), candidateScore);
+                if (candidateScore >= properties.getNumberPathMinMatchScore()) {
+                    pair(oldClause, newClause, oldRemaining, newRemaining, matches);
+                    log.debug("按唯一父级编号路径配对条款, oldOrder={}, newOrder={}, oldNumber={}, newNumber={}, candidateScore={}",
+                            oldClause.getOrder(), newClause.getOrder(), oldClause.getClauseNo(),
+                            newClause.getClauseNo(), candidateScore);
+                } else {
+                    warnings.add("相同父级编号的条款内容差异过大：修改前位置" + oldClause.getOrder()
+                            + "，保留为删除和新增");
+                    log.warn("相同父级编号路径内容相似度过低，拒绝直接配对, oldOrder={}, newOrder={}, oldNumber={}, newNumber={}, candidateScore={}, threshold={}",
+                            oldClause.getOrder(), newClause.getOrder(), oldClause.getClauseNo(),
+                            newClause.getClauseNo(), candidateScore,
+                            properties.getNumberPathMinMatchScore());
+                }
                 continue;
             }
             matchDuplicateNumberGroup(oldGroup, newGroup, oldRemaining, newRemaining,
@@ -721,10 +731,15 @@ public class ClauseComparisonEngine {
                         .equals(partKey(newParts.get(newIndex - 1), newClauseNo));
                 double pairSimilarity = partSimilarity(oldParts.get(oldIndex - 1),
                         newParts.get(newIndex - 1), oldClauseNo, newClauseNo);
-                int bestCost = cost[oldIndex - 1][newIndex - 1] + (equal ? 0 : 1);
-                double bestSimilarity = alignmentSimilarity[oldIndex - 1][newIndex - 1]
-                        + pairSimilarity;
-                byte bestMove = diagonalMove;
+                boolean plausiblePair = equal
+                        || pairSimilarity >= properties.getParagraphMinMatchScore();
+                int bestCost = plausiblePair
+                        ? cost[oldIndex - 1][newIndex - 1] + (equal ? 0 : 1)
+                        : Integer.MAX_VALUE;
+                double bestSimilarity = plausiblePair
+                        ? alignmentSimilarity[oldIndex - 1][newIndex - 1] + pairSimilarity
+                        : Double.NEGATIVE_INFINITY;
+                byte bestMove = plausiblePair ? diagonalMove : 0;
 
                 int deleteCost = cost[oldIndex - 1][newIndex] + 1;
                 double deleteSimilarity = alignmentSimilarity[oldIndex - 1][newIndex];
@@ -789,7 +804,7 @@ public class ClauseComparisonEngine {
         return result;
     }
 
-    /** 编辑步数相同时以段落相似度消歧，避免旧标题被并列路径配到新版正文段落。 */
+    /** 低相似度段落不允许直接配对；编辑步数相同时再以相似度消歧，避免无关段落被硬配成修改。 */
     private boolean isBetterAlignment(int candidateCost, double candidateSimilarity,
                                       int currentCost, double currentSimilarity) {
         return candidateCost < currentCost

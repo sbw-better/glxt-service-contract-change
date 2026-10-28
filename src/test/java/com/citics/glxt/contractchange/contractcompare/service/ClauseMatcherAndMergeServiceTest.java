@@ -17,6 +17,7 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 public class ClauseMatcherAndMergeServiceTest {
     private final ClauseComparisonEngine engine = new ClauseComparisonEngine(new ContractCompareProperties());
@@ -289,7 +290,7 @@ public class ClauseMatcherAndMergeServiceTest {
     }
 
     @Test
-    public void shouldReplaceWholeParagraphWhenTextsCannotBeReliablyAligned() {
+    public void shouldSeparateUnrelatedParagraphsWhenTheyCannotBeReliablyAligned() {
         String oldText = "管理人为上海秋晟资产有限公司。";
         String newText = "基金经理王某拥有数学与经济学学位，并具有多年证券投资管理经验。";
         Clause oldClause = clause("OLD-1", "第一条", "管理人员", 1,
@@ -300,9 +301,13 @@ public class ClauseMatcherAndMergeServiceTest {
         ClauseChange change = merge(Collections.singletonList(oldClause),
                 Collections.singletonList(newClause)).get(0);
 
-        assertEquals(1, change.getChangedParagraphs().size());
-        assertDetail(change.getChangedParagraphs().get(0), 0,
-                DetailType.REPLACED, oldText, newText);
+        assertEquals(2, change.getChangedParagraphs().size());
+        assertTrue(change.getChangedParagraphs().stream().anyMatch(paragraph ->
+                paragraph.getParagraphChangeType() == ChangeType.DELETED
+                        && oldText.equals(paragraph.getOldContent())));
+        assertTrue(change.getChangedParagraphs().stream().anyMatch(paragraph ->
+                paragraph.getParagraphChangeType() == ChangeType.ADDED
+                        && newText.equals(paragraph.getNewContent())));
     }
 
     private List<ClauseChange> merge(List<Clause> oldClauses, List<Clause> newClauses) {
