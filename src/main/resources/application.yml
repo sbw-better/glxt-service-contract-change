@@ -59,7 +59,6 @@ contract-change:
     min-similarity: ${SEARCH_MIN_SIMILARITY:0.60}
     high-threshold: ${SEARCH_HIGH_THRESHOLD:0.80}
     candidate-threshold: ${SEARCH_CANDIDATE_THRESHOLD:0.55}
-    candidate-min-support-count: ${SEARCH_CANDIDATE_MIN_SUPPORT_COUNT:2}
     min-support-count: ${SEARCH_MIN_SUPPORT_COUNT:2}
     # 投票无结果时，第一名达到该相似度则返回第一名标签作为候选，不标记为高可信。
     strong-match-threshold: ${SEARCH_STRONG_MATCH_THRESHOLD:0.80}

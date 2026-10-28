@@ -122,9 +122,6 @@ public class ContractChangeProperties {
         @DecimalMin("0.0")
         @DecimalMax("1.0")
         private double candidateThreshold = 0.55D;
-        /** 普通多样本投票返回候选所需的最少历史样本数；单样本只允许走强相似度兜底。 */
-        @Min(1)
-        private int candidateMinSupportCount = 2;
         /** 除了分数足够高，还需要至少这么多条历史段落共同支持，才能标记为高可信。 */
         @Min(1)
         private int minSupportCount = 2;

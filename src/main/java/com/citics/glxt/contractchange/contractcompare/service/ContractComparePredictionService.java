@@ -304,7 +304,15 @@ public class ContractComparePredictionService {
                         analysisId, target.paragraphId, clauseNo, normalizedBase.length());
                 clauseNo = null;
             }
-            heading = join(clauseNo, target.change.getClauseTitle(),
+            String clauseTitle = target.change.getClauseTitle();
+            if (hasLeadingClauseTitle(normalizedBase, target.change.getClauseNo(), clauseTitle)) {
+                // 编号后紧跟标题时，目标正文已经包含完整标题；只省编号会留下“标题 + 原段落”的重复。
+                log.debug("双版本上下文兜底省略正文已有的完整条款标题, analysisId={}, paragraphId={}, clauseNo={}, clauseTitle={}",
+                        analysisId, target.paragraphId, target.change.getClauseNo(), clauseTitle);
+                clauseNo = null;
+                clauseTitle = null;
+            }
+            heading = join(clauseNo, clauseTitle,
                     target.change.getSourceHeading(), target.change.getTargetClauseReference());
         }
         String full = "";
@@ -342,6 +350,28 @@ public class ContractComparePredictionService {
         char last = normalizedClauseNo.charAt(normalizedClauseNo.length() - 1);
         return Character.isWhitespace(next) || "、，,：:；;。．.）)]】".indexOf(next) >= 0
                 || "）)]】、，,：:；;。．.".indexOf(last) >= 0;
+    }
+
+    /** 检查目标正文是否已经以“编号 + 分隔符 + 标题”开头，防止上下文重复拼标题。 */
+    private boolean hasLeadingClauseTitle(String normalizedBase, String clauseNo, String clauseTitle) {
+        String number = ContractTextNormalizer.normalize(clauseNo);
+        String title = ContractTextNormalizer.normalize(clauseTitle);
+        if (normalizedBase.isEmpty() || number.isEmpty() || title.isEmpty()
+                || !normalizedBase.startsWith(number)) {
+            return false;
+        }
+        int index = number.length();
+        while (index < normalizedBase.length()) {
+            char value = normalizedBase.charAt(index);
+            if (Character.isWhitespace(value) || Character.isSpaceChar(value)
+                    || "、，,：:；;。．.）)]】".indexOf(value) >= 0) {
+                index++;
+            } else {
+                break;
+            }
+        }
+        return index + title.length() <= normalizedBase.length()
+                && normalizedBase.regionMatches(true, index, title, 0, title.length());
     }
 
     /**

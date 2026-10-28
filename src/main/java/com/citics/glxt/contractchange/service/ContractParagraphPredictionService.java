@@ -356,13 +356,6 @@ public class ContractParagraphPredictionService {
                 if (score < properties.getSearch().getCandidateThreshold()) {
                     continue;
                 }
-                if (entry.getValue().support
-                        < properties.getSearch().getCandidateMinSupportCount()) {
-                    log.debug("类型投票分数达标但独立历史样本支持不足, code={}, score={}, supportCount={}, requiredSupportCount={}",
-                            entry.getKey(), score, entry.getValue().support,
-                            properties.getSearch().getCandidateMinSupportCount());
-                    continue;
-                }
                 boolean high = score >= properties.getSearch().getHighThreshold()
                         && entry.getValue().support >= properties.getSearch().getMinSupportCount();
                 types.add(new ChangeTypePrediction(entry.getKey(), score, entry.getValue().support,

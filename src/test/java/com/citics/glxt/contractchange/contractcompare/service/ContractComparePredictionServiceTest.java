@@ -330,6 +330,28 @@ public class ContractComparePredictionServiceTest {
     }
 
     @Test
+    public void shouldNotRepeatClauseTitleWhenTargetAlreadyStartsWithNumberAndTitle() {
+        when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
+                .thenReturn(Collections.singletonList(LenientPrediction.success(noMatch())))
+                .thenReturn(Collections.singletonList(
+                        LenientPrediction.success(candidateMatch())));
+        String target = "1、信函 基金管理人以邮寄方式向委托人披露相关信息。";
+        ContractCompareResponse response = response(ChangeType.MODIFIED,
+                "旧信函约定", target,
+                new ClauseContext(null, "1、信函 基金管理人以邮寄方式向委托人披露相关信息。"));
+        response.getChanges().get(0).setClauseNo("1");
+        response.getChanges().get(0).setClauseTitle("信函");
+
+        service.predict(response, AnalysisType.DOUBLE_VERSION, "u1");
+
+        ArgumentCaptor<List<String>> captor = ArgumentCaptor.forClass(List.class);
+        verify(paragraphService, times(2)).predictBatchLenient(captor.capture(), eq("u1"));
+        String fallback = captor.getAllValues().get(1).get(0);
+        assertTrue(fallback.startsWith(target));
+        assertEquals(1, occurrences(fallback, "信函"));
+    }
+
+    @Test
     public void shouldRemoveHeadingPrefixIgnoringWhitespaceAndKeepSourceOrder() {
         when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
                 .thenReturn(Collections.singletonList(LenientPrediction.success(noMatch())))

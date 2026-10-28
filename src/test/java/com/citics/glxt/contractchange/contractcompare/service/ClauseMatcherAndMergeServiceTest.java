@@ -36,6 +36,37 @@ public class ClauseMatcherAndMergeServiceTest {
     }
 
     @Test
+    public void shouldMatchRenumberedClauseByUniqueTitleBeforeReusedNumber() {
+        Clause oldParent = clause("OLD-P", "第六条", "信息披露", 1, "第六条 信息披露");
+        Clause oldFundraising = clause("OLD-6", "（六）", "基金募集期间的信息披露", 2,
+                "（六）基金募集期间的信息披露\n募集期间披露募集信息。");
+        Clause oldManager = clause("OLD-8", "（八）", "基金管理人进行信息披露的方式", 3,
+                "（八）基金管理人进行信息披露的方式\n管理人应通过约定方式披露信息。");
+        oldFundraising.setParent(oldParent);
+        oldManager.setParent(oldParent);
+        oldParent.getChildren().add(oldFundraising);
+        oldParent.getChildren().add(oldManager);
+
+        Clause newParent = clause("NEW-P", "第六条", "信息披露", 1, "第六条 信息披露");
+        Clause newManager = clause("NEW-6", "（六）", "基金管理人进行信息披露的方式", 2,
+                "（六）基金管理人进行信息披露的方式\n管理人应通过指定方式披露信息。");
+        newManager.setParent(newParent);
+        newParent.getChildren().add(newManager);
+
+        List<ClauseChange> changes = merge(Arrays.asList(oldParent, oldFundraising, oldManager),
+                Arrays.asList(newParent, newManager));
+
+        assertTrue(changes.stream().anyMatch(change ->
+                change.getChangeType() == ChangeType.MODIFIED
+                        && "（六）".equals(change.getClauseNo())
+                        && change.getContext().getOldContent().contains("基金管理人进行信息披露的方式")
+                        && !change.getContext().getOldContent().contains("基金募集期间的信息披露")));
+        assertTrue(changes.stream().anyMatch(change ->
+                change.getChangeType() == ChangeType.DELETED
+                        && "基金募集期间的信息披露".equals(change.getClauseTitle())));
+    }
+
+    @Test
     public void shouldReturnOneModifiedClauseWithChangedParagraphAndDetails() {
         Clause oldClause = clause("OLD-1", "2.1", "合同金额", 1,
                 "2.1 合同金额\n本合同总金额为人民币100万元。");

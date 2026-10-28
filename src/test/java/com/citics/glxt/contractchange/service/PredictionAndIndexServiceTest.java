@@ -71,12 +71,14 @@ public class PredictionAndIndexServiceTest {
         assertEquals("SEMANTIC", response.getMatchType());
         assertEquals("TYPE_A", response.getChangeTypes().get(0).getCode());
         assertEquals("HIGH", response.getChangeTypes().get(0).getLevel());
-        assertTrue(response.getChangeTypes().stream()
-                .noneMatch(value -> "TYPE_B".equals(value.getCode())));
+        assertTrue(response.getChangeTypes().stream().anyMatch(value ->
+                "TYPE_B".equals(value.getCode())
+                        && "CANDIDATE".equals(value.getLevel())
+                        && value.getSupportCount() == 1));
     }
 
     @Test
-    public void shouldNotTurnOneModeratelySimilarSampleIntoCertainCandidateByVoteRatio() {
+    public void shouldReturnOneSampleAsCandidateButNotHighConfidence() {
         double similarity = 0.7772D;
         ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
         when(mapper.selectActiveParagraphs("test-v1", 3)).thenReturn(Collections.singletonList(
@@ -93,8 +95,12 @@ public class PredictionAndIndexServiceTest {
 
         PredictionResponse response = service.predict("基金清算结束后应向委托人披露清算报告", "test-user");
 
-        assertEquals("NO_RELIABLE_MATCH", response.getMatchType());
-        assertTrue(response.getChangeTypes().isEmpty());
+        assertEquals("SEMANTIC", response.getMatchType());
+        assertEquals(1, response.getChangeTypes().size());
+        assertEquals("62", response.getChangeTypes().get(0).getCode());
+        assertEquals(1D, response.getChangeTypes().get(0).getScore(), 0.000001D);
+        assertEquals(1, response.getChangeTypes().get(0).getSupportCount());
+        assertEquals("CANDIDATE", response.getChangeTypes().get(0).getLevel());
         assertEquals(similarity, response.getMaxSimilarity(), 0.000001D);
     }
 

@@ -76,10 +76,12 @@ public class ClauseComparisonEngine {
         Map<Clause, Clause> matches = new IdentityHashMap<Clause, Clause>();
         List<String> warnings = new ArrayList<String>();
         matchExactContent(oldRemaining, newRemaining, matches);
-        matchUniqueNumberPaths(oldRemaining, newRemaining, matches,
-                oldContract.getClauses(), newContract.getClauses(), warnings);
+        // 标题是章节改名、重排/重新编号时更可靠的身份线索；先锁定唯一标题，
+        // 再用“同父级 + 编号”匹配，避免新旧编号恰好相同的不同小节被抢先配错。
         matchUniqueTitlesWithinParent(oldRemaining, newRemaining, matches);
         matchUniqueTitles(oldRemaining, newRemaining, matches);
+        matchUniqueNumberPaths(oldRemaining, newRemaining, matches,
+                oldContract.getClauses(), newContract.getClauses(), warnings);
         matchFuzzy(oldContract.getClauses(), newContract.getClauses(), oldRemaining,
                 newRemaining, matches, warnings);
         log.info("合同条款匹配完成, oldClauseCount={}, newClauseCount={}, matchedCount={}, unmatchedOldCount={}, unmatchedNewCount={}, warningCount={}",

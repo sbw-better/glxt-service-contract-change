@@ -57,6 +57,9 @@ public class ContractStructureParser {
         int skippedTocParagraphs = 0;
         int skippedEvaluationWatermarks = 0;
         int parsedTables = 0;
+        int parsedContentParagraphs = 0;
+        int parsedTableRows = 0;
+        int skippedEmptyParagraphs = 0;
 
         for (Object sectionObject : document.getSections()) {
             Section section = (Section) sectionObject;
@@ -68,6 +71,7 @@ public class ContractStructureParser {
                     Paragraph paragraph = (Paragraph) node;
                     String text = ContractCompareText.cleanDisplayText(paragraph.getText());
                     if (text.isEmpty()) {
+                        skippedEmptyParagraphs++;
                         continue;
                     }
                     if (text.startsWith(ASPOSE_EVALUATION_WATERMARK)) {
@@ -101,6 +105,7 @@ public class ContractStructureParser {
                             continue;
                         }
                     }
+                    parsedContentParagraphs++;
                     if (isPrefaceSubdocumentStart(text) && current != null && current.isSynthetic()) {
                         hierarchy.clear();
                         current = addClause(clauses, hierarchy, sequence,
@@ -140,6 +145,7 @@ public class ContractStructureParser {
                     List<String> rows = tableRows(table);
                     current.getContentParts().addAll(rows);
                     parsedTables++;
+                    parsedTableRows += rows.size();
                     int cellCount = 0;
                     for (Object rowObject : table.getRows()) {
                         cellCount += ((com.aspose.words.Row) rowObject).getCells().getCount();
@@ -157,9 +163,10 @@ public class ContractStructureParser {
                 }
             }
         }
-        log.info("合同结构解析完成, clauseCount={}, tocParagraphsSkipped={}, evaluationWatermarksSkipped={}, tableCount={}, bodyParagraphCount={}",
-                clauses.size(), skippedTocParagraphs, skippedEvaluationWatermarks,
-                parsedTables, paragraphIndexes.size());
+        log.info("合同结构解析完成, clauseCount={}, contentParagraphCount={}, tocParagraphsSkipped={}, emptyParagraphsSkipped={}, evaluationWatermarksSkipped={}, tableCount={}, tableRowCount={}, bodyParagraphNodeCount={}",
+                clauses.size(), parsedContentParagraphs, skippedTocParagraphs,
+                skippedEmptyParagraphs, skippedEvaluationWatermarks,
+                parsedTables, parsedTableRows, paragraphIndexes.size());
         return new Parsed(clauses);
     }
 
