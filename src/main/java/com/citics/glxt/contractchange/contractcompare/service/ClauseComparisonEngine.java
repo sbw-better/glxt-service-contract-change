@@ -692,12 +692,27 @@ public class ClauseComparisonEngine {
 
     private void appendContent(Clause clause, boolean includeChildren,
                                List<PartSpan> spans) {
+        int sourcePartIndex = 0;
         for (String part : clause.getContentParts()) {
+            sourcePartIndex++;
             String text = ContractCompareText.cleanDisplayText(part);
             if (text.isEmpty()) {
                 continue;
             }
-            spans.add(new PartSpan(text, spans.size() + 1));
+            // Word 的手动换行（w:cr）仍属于同一个 Paragraph，Aspose 会在
+            // Paragraph.getText() 中将其表现为换行；普通段落则是多个 contentParts。
+            // 将两种边界统一成对齐单元，避免“一个含手动换行的段落”对“多个段落”误报删除/新增。
+            String[] logicalParts = text.split("\\n+");
+            if (logicalParts.length > 1) {
+                log.debug("将Word段落内手动换行拆为对齐单元, clauseNo={}, clauseTitle={}, sourcePartIndex={}, logicalPartCount={}",
+                        clause.getClauseNo(), clause.getTitle(), sourcePartIndex, logicalParts.length);
+            }
+            for (String line : logicalParts) {
+                String lineText = ContractCompareText.cleanDisplayText(line);
+                if (!lineText.isEmpty()) {
+                    spans.add(new PartSpan(lineText, spans.size() + 1));
+                }
+            }
         }
         if (includeChildren) {
             for (Clause child : clause.getChildren()) {

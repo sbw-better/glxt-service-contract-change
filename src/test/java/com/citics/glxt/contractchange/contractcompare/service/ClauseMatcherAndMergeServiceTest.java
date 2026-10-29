@@ -269,6 +269,26 @@ public class ClauseMatcherAndMergeServiceTest {
     }
 
     @Test
+    public void shouldTreatManualLineBreakAndParagraphBreakAsSameAlignmentUnits() {
+        Clause oldClause = clause("OLD-1", "（三）", "投资策略", 1,
+                "（三）投资策略\n1、第一项内容。\n2、第二项内容。\n保持不变的说明。");
+        // 模拟旧DOCX：第1、2项是同一个Word段落中的手动换行（单个contentPart内含\n）。
+        oldClause.getContentParts().clear();
+        oldClause.getContentParts().add("（三）投资策略");
+        oldClause.getContentParts().add("1、第一项内容。\n2、第二项内容。");
+        oldClause.getContentParts().add("保持不变的说明。");
+
+        // 模拟新DOCX：第1、2项分别是独立Word段落（两个contentPart）。
+        Clause newClause = clause("NEW-1", "（三）", "投资策略", 1,
+                "（三）投资策略\n1、第一项内容。\n2、第二项内容。\n保持不变的说明。");
+
+        List<ClauseChange> changes = merge(Collections.singletonList(oldClause),
+                Collections.singletonList(newClause));
+
+        assertEquals("仅段落边界不同不应生成任何变化", 0, changes.size());
+    }
+
+    @Test
     public void shouldReturnPunctuationChangeWithParagraphContext() {
         Clause oldClause = clause("OLD-1", "第一条", "人员", 1,
                 "第一条 人员\n基金经理为张三，任期三年。");
