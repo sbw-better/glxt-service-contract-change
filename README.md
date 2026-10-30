@@ -107,6 +107,7 @@ Java会校验返回数量、批量响应`index`、实际维度、非法浮点数
 | `SEARCH_MAX_PARAGRAPH_LENGTH` | `2000` | 规范化段落最大字符数，不等同于Token数 |
 | `SEARCH_MIN_SIMILARITY` | `0.60` | 最低召回相似度 |
 | `SEARCH_HIGH_THRESHOLD` | `0.80` | 高可信类型得分阈值 |
+| `SEARCH_HIGH_MIN_SIMILARITY` | `0.85` | 标记高可信时，支持该类型的每条历史样本都必须达到的最低相似度 |
 | `SEARCH_CANDIDATE_THRESHOLD` | `0.55` | 候选类型得分阈值 |
 | `SEARCH_STRONG_MATCH_THRESHOLD` | `0.80` | 强相似单条候选兜底阈值 |
 

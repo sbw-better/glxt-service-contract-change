@@ -19,6 +19,9 @@ public class ContractCompareResponse implements Serializable {
     private int totalChanges;
     private List<ClauseChange> changes;
     private List<String> warnings;
+    /** 结构化警告；保留 warnings 字符串字段，便于旧调用方继续使用。 */
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    private List<WarningDetail> warningDetails;
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private PredictionSummary predictionSummary;
     /** 整份合同按文件级可信度规则汇总后的业务变更类型编码。 */
@@ -40,6 +43,24 @@ public class ContractCompareResponse implements Serializable {
         private int noReliableMatchCount;
         private int failedCount;
         private int skippedTooLongCount;
+    }
+
+    /** 可定位、可分类的诊断信息，字段仅在可确定时填写，避免伪造精确位置。 */
+    @Data
+    public static class WarningDetail implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private String code;
+        private String severity;
+        private String message;
+        private String clauseNo;
+        private String clauseTitle;
+        /** 结构解析列表中的旧条款顺序号，仅表示条款序号而非Word段落序号。 */
+        private Integer sourceClauseOrder;
+        private Integer sourceParagraphIndex;
+        private Integer relatedChangeIndex;
+        private Integer relatedParagraphIndex;
+        private String oldTextExcerpt;
+        private String newTextExcerpt;
     }
 
     /** 一条完整条款变更。 */

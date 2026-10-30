@@ -58,8 +58,10 @@ public class DoubleVersionChangeExtractor implements ContractChangeExtractor {
             Parsed newContract = structureParser.parse(compared.getNewDocument());
             Analysis analysis = comparisonEngine.analyze(
                     oldContract, newContract, compared.getRevisions());
-            return new ContractCompareResponse(analysis.getChanges().size(),
-                    analysis.getChanges(), analysis.getWarnings());
+            ContractCompareResponse response = new ContractCompareResponse(
+                    analysis.getChanges().size(), analysis.getChanges(), analysis.getWarnings());
+            response.setWarningDetails(analysis.getWarningDetails());
+            return response;
         } catch (Exception ex) {
             if (ex instanceof RuntimeException) {
                 throw (RuntimeException) ex;

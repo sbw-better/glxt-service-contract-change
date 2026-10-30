@@ -118,6 +118,10 @@ public class ContractChangeProperties {
         @DecimalMin("0.0")
         @DecimalMax("1.0")
         private double highThreshold = 0.80D;
+        /** 高可信要求每条支持该类型的历史样本都达到此相似度，避免弱样本仅凭标签一致抬高投票占比。 */
+        @DecimalMin("-1.0")
+        @DecimalMax("1.0")
+        private double highMinSimilarity = 0.85D;
         /** 一个类型至少达到这个得分，才会作为候选返回。 */
         @DecimalMin("0.0")
         @DecimalMax("1.0")

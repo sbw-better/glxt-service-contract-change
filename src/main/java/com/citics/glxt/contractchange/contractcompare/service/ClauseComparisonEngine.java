@@ -7,6 +7,7 @@ import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRespo
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseChange;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseContext;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.DetailType;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.WarningDetail;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.Clause;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.MatchResult;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.Parsed;
@@ -52,21 +53,125 @@ public class ClauseComparisonEngine {
         LocationResult locations = locate(revisions, oldContract, newContract);
         List<ClauseChange> changes = merge(oldContract, newContract, matches);
         List<String> warnings = new ArrayList<String>(matches.getWarnings());
-        if (locations.unlocatedCount > 0) {
-            warnings.add("有" + locations.unlocatedCount + "处Word修订无法可靠归属到具体条款");
+        List<WarningDetail> warningDetails = new ArrayList<WarningDetail>();
+        for (String matchWarning : matches.getWarnings()) {
+            WarningDetail detail = warning("CLAUSE_MATCH_REVIEW", "WARNING", matchWarning);
+            enrichClauseMatchWarning(detail, matchWarning, oldContract, changes);
+            warningDetails.add(detail);
         }
-        if (revisions.isEmpty() && !changes.isEmpty()) {
-            warnings.add("结构化文本存在差异，但Aspose未生成Revision，请人工复核");
-        }
-        for (ClauseChange change : changes) {
-            if (change.getChangeType() == ChangeType.MODIFIED && hasMissingDetails(change)) {
-                warnings.add("条款" + displayName(change) + "的具体文字差异无法可靠生成，请结合变化段落复核");
-            } else if (change.getChangeType() == ChangeType.MODIFIED
-                    && hasWholeParagraphReplacement(change)) {
-                warnings.add("条款" + displayName(change) + "存在无法可靠细分的变化，已按整段替换返回");
+        if (locations.getUnlocatedCount() > 0) {
+            String message = "有" + locations.getUnlocatedCount() + "处Word修订无法可靠归属到具体条款";
+            warnings.add(message);
+            for (RevisionSignal signal : locations.unlocatedRevisions) {
+                WarningDetail detail = warning("REVISION_UNLOCATED", "WARNING", message);
+                detail.setSourceParagraphIndex(signal.getParagraphIndex());
+                detail.setOldTextExcerpt(excerpt(signal.getText()));
+                warningDetails.add(detail);
             }
         }
-        return new Analysis(changes, warnings);
+        if (revisions.isEmpty() && !changes.isEmpty()) {
+            String message = "结构化文本存在差异，但Aspose未生成Revision，请人工复核";
+            warnings.add(message);
+            for (int changeIndex = 0; changeIndex < changes.size(); changeIndex++) {
+                ClauseChange change = changes.get(changeIndex);
+                WarningDetail detail = warning("REVISION_SIGNAL_MISSING", "WARNING", message);
+                locateChange(detail, change, changeIndex);
+                warningDetails.add(detail);
+            }
+        }
+        for (int changeIndex = 0; changeIndex < changes.size(); changeIndex++) {
+            ClauseChange change = changes.get(changeIndex);
+            if (change.getChangeType() == ChangeType.MODIFIED && hasMissingDetails(change)) {
+                String message = "条款" + displayName(change) + "的具体文字差异无法可靠生成，请结合变化段落复核";
+                warnings.add(message);
+                warningDetails.addAll(changeWarningDetails("DIFF_DETAILS_MISSING", message,
+                        change, changeIndex));
+            } else if (change.getChangeType() == ChangeType.MODIFIED
+                    && hasWholeParagraphReplacement(change)) {
+                String message = "条款" + displayName(change) + "存在无法可靠细分的变化，已按整段替换返回";
+                warnings.add(message);
+                warningDetails.addAll(changeWarningDetails("WHOLE_PARAGRAPH_REPLACEMENT", message,
+                        change, changeIndex));
+            }
+        }
+        log.info("合同比对诊断警告生成完成, warningCount={}, warningDetailCount={}, unlocatedRevisionCount={}, changeCount={}",
+                warnings.size(), warningDetails.size(), locations.getUnlocatedCount(), changes.size());
+        return new Analysis(changes, warnings, warningDetails);
+    }
+
+    private List<WarningDetail> changeWarningDetails(String code, String message,
+                                                      ClauseChange change, int changeIndex) {
+        List<WarningDetail> result = new ArrayList<WarningDetail>();
+        List<ChangedParagraph> paragraphs = change.getChangedParagraphs();
+        if (paragraphs == null || paragraphs.isEmpty()) {
+            WarningDetail detail = warning(code, "WARNING", message);
+            locateChange(detail, change, changeIndex);
+            result.add(detail);
+            return result;
+        }
+        for (int paragraphIndex = 0; paragraphIndex < paragraphs.size(); paragraphIndex++) {
+            ChangedParagraph paragraph = paragraphs.get(paragraphIndex);
+            WarningDetail detail = warning(code, "WARNING", message);
+            locateChange(detail, change, changeIndex);
+            detail.setRelatedParagraphIndex(paragraphIndex + 1);
+            detail.setOldTextExcerpt(excerpt(paragraph.getOldContent()));
+            detail.setNewTextExcerpt(excerpt(paragraph.getNewContent()));
+            result.add(detail);
+        }
+        return result;
+    }
+
+    private void locateChange(WarningDetail detail, ClauseChange change, int changeIndex) {
+        detail.setClauseNo(change.getClauseNo());
+        detail.setClauseTitle(change.getClauseTitle());
+        detail.setRelatedChangeIndex(changeIndex + 1);
+    }
+
+    /** 将既有中文匹配警告中的旧条款顺序号解析回结构节点，补齐编号、标题和变化结果关联。 */
+    private void enrichClauseMatchWarning(WarningDetail detail, String message,
+                                          Parsed oldContract, List<ClauseChange> changes) {
+        Matcher orderMatcher = Pattern.compile("修改前位置(\\d+)").matcher(message);
+        if (!orderMatcher.find()) {
+            return;
+        }
+        int order = Integer.parseInt(orderMatcher.group(1));
+        for (Clause clause : oldContract.getClauses()) {
+            if (clause.getOrder() != order) {
+                continue;
+            }
+            detail.setSourceClauseOrder(order);
+            detail.setClauseNo(clause.getClauseNo());
+            detail.setClauseTitle(clause.getTitle());
+            for (int index = 0; index < changes.size(); index++) {
+                ClauseChange change = changes.get(index);
+                if (sameClauseIdentity(clause, change)) {
+                    detail.setRelatedChangeIndex(index + 1);
+                    break;
+                }
+            }
+            return;
+        }
+    }
+
+    private boolean sameClauseIdentity(Clause clause, ClauseChange change) {
+        return clause.getClauseNo() != null && clause.getClauseNo().equals(change.getClauseNo())
+                && clause.getTitle() != null && clause.getTitle().equals(change.getClauseTitle());
+    }
+
+    private WarningDetail warning(String code, String severity, String message) {
+        WarningDetail detail = new WarningDetail();
+        detail.setCode(code);
+        detail.setSeverity(severity);
+        detail.setMessage(message);
+        return detail;
+    }
+
+    private String excerpt(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            return null;
+        }
+        String compact = text.replaceAll("\\s+", " ").trim();
+        return compact.length() <= 120 ? compact : compact.substring(0, 120) + "…";
     }
 
     /** 依次按正文、同父级编号路径、标题和模糊相似度配对；无法可靠判断的保留为新增/删除。 */
@@ -427,7 +532,7 @@ public class ClauseComparisonEngine {
 
     private LocationResult locate(List<RevisionSignal> revisions, Parsed oldContract, Parsed newContract) {
         Set<Clause> located = Collections.newSetFromMap(new IdentityHashMap<Clause, Boolean>());
-        int unlocated = 0;
+        List<RevisionSignal> unlocated = new ArrayList<RevisionSignal>();
         for (RevisionSignal revision : revisions) {
             Clause clause = byParagraphIndex(revision.getParagraphIndex(), oldContract, newContract);
             if (clause == null) {
@@ -435,7 +540,7 @@ public class ClauseComparisonEngine {
             }
             if (clause == null) {
                 if (!ContractCompareText.normalize(revision.getText()).isEmpty()) {
-                    unlocated++;
+                    unlocated.add(revision);
                 }
             } else {
                 located.add(clause);
@@ -1059,20 +1164,29 @@ public class ClauseComparisonEngine {
     }
 
     @Getter
-    @AllArgsConstructor
     public static final class Analysis {
         private final List<ClauseChange> changes;
         private final List<String> warnings;
+        private final List<WarningDetail> warningDetails;
+
+        public Analysis(List<ClauseChange> changes, List<String> warnings,
+                        List<WarningDetail> warningDetails) {
+            this.changes = changes;
+            this.warnings = warnings;
+            this.warningDetails = warningDetails;
+        }
     }
 
     private static final class LocationResult {
         private final Set<Clause> clauses;
-        private final int unlocatedCount;
+        private final List<RevisionSignal> unlocatedRevisions;
 
-        private LocationResult(Set<Clause> clauses, int unlocatedCount) {
+        private LocationResult(Set<Clause> clauses, List<RevisionSignal> unlocatedRevisions) {
             this.clauses = clauses;
-            this.unlocatedCount = unlocatedCount;
+            this.unlocatedRevisions = unlocatedRevisions;
         }
+
+        private int getUnlocatedCount() { return unlocatedRevisions.size(); }
     }
 
     private static final class Candidate {

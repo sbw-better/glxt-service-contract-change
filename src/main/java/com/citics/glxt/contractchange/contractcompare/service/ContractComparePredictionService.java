@@ -8,6 +8,7 @@ import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRespo
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangedParagraph;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseChange;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.PredictionSummary;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.WarningDetail;
 import com.citics.glxt.contractchange.model.ChangeTypePrediction;
 import com.citics.glxt.contractchange.model.PredictionResponse;
 import com.citics.glxt.contractchange.service.ContractParagraphPredictionService;
@@ -116,15 +117,65 @@ public class ContractComparePredictionService {
         response.setFileChangeTypeCodes(aggregateFileChangeTypes(targets));
         if (failed > 0) {
             ensureWarnings(response).add("有" + failed + "个变化段落未完成业务类型识别，请人工复核");
+            addPredictionWarningDetails(response, targets, "FAILED",
+                    "PREDICTION_FAILED", "业务类型识别未完成");
         }
         if (skippedTooLong > 0) {
             ensureWarnings(response).add("有" + skippedTooLong
                     + "个变化段落超过类型识别字符上限，未调用模型，请人工复核");
+            addPredictionWarningDetails(response, targets, "SKIPPED_TOO_LONG",
+                    "PREDICTION_INPUT_TOO_LONG", "变化段落超过类型识别字符上限，未调用模型");
         }
         log.info("合同比对业务类型识别完成, analysisId={}, analysisType={}, total={}, matched={}, contextFallbackMatched={}, noMatch={}, failed={}, skippedTooLong={}, elapsedMs={}",
                 analysisId, analysisType, targets.size(), matched, fallbackMatched, noMatch, failed,
                 skippedTooLong,
                 System.currentTimeMillis() - started);
+    }
+
+    /** 保留旧汇总警告的同时，逐条指出识别失败/跳过对应的条款和变化段落。 */
+    private void addPredictionWarningDetails(ContractCompareResponse response, List<Target> targets,
+                                             String status, String code, String message) {
+        List<WarningDetail> details = response.getWarningDetails();
+        if (details == null) {
+            details = new ArrayList<WarningDetail>();
+            response.setWarningDetails(details);
+        }
+        for (Target target : targets) {
+            BusinessTypePrediction prediction = target.paragraph.getBusinessTypePrediction();
+            if (prediction == null || !status.equals(prediction.getStatus())) {
+                continue;
+            }
+            WarningDetail detail = new WarningDetail();
+            detail.setCode(code);
+            detail.setSeverity("WARNING");
+            detail.setMessage(message + (prediction.getMessage() == null
+                    ? "" : "：" + prediction.getMessage()));
+            detail.setClauseNo(target.change.getClauseNo());
+            detail.setClauseTitle(target.change.getClauseTitle());
+            detail.setRelatedChangeIndex(response.getChanges().indexOf(target.change) + 1);
+            List<ChangedParagraph> paragraphs = target.change.getChangedParagraphs();
+            if (paragraphs != null) {
+                for (int index = 0; index < paragraphs.size(); index++) {
+                    if (paragraphs.get(index) == target.paragraph) {
+                        detail.setRelatedParagraphIndex(index + 1);
+                        break;
+                    }
+                }
+            }
+            detail.setOldTextExcerpt(excerpt(target.paragraph.getOldContent()));
+            detail.setNewTextExcerpt(excerpt(target.paragraph.getNewContent()));
+            details.add(detail);
+        }
+        log.info("业务类型警告明细已补充位置, code={}, detailCount={}", code,
+                details.stream().filter(item -> code.equals(item.getCode())).count());
+    }
+
+    private String excerpt(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        String compact = value.replaceAll("\\s+", " ").trim();
+        return compact.length() <= 120 ? compact : compact.substring(0, 120) + "…";
     }
 
     /** 按段落投票规则汇总文件级类型；非MATCHED段落传入空投票，不能贡献类别。 */

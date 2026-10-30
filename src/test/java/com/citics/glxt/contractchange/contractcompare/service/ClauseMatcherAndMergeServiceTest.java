@@ -6,9 +6,11 @@ import com.citics.glxt.contractchange.contractcompare.model.ContractCompareRespo
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ChangeType;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.ClauseChange;
 import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.DetailType;
+import com.citics.glxt.contractchange.contractcompare.model.ContractCompareResponse.WarningDetail;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.Clause;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.MatchResult;
 import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.Parsed;
+import com.citics.glxt.contractchange.contractcompare.service.ContractCompareDocument.RevisionSignal;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -287,6 +289,22 @@ public class ClauseMatcherAndMergeServiceTest {
                 Collections.singletonList(newClause));
 
         assertEquals("仅段落边界不同不应生成任何变化", 0, changes.size());
+    }
+
+    @Test
+    public void shouldIncludeParagraphLocationAndExcerptForUnlocatedRevisionWarning() {
+        ClauseComparisonEngine.Analysis analysis = engine.analyze(
+                new Parsed(Collections.<Clause>emptyList()),
+                new Parsed(Collections.<Clause>emptyList()),
+                Collections.singletonList(new RevisionSignal(1,
+                        "无法归属的修订内容用于定位检查。", 57)));
+
+        assertEquals(1, analysis.getWarnings().size());
+        assertEquals(1, analysis.getWarningDetails().size());
+        WarningDetail detail = analysis.getWarningDetails().get(0);
+        assertEquals("REVISION_UNLOCATED", detail.getCode());
+        assertEquals(Integer.valueOf(57), detail.getSourceParagraphIndex());
+        assertTrue(detail.getOldTextExcerpt().contains("无法归属的修订内容"));
     }
 
     @Test

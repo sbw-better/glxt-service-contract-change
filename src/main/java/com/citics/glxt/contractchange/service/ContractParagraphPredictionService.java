@@ -331,6 +331,9 @@ public class ContractParagraphPredictionService {
      */
     private PredictionResponse semantic(List<ParagraphSearchResult> matches) {
         int voteCount = Math.min(properties.getSearch().getVoteTopK(), matches.size());
+        // 最高相似度使用本次通过 min-similarity 的排序首条；它是单条证据强度，
+        // 与类型投票占比（多条证据的类别一致程度）是两个独立维度。
+        double maxSimilarity = matches.get(0).getSimilarity();
         Map<String, Vote> votes = new HashMap<String, Vote>();
         double totalWeight = 0D;
         for (int i = 0; i < voteCount; i++) {
@@ -346,6 +349,7 @@ public class ContractParagraphPredictionService {
                 }
                 vote.weight += weight;
                 vote.support++;
+                vote.minimumSimilarity = Math.min(vote.minimumSimilarity, match.getSimilarity());
             }
         }
         List<ChangeTypePrediction> types = new ArrayList<ChangeTypePrediction>();
@@ -356,8 +360,22 @@ public class ContractParagraphPredictionService {
                 if (score < properties.getSearch().getCandidateThreshold()) {
                     continue;
                 }
-                boolean high = score >= properties.getSearch().getHighThreshold()
-                        && entry.getValue().support >= properties.getSearch().getMinSupportCount();
+                boolean voteShareQualified = score >= properties.getSearch().getHighThreshold();
+                boolean supportQualified = entry.getValue().support
+                        >= properties.getSearch().getMinSupportCount();
+                // 逐类检查实际支持样本的最低相似度，不能用其他类型的高相似样本替该类型背书。
+                boolean supportSimilarityQualified = entry.getValue().minimumSimilarity
+                        >= properties.getSearch().getHighMinSimilarity();
+                // HIGH 同时需要类别占比、支持数和所有支持证据均足够相似；
+                // 仅因弱相似样本都带同一标签而得到 100% 投票占比，不足以标为 HIGH。
+                boolean high = voteShareQualified && supportQualified && supportSimilarityQualified;
+                log.debug("业务类型置信等级判定, code={}, voteShare={}, supportCount={}, maxSimilarity={}, minSupportingSimilarity={}, highThreshold={}, minSupportCount={}, highMinSimilarity={}, voteShareQualified={}, supportQualified={}, supportSimilarityQualified={}, level={}",
+                        entry.getKey(), score, entry.getValue().support, maxSimilarity,
+                        entry.getValue().minimumSimilarity,
+                        properties.getSearch().getHighThreshold(),
+                        properties.getSearch().getMinSupportCount(),
+                        properties.getSearch().getHighMinSimilarity(), voteShareQualified,
+                        supportQualified, supportSimilarityQualified, high ? "HIGH" : "CANDIDATE");
                 types.add(new ChangeTypePrediction(entry.getKey(), score, entry.getValue().support,
                         high ? "HIGH" : "CANDIDATE"));
             }
@@ -444,5 +462,7 @@ public class ContractParagraphPredictionService {
         private double weight;
         /** 支持该类型的历史样本数量。 */
         private int support;
+        /** 支持该类型的历史样本中最低的相似度，用于 HIGH 的逐证据门槛。 */
+        private double minimumSimilarity = 1D;
     }
 }

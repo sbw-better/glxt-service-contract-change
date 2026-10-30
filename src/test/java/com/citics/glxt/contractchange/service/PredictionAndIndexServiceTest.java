@@ -78,6 +78,40 @@ public class PredictionAndIndexServiceTest {
     }
 
     @Test
+    public void shouldKeepUnanimousButModeratelySimilarSamplesAsCandidate() {
+        properties.getSearch().setMinSimilarity(0.75D);
+        properties.getSearch().setCandidateThreshold(0.75D);
+        properties.getSearch().setHighThreshold(0.85D);
+        properties.getSearch().setMinSupportCount(2);
+        properties.getSearch().setHighMinSimilarity(0.85D);
+        double firstSimilarity = 0.7748D;
+        double secondSimilarity = 0.7736D;
+        ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
+        when(mapper.selectActiveParagraphs("test-v1", 3)).thenReturn(Arrays.asList(
+                paragraph(21L, "净认购金额=认购金额÷（1+认购费率）", "40",
+                        vectorWithSimilarity(firstSimilarity)),
+                paragraph(153L, "净认购金额=认购金额÷（1+某类份额对应的认购费率）", "40",
+                        vectorWithSimilarity(secondSimilarity))
+        ));
+        ParagraphVectorIndexService moderateIndex = new ParagraphVectorIndexService(mapper, properties);
+        moderateIndex.reload();
+
+        EmbeddingClient client = mock(EmbeddingClient.class);
+        when(client.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(3,
+                Collections.singletonList(new float[]{1F, 0F, 0F})));
+        ContractParagraphPredictionService service =
+                new ContractParagraphPredictionService(moderateIndex, client, properties);
+
+        PredictionResponse response = service.predict("认购份额调整规则", "test-user");
+
+        assertEquals(0.7748D, response.getMaxSimilarity(), 0.00001D);
+        assertEquals("40", response.getChangeTypes().get(0).getCode());
+        assertEquals(1D, response.getChangeTypes().get(0).getScore(), 0.000001D);
+        assertEquals(2, response.getChangeTypes().get(0).getSupportCount());
+        assertEquals("CANDIDATE", response.getChangeTypes().get(0).getLevel());
+    }
+
+    @Test
     public void shouldReturnOneSampleAsCandidateButNotHighConfidence() {
         double similarity = 0.7772D;
         ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
