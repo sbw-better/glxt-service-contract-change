@@ -369,6 +369,16 @@ public class ContractParagraphPredictionService {
                 // HIGH 同时需要类别占比、支持数和所有支持证据均足够相似；
                 // 仅因弱相似样本都带同一标签而得到 100% 投票占比，不足以标为 HIGH。
                 boolean high = voteShareQualified && supportQualified && supportSimilarityQualified;
+                // 候选最终可能跨多个当前段落汇总，因此单段候选也必须有最低的历史样本相关性。
+                // 这不要求不同段落必须命中不同 sampleId；同一历史样本仍可支持多个段落，
+                // 但它对每个段落都必须独立达到本门槛，避免弱相似结果仅靠段落数量被放大。
+                double candidateMinSimilarity = properties.getSearch().getCandidateMinSimilarity();
+                if (!high && entry.getValue().minimumSimilarity < candidateMinSimilarity) {
+                    log.info("业务类型候选因支持样本相似度不足而过滤, code={}, voteShare={}, supportCount={}, maxSimilarity={}, minSupportingSimilarity={}, candidateMinSimilarity={}",
+                            entry.getKey(), score, entry.getValue().support, maxSimilarity,
+                            entry.getValue().minimumSimilarity, candidateMinSimilarity);
+                    continue;
+                }
                 log.debug("业务类型置信等级判定, code={}, voteShare={}, supportCount={}, maxSimilarity={}, minSupportingSimilarity={}, highThreshold={}, minSupportCount={}, highMinSimilarity={}, voteShareQualified={}, supportQualified={}, supportSimilarityQualified={}, level={}",
                         entry.getKey(), score, entry.getValue().support, maxSimilarity,
                         entry.getValue().minimumSimilarity,
@@ -408,7 +418,14 @@ public class ContractParagraphPredictionService {
 
         ParagraphSearchResult first = matches.get(0);
         double firstSimilarity = first.getSimilarity();
-        if (firstSimilarity < properties.getSearch().getStrongMatchThreshold()) {
+        double requiredCandidateSimilarity = Math.max(
+                properties.getSearch().getStrongMatchThreshold(),
+                properties.getSearch().getCandidateMinSimilarity());
+        if (firstSimilarity < requiredCandidateSimilarity) {
+            log.info("强匹配候选兜底因相似度不足而跳过, sampleId={}, firstSimilarity={}, strongMatchThreshold={}, candidateMinSimilarity={}, effectiveThreshold={}",
+                    first.getSample().getSampleId(), firstSimilarity,
+                    properties.getSearch().getStrongMatchThreshold(),
+                    properties.getSearch().getCandidateMinSimilarity(), requiredCandidateSimilarity);
             return false;
         }
 

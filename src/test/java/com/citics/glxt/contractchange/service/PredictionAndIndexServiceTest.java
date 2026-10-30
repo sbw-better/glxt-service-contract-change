@@ -78,7 +78,7 @@ public class PredictionAndIndexServiceTest {
     }
 
     @Test
-    public void shouldKeepUnanimousButModeratelySimilarSamplesAsCandidate() {
+    public void shouldRejectUnanimousTypeWhenItsSupportingSamplesAreTooWeakForCandidate() {
         properties.getSearch().setMinSimilarity(0.75D);
         properties.getSearch().setCandidateThreshold(0.75D);
         properties.getSearch().setHighThreshold(0.85D);
@@ -105,15 +105,14 @@ public class PredictionAndIndexServiceTest {
         PredictionResponse response = service.predict("认购份额调整规则", "test-user");
 
         assertEquals(0.7748D, response.getMaxSimilarity(), 0.00001D);
-        assertEquals("40", response.getChangeTypes().get(0).getCode());
-        assertEquals(1D, response.getChangeTypes().get(0).getScore(), 0.000001D);
-        assertEquals(2, response.getChangeTypes().get(0).getSupportCount());
-        assertEquals("CANDIDATE", response.getChangeTypes().get(0).getLevel());
+        assertEquals("NO_RELIABLE_MATCH", response.getMatchType());
+        assertTrue(response.getChangeTypes().isEmpty());
+        assertEquals(2, response.getReferences().size());
     }
 
     @Test
     public void shouldReturnOneSampleAsCandidateButNotHighConfidence() {
-        double similarity = 0.7772D;
+        double similarity = 0.82D;
         ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
         when(mapper.selectActiveParagraphs("test-v1", 3)).thenReturn(Collections.singletonList(
                 paragraph(135L, "历史中相近但无关的披露段落", "62",
@@ -136,6 +135,61 @@ public class PredictionAndIndexServiceTest {
         assertEquals(1, response.getChangeTypes().get(0).getSupportCount());
         assertEquals("CANDIDATE", response.getChangeTypes().get(0).getLevel());
         assertEquals(similarity, response.getMaxSimilarity(), 0.000001D);
+    }
+
+    @Test
+    public void shouldNotAggregateTwoWeakUnrelatedCandidatesThatMissCandidateSimilarityFloor() {
+        double firstSimilarity = 0.7599D;
+        double secondSimilarity = 0.7799D;
+        ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
+        when(mapper.selectActiveParagraphs("test-v1", 3)).thenReturn(Arrays.asList(
+                paragraph(35L, "本基金不设置申购和赎回的预约机制", "44",
+                        vectorWithSimilarity(firstSimilarity)),
+                paragraph(36L, "本基金不设置申购和赎回的预约机制（历史重复样本）", "44",
+                        vectorWithSimilarity(secondSimilarity))
+        ));
+        ParagraphVectorIndexService weakCandidateIndex = new ParagraphVectorIndexService(mapper, properties);
+        weakCandidateIndex.reload();
+
+        EmbeddingClient client = mock(EmbeddingClient.class);
+        when(client.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(3,
+                Arrays.asList(new float[]{1F, 0F, 0F}, new float[]{1F, 0F, 0F})));
+        ContractParagraphPredictionService service =
+                new ContractParagraphPredictionService(weakCandidateIndex, client, properties);
+
+        java.util.List<PredictionResponse> predictions = service.predictBatch(
+                Arrays.asList("基金委托人特别知悉确认", "本基金合同的成立"), "test-user");
+
+        assertEquals(2, predictions.size());
+        assertTrue(predictions.stream().allMatch(value ->
+                "NO_RELIABLE_MATCH".equals(value.getMatchType()) && value.getChangeTypes().isEmpty()));
+        assertTrue(new FileChangeTypeAggregator().aggregate(
+                Arrays.asList("基金委托人特别知悉确认", "本基金合同的成立"), predictions).isEmpty());
+    }
+
+    @Test
+    public void shouldAllowOneRelevantHistoricalSampleToSupportMultipleCurrentParagraphs() {
+        double similarity = 0.82D;
+        ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);
+        when(mapper.selectActiveParagraphs("test-v1", 3)).thenReturn(Collections.singletonList(
+                paragraph(35L, "适用于基金合同的通用有效约定", "44",
+                        vectorWithSimilarity(similarity))));
+        ParagraphVectorIndexService relevantIndex = new ParagraphVectorIndexService(mapper, properties);
+        relevantIndex.reload();
+
+        EmbeddingClient client = mock(EmbeddingClient.class);
+        when(client.embed(anyList(), anyString())).thenReturn(new EmbeddingBatchResult(3,
+                Arrays.asList(new float[]{1F, 0F, 0F}, new float[]{1F, 0F, 0F})));
+        ContractParagraphPredictionService service =
+                new ContractParagraphPredictionService(relevantIndex, client, properties);
+        java.util.List<PredictionResponse> predictions = service.predictBatch(
+                Arrays.asList("合同适用的有效约定甲", "合同适用的有效约定乙"), "test-user");
+
+        assertTrue(predictions.stream().allMatch(value ->
+                value.getReferences().get(0).getSampleId() == 35L
+                        && "CANDIDATE".equals(value.getChangeTypes().get(0).getLevel())));
+        assertEquals(Collections.singletonList("44"), new FileChangeTypeAggregator().aggregate(
+                Arrays.asList("合同适用的有效约定甲", "合同适用的有效约定乙"), predictions));
     }
 
     /**

@@ -118,6 +118,10 @@ public class ContractChangeProperties {
         @DecimalMin("0.0")
         @DecimalMax("1.0")
         private double highThreshold = 0.80D;
+        /** 候选类型的每条支持样本至少达到此相似度；弱相关候选不参与文件级汇总。 */
+        @DecimalMin("-1.0")
+        @DecimalMax("1.0")
+        private double candidateMinSimilarity = 0.80D;
         /** 高可信要求每条支持该类型的历史样本都达到此相似度，避免弱样本仅凭标签一致抬高投票占比。 */
         @DecimalMin("-1.0")
         @DecimalMax("1.0")
@@ -134,11 +138,12 @@ public class ContractChangeProperties {
         @DecimalMax("1.0")
         private double strongMatchThreshold = 0.80D;
         /** 校验具有先后关系的检索参数，配置错误时直接阻止应用启动。 */
-        @AssertTrue(message = "检索配置不合法：vote/evidence TopK不能大于retrieveTopK，候选阈值不能大于高可信阈值")
+        @AssertTrue(message = "检索配置不合法：vote/evidence TopK不能大于retrieveTopK，候选阈值不能大于高可信阈值，候选相似度不能低于检索相似度")
         public boolean isValidCombination() {
             return voteTopK <= retrieveTopK
                     && evidenceTopK <= retrieveTopK
-                    && candidateThreshold <= highThreshold;
+                    && candidateThreshold <= highThreshold
+                    && minSimilarity <= candidateMinSimilarity;
         }
     }
 }

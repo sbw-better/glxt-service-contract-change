@@ -58,6 +58,8 @@ contract-change:
     max-paragraph-length: ${SEARCH_MAX_PARAGRAPH_LENGTH:5000}
     min-similarity: ${SEARCH_MIN_SIMILARITY:0.60}
     high-threshold: ${SEARCH_HIGH_THRESHOLD:0.80}
+    # CANDIDATE的每条类型支持样本也必须达到此相似度，防止弱相关候选跨段落累计后进入文档汇总。
+    candidate-min-similarity: ${SEARCH_CANDIDATE_MIN_SIMILARITY:0.80}
     # HIGH除投票占比和支持数外，最高单条历史相似度也必须达到此值；弱相关同标签样本只作为候选。
     high-min-similarity: ${SEARCH_HIGH_MIN_SIMILARITY:0.85}
     candidate-threshold: ${SEARCH_CANDIDATE_THRESHOLD:0.55}

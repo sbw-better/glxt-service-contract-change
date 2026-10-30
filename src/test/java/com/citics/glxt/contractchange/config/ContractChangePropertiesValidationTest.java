@@ -39,6 +39,15 @@ public class ContractChangePropertiesValidationTest {
         assertFalse(validator.validate(properties).isEmpty());
     }
 
+    @Test
+    public void shouldRejectCandidateSimilarityBelowRetrievalSimilarity() {
+        ContractChangeProperties properties = validProperties();
+        properties.getSearch().setMinSimilarity(0.85D);
+        properties.getSearch().setCandidateMinSimilarity(0.80D);
+
+        assertFalse(validator.validate(properties).isEmpty());
+    }
+
     /** 模型平台未分配关键参数时必须阻止应用启动，避免误用旧模型默认值。 */
     @Test
     public void shouldRejectMissingGatewayConfiguration() {
