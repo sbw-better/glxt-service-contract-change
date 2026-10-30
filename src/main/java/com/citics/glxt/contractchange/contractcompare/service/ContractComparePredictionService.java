@@ -261,15 +261,17 @@ public class ContractComparePredictionService {
         result.setModelVersion(source.getModelVersion());
         result.setMaxSimilarity(source.getMaxSimilarity());
         result.setReferences(source.getReferences());
-        if (contextFallback && source.getChangeTypes() != null) {
-            List<ChangeTypePrediction> capped = new ArrayList<ChangeTypePrediction>();
+        // 上下文兜底只改变模型实际看到的文本，不自动代表证据等级更低。
+        // 保留预测服务依据投票占比、支持数和支持样本相似度算出的等级；强匹配单样本兜底
+        // 本身只会产出 CANDIDATE，因此不会因移除此处降级而被提升为 HIGH。
+        result.setChangeTypes(source.getChangeTypes());
+        if (source.getChangeTypes() != null) {
             for (ChangeTypePrediction type : source.getChangeTypes()) {
-                capped.add(new ChangeTypePrediction(type.getCode(), type.getScore(),
-                        type.getSupportCount(), "CANDIDATE"));
+                log.debug("合同比较预测等级回填, scope={}, fallbackUsed={}, matchType={}, code={}, score={}, supportCount={}, maxSimilarity={}, sourceLevel={}, finalLevel={}",
+                        scope, contextFallback, source.getMatchType(), type.getCode(),
+                        type.getScore(), type.getSupportCount(), source.getMaxSimilarity(),
+                        type.getLevel(), type.getLevel());
             }
-            result.setChangeTypes(capped);
-        } else {
-            result.setChangeTypes(source.getChangeTypes());
         }
         return result;
     }

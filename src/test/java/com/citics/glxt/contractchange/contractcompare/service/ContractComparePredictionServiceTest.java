@@ -48,7 +48,7 @@ public class ContractComparePredictionServiceTest {
     }
 
     @Test
-    public void shouldFallbackToNewContextAndCapHighResultAsCandidate() {
+    public void shouldFallbackToNewContextAndPreserveHighResultForAggregation() {
         when(paragraphService.predictBatchLenient(anyList(), eq("u1")))
                 .thenReturn(Collections.singletonList(LenientPrediction.success(noMatch())))
                 .thenReturn(Collections.singletonList(LenientPrediction.success(highMatch())));
@@ -65,9 +65,10 @@ public class ContractComparePredictionServiceTest {
         assertTrue(paragraph.getBusinessTypePrediction().isFallbackUsed());
         assertTrue(paragraph.getBusinessTypePrediction().getPredictionText().contains("金额为120万元。"));
         assertTrue(paragraph.getBusinessTypePrediction().getPredictionText().contains("其他新约定。"));
-        assertEquals("CANDIDATE",
+        // 上下文兜底只负责补充模型输入；分类服务判为 HIGH 时保留该等级，供文件级汇总使用。
+        assertEquals("HIGH",
                 paragraph.getBusinessTypePrediction().getChangeTypes().get(0).getLevel());
-        assertTrue(response.getFileChangeTypeCodes().isEmpty());
+        assertEquals(Collections.singletonList("20"), response.getFileChangeTypeCodes());
         verify(paragraphService, times(2)).predictBatchLenient(anyList(), eq("u1"));
     }
 
