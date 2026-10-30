@@ -275,7 +275,8 @@ public class ClauseMatcherAndMergeServiceTest {
         // 模拟旧DOCX：第1、2项是同一个Word段落中的手动换行（单个contentPart内含\n）。
         oldClause.getContentParts().clear();
         oldClause.getContentParts().add("（三）投资策略");
-        oldClause.getContentParts().add("1、第一项内容。\n2、第二项内容。");
+        // Aspose Paragraph.getText() 对 w:cr 可能返回竖向制表符（\u000B），而非普通\n。
+        oldClause.getContentParts().add("1、第一项内容。\u000B2、第二项内容。");
         oldClause.getContentParts().add("保持不变的说明。");
 
         // 模拟新DOCX：第1、2项分别是独立Word段落（两个contentPart）。

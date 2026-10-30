@@ -695,7 +695,10 @@ public class ClauseComparisonEngine {
         int sourcePartIndex = 0;
         for (String part : clause.getContentParts()) {
             sourcePartIndex++;
-            String text = ContractCompareText.cleanDisplayText(part);
+            // 仅在差异对齐阶段把 Aspose 的手动换行符（w:cr，通常返回\u000B）
+            // 转成换行。不要放进通用 cleanDisplayText，避免影响章节解析、上下文和其他调用方。
+            String text = ContractCompareText.cleanDisplayText(
+                    part == null ? null : part.replace('\u000B', '\n'));
             if (text.isEmpty()) {
                 continue;
             }

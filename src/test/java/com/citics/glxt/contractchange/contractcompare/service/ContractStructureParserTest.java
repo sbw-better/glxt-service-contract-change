@@ -167,6 +167,22 @@ public class ContractStructureParserTest {
     }
 
     @Test
+    public void shouldKeepLongNumberedInvestmentTextInsideCurrentClause() throws Exception {
+        Document document = new Document();
+        DocumentBuilder builder = new DocumentBuilder(document);
+        builder.writeln("（三）投资策略");
+        builder.writeln("1、根据宏观经济运行和行业趋势进行深入研究，选择具有长期增长潜力并符合基金投资目标的股票作为主要投资对象。");
+        builder.writeln("2、基于对宏观经济和资本市场的全面分析，判断定向增发项目的预期中签情况、预期损益和风险水平并选择投资时机。");
+
+        Parsed parsed = new ContractStructureParser().parse(document);
+
+        assertEquals(1, parsed.getClauses().size());
+        Clause strategy = parsed.getClauses().get(0);
+        assertEquals("（三）", strategy.getClauseNo());
+        assertEquals(3, strategy.getContentParts().size());
+    }
+
+    @Test
     public void shouldNestChineseNumberedSubheadingsUnderCurrentClause() throws Exception {
         Document document = new Document();
         DocumentBuilder builder = new DocumentBuilder(document);

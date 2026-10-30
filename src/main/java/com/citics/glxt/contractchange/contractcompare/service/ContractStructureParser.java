@@ -228,6 +228,9 @@ public class ContractStructureParser {
         Matcher decimal = DECIMAL_CLAUSE.matcher(text);
         if (decimal.matches()
                 && (decimal.group(1).contains(".") || decimal.group(2) != null)
+                // 数字开头的长正文（如投资策略中的“1、……”“2、……”）不是条款标题。
+                // 只有编号后短标题才建立子条款，避免段落合并/拆分改变其结构归属。
+                && (decimal.group(2) == null || decimal.group(2).length() <= 40)
                 && !looksLikeDate(decimal.group(1), decimal.group(2))) {
             String number = decimal.group(1);
             int defaultLevel = number.split("\\.").length;
