@@ -60,7 +60,7 @@ search:
   high-threshold: ${SEARCH_HIGH_THRESHOLD:0.85}
   # CANDIDATE的每条类型支持样本也必须达到此相似度，防止弱相关候选跨段落累计后进入文档汇总。
   candidate-min-similarity: ${SEARCH_CANDIDATE_MIN_SIMILARITY:0.78}
-  # HIGH除投票占比和支持数外，最高单条历史相似度也必须达到此值；弱相关同标签样本只作为候选。
+  # HIGH除投票占比和支持数外，每条支持该类型的历史样本都必须达到此相似度；弱相关样本会阻止该类型成为HIGH。
   high-min-similarity: ${SEARCH_HIGH_MIN_SIMILARITY:0.78}
   candidate-threshold: ${SEARCH_CANDIDATE_THRESHOLD:0.75}
   min-support-count: ${SEARCH_MIN_SUPPORT_COUNT:2}

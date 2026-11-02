@@ -109,34 +109,34 @@ public class ContractChangeProperties {
          * 外部配置调整；服务始终明确拒绝超长段落，不做静默截断。</p>
          */
         @Min(1)
-        private int maxParagraphLength = 2000;
+        private int maxParagraphLength = 5000;
         /** 历史段落至少达到这个相似度，才参与类型判断。 */
         @DecimalMin("-1.0")
         @DecimalMax("1.0")
-        private double minSimilarity = 0.60D;
+        private double minSimilarity = 0.75D;
         /** 一个类型的综合支持得分达到这个值，才可能标记为高可信。 */
         @DecimalMin("0.0")
         @DecimalMax("1.0")
-        private double highThreshold = 0.80D;
-        /** 候选类型的每条支持样本至少达到此相似度；弱相关候选不参与文件级汇总。 */
+        private double highThreshold = 0.85D;
+        /** 候选类型的每条支持样本至少达到此相似度；不满足时该候选类型会被过滤。 */
         @DecimalMin("-1.0")
         @DecimalMax("1.0")
-        private double candidateMinSimilarity = 0.80D;
+        private double candidateMinSimilarity = 0.78D;
         /** 高可信要求每条支持该类型的历史样本都达到此相似度，避免弱样本仅凭标签一致抬高投票占比。 */
         @DecimalMin("-1.0")
         @DecimalMax("1.0")
-        private double highMinSimilarity = 0.85D;
+        private double highMinSimilarity = 0.78D;
         /** 一个类型至少达到这个得分，才会作为候选返回。 */
         @DecimalMin("0.0")
         @DecimalMax("1.0")
-        private double candidateThreshold = 0.55D;
+        private double candidateThreshold = 0.75D;
         /** 除了分数足够高，还需要至少这么多条历史段落共同支持，才能标记为高可信。 */
         @Min(1)
         private int minSupportCount = 2;
         /** 投票无结果时，启用强单条匹配兜底所需的第一名最低相似度。 */
         @DecimalMin("-1.0")
         @DecimalMax("1.0")
-        private double strongMatchThreshold = 0.80D;
+        private double strongMatchThreshold = 0.99D;
         /** 校验具有先后关系的检索参数，配置错误时直接阻止应用启动。 */
         @AssertTrue(message = "检索配置不合法：vote/evidence TopK不能大于retrieveTopK，候选阈值不能大于高可信阈值，候选相似度不能低于检索相似度")
         public boolean isValidCombination() {

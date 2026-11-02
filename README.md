@@ -104,12 +104,17 @@ Java会校验返回数量、批量响应`index`、实际维度、非法浮点数
 | `EMBEDDING_BATCH_SIZE` | `16` | 单次网关请求文本数量，当前平台上限为16 |
 | `IMPORT_MAX_ROWS` | `1000` | 单次Excel最大数据行数 |
 | `IMPORT_MAX_TOTAL_SAMPLES` | `10000` | 当前版本有效样本数量上限，失效历史不占容量 |
-| `SEARCH_MAX_PARAGRAPH_LENGTH` | `2000` | 规范化段落最大字符数，不等同于Token数 |
-| `SEARCH_MIN_SIMILARITY` | `0.60` | 最低召回相似度 |
-| `SEARCH_HIGH_THRESHOLD` | `0.80` | 高可信类型得分阈值 |
-| `SEARCH_HIGH_MIN_SIMILARITY` | `0.85` | 标记高可信时，支持该类型的每条历史样本都必须达到的最低相似度 |
-| `SEARCH_CANDIDATE_THRESHOLD` | `0.55` | 候选类型得分阈值 |
-| `SEARCH_STRONG_MATCH_THRESHOLD` | `0.80` | 强相似单条候选兜底阈值 |
+| `SEARCH_RETRIEVE_TOP_K` | `10` | 向量检索最多返回的近邻数量 |
+| `SEARCH_VOTE_TOP_K` | `10` | 最多参与类型投票的近邻数量，不超过检索数量 |
+| `SEARCH_EVIDENCE_TOP_K` | `5` | 响应中最多返回的历史参考段落数量 |
+| `SEARCH_MAX_PARAGRAPH_LENGTH` | `5000` | 规范化段落最大字符数，不等同于Token数；超长文本不截断 |
+| `SEARCH_MIN_SIMILARITY` | `0.75` | 历史近邻参与投票的最低相似度；未过门槛的近邻仍可能作为无可靠匹配的参考返回 |
+| `SEARCH_CANDIDATE_THRESHOLD` | `0.75` | 类型加权投票得分达到此值，才可能作为候选返回 |
+| `SEARCH_HIGH_THRESHOLD` | `0.85` | 类型加权投票得分达到此值，才满足HIGH的投票条件 |
+| `SEARCH_CANDIDATE_MIN_SIMILARITY` | `0.78` | 候选类型的每条支持历史样本都必须达到的最低相似度 |
+| `SEARCH_HIGH_MIN_SIMILARITY` | `0.78` | HIGH类型的每条支持历史样本都必须达到的最低相似度 |
+| `SEARCH_MIN_SUPPORT_COUNT` | `2` | 标记HIGH所需的最少支持历史段落数 |
+| `SEARCH_STRONG_MATCH_THRESHOLD` | `0.99` | 投票未产出类型时，第一名历史样本触发单条CANDIDATE兜底所需的最低相似度 |
 
 `EMBEDDING_MODEL_NAME`用于实际网关请求；`EMBEDDING_MODEL_VERSION`用于向量兼容性隔离。
 即使平台模型别名不变，只要底层模型发生变化，也必须使用新的版本标识并重新生成历史向量。
