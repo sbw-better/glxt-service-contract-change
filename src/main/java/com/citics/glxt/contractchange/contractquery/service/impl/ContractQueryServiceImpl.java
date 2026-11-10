@@ -7,6 +7,11 @@ import com.citics.glxt.contractchange.contractquery.model.ContractFileDownload;
 import com.citics.glxt.contractchange.contractquery.model.ContractQueryRequest;
 import com.citics.glxt.contractchange.contractquery.model.ContractDownloadRequest;
 import com.citics.glxt.contractchange.contractquery.model.ContractDownloadPayload;
+import com.citics.glxt.contractchange.contractquery.model.ContractPageQueryRequest;
+import com.citics.glxt.contractchange.common.page.PageResult;
+import com.citics.glxt.contractchange.common.utils.page.PageUtils;
+import com.github.pagehelper.PageHelper;
+import com.github.pagehelper.PageInfo;
 import com.citics.glxt.contractchange.contractquery.service.ContractQueryService;
 import com.citics.glxt.contractchange.common.service.CommonService;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +58,23 @@ public class ContractQueryServiceImpl implements ContractQueryService {
         log.info("合同文档查询完成, managerId={}, startDate={}, endDate={}, resultCount={}, elapsedMs={}",
                 managerId, startDate, baseDate, contracts.size(), System.currentTimeMillis() - startedAt);
         return contracts;
+    }
+
+    @Override
+    public PageResult queryContractsPage(ContractPageQueryRequest request) {
+        LocalDate baseDate = request.getBaseDate();
+        LocalDate startDate = baseDate.minusDays(request.getQueryDays().longValue());
+        long startedAt = System.currentTimeMillis();
+        log.info("合同文档分页查询开始, managerId={}, startDate={}, endDate={}, pageNum={}, pageSize={}",
+                request.getManagerId(), startDate, baseDate, request.getPageNum(), request.getPageSize());
+        PageHelper.startPage(request.getPageNum(), request.getPageSize());
+        List<ContractInfo> contracts = tpifCpwdkMapper.selectContracts(
+                request.getManagerId(), Date.valueOf(startDate), Date.valueOf(baseDate));
+        PageInfo<ContractInfo> pageInfo = new PageInfo<>(contracts);
+        PageResult result = PageUtils.getPageResult(pageInfo);
+        log.info("合同文档分页查询完成, managerId={}, resultCount={}, totalSize={}, elapsedMs={}",
+                request.getManagerId(), contracts.size(), pageInfo.getTotal(), System.currentTimeMillis() - startedAt);
+        return result;
     }
 
     @Override

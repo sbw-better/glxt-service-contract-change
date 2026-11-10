@@ -6,6 +6,9 @@ import com.citics.glxt.contractchange.contractquery.model.ContractFileDownload;
 import com.citics.glxt.contractchange.contractquery.model.ContractQueryRequest;
 import com.citics.glxt.contractchange.contractquery.model.ContractDownloadRequest;
 import com.citics.glxt.contractchange.contractquery.model.ContractDownloadPayload;
+import com.citics.glxt.contractchange.contractquery.model.ContractPageQueryRequest;
+import com.citics.glxt.contractchange.common.page.PageResult;
+import com.citics.glxt.contractchange.common.page.PageRequest;
 import com.citics.glxt.contractchange.contractquery.service.ContractQueryService;
 import org.junit.Before;
 import org.junit.Test;
@@ -34,10 +37,60 @@ public class ContractQueryControllerTest {
         queryService = mock(ContractQueryService.class);
         when(queryService.queryContracts(org.mockito.ArgumentMatchers.any(ContractQueryRequest.class)))
                 .thenReturn(Collections.<ContractInfo>emptyList());
+        PageResult pageResult = new PageResult();
+        pageResult.setPageNum(1);
+        pageResult.setPageSize(20);
+        pageResult.setTotalSize(0);
+        pageResult.setTotalPages(0);
+        pageResult.setContent(Collections.emptyList());
+        when(queryService.queryContractsPage(org.mockito.ArgumentMatchers.any(ContractPageQueryRequest.class)))
+                .thenReturn(pageResult);
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
         mockMvc = MockMvcBuilders.standaloneSetup(new ContractQueryController(queryService))
                 .setControllerAdvice(new GlobalExceptionHandler()).setValidator(validator).build();
+    }
+
+    @Test
+    public void shouldReturnPagedQueryAndDefaultPageNumber() throws Exception {
+        mockMvc.perform(post("/service/contract-query/doc/page").contentType("application/json")
+                        .content("{\"managerId\":525,\"baseDate\":\"2026-10-09\",\"pageSize\":20}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.pageNum").value(1))
+                .andExpect(jsonPath("$.data.pageSize").value(20))
+                .andExpect(jsonPath("$.data.totalSize").value(0))
+                .andExpect(jsonPath("$.data.content").isArray());
+        org.mockito.ArgumentCaptor<ContractPageQueryRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(ContractPageQueryRequest.class);
+        verify(queryService).queryContractsPage(captor.capture());
+        org.junit.Assert.assertEquals(1, captor.getValue().getPageNum());
+        org.junit.Assert.assertEquals(Integer.valueOf(0), captor.getValue().getQueryDays());
+    }
+
+    @Test
+    public void shouldRejectInvalidPageSize() throws Exception {
+        for (int size : new int[]{0, -1, 101}) {
+            mockMvc.perform(post("/service/contract-query/doc/page").contentType("application/json")
+                            .content("{\"managerId\":525,\"baseDate\":\"2026-10-09\",\"pageSize\":" + size + "}"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(400));
+        }
+        mockMvc.perform(post("/service/contract-query/doc/page").contentType("application/json")
+                        .content("{\"managerId\":525,\"baseDate\":\"2026-10-09\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(400));
+    }
+
+    @Test
+    public void shouldRejectPageNumberBelowOne() throws Exception {
+        mockMvc.perform(post("/service/contract-query/doc/page").contentType("application/json")
+                        .content("{\"managerId\":525,\"baseDate\":\"2026-10-09\",\"pageNum\":0,\"pageSize\":20}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(400));
+    }
+
+    @Test
+    public void shouldKeepSharedPageRequestDefaultsUnchanged() {
+        PageRequest request = new PageRequest();
+        org.junit.Assert.assertEquals(1, request.getPageNum());
+        org.junit.Assert.assertEquals(0, request.getPageSize());
     }
 
     @Test

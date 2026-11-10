@@ -5,6 +5,8 @@ import com.citics.glxt.contractchange.contractquery.model.ContractQueryRequest;
 import com.citics.glxt.contractchange.contractquery.model.ContractInfo;
 import com.citics.glxt.contractchange.contractquery.model.ContractDownloadRequest;
 import com.citics.glxt.contractchange.contractquery.model.ContractDownloadPayload;
+import com.citics.glxt.contractchange.contractquery.model.ContractPageQueryRequest;
+import com.citics.glxt.contractchange.common.page.PageResult;
 import com.citics.glxt.contractchange.contractquery.service.ContractQueryService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -37,6 +39,14 @@ public class ContractQueryController {
     public ContractChangeResult<List<ContractInfo>> queryContracts(
             @Valid @RequestBody ContractQueryRequest request) {
         return ContractChangeResult.success(queryService.queryContracts(request));
+    }
+
+    /** 分页查询有效合同文档，分页参数与筛选条件均通过JSON请求体传入。 */
+    @PostMapping(value = "/doc/page", consumes = "application/json")
+    @ApiOperation("分页查询管理人名下有效合同文档")
+    public ContractChangeResult<PageResult> queryContractsPage(
+            @Valid @RequestBody ContractPageQueryRequest request) {
+        return ContractChangeResult.success(queryService.queryContractsPage(request));
     }
 
     /** 校验管理人和文件归属后，以附件流方式返回文档，供客户端下载。 */
