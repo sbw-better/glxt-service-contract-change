@@ -584,9 +584,9 @@
     JOIN tpif_cpdm cp ON wd.glid = cp.id
     WHERE wd.wdfl IN (106, 108)
       AND wd.sfyx = 1
-      AND cp.glr = #{managerId}
+      AND cp.glr = #{criteria.managerId}
       AND TO_DATE(TO_CHAR(NVL(wd.sxrq, wd.scrq), 'FM00000000'), 'YYYYMMDD')
-          BETWEEN #{startDate} AND #{endDate}
+          BETWEEN #{criteria.startDate} AND #{criteria.endDate}
   </select>
 
   <!-- 下载前必须再次校验文件归属；此处的分类和有效状态与接口一返回范围一致。 -->

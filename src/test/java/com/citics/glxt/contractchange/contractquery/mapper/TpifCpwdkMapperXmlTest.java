@@ -33,9 +33,9 @@ public class TpifCpwdkMapperXmlTest {
                 TpifCpwdkMapper.class.getName() + ".selectOwnedContractsForDownload"));
         assertTrue(xml.contains("wd.wdfl IN (106, 108)"));
         assertTrue(xml.contains("wd.sfyx = 1"));
-        assertTrue(xml.contains("cp.glr = #{managerId}"));
+        assertTrue(xml.contains("cp.glr = #{criteria.managerId}"));
         assertTrue(xml.contains("TO_DATE(TO_CHAR(NVL(wd.sxrq, wd.scrq), 'FM00000000'), 'YYYYMMDD')"));
-        assertTrue(xml.contains("BETWEEN #{startDate} AND #{endDate}"));
+        assertTrue(xml.contains("BETWEEN #{criteria.startDate} AND #{criteria.endDate}"));
         assertTrue(xml.contains("wd.id IN"));
         assertTrue(xml.contains("AND cp.glr = #{managerId}"));
         for (String column : new String[]{"FILE_ID", "PRODUCT_CODE", "PRODUCT_NAME", "CONTRACT_VERSION",

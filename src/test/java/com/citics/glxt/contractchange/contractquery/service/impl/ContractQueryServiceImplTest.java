@@ -6,6 +6,9 @@ import com.citics.glxt.contractchange.contractquery.model.ContractFileDownload;
 import com.citics.glxt.contractchange.contractquery.model.ContractQueryRequest;
 import com.citics.glxt.contractchange.contractquery.model.ContractDownloadRequest;
 import com.citics.glxt.contractchange.contractquery.model.ContractDownloadPayload;
+import com.citics.glxt.contractchange.contractquery.model.ContractQueryCriteria;
+import com.citics.glxt.contractchange.contractquery.model.ContractPageQueryRequest;
+import com.citics.glxt.contractchange.contractquery.model.ContractInfo;
 import com.citics.glxt.contractchange.common.service.CommonService;
 import org.junit.Test;
 
@@ -18,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 
 public class ContractQueryServiceImplTest {
@@ -25,25 +29,66 @@ public class ContractQueryServiceImplTest {
     public void shouldPassInclusiveDateRangeToMapper() {
         TpifCpwdkMapper mapper = mock(TpifCpwdkMapper.class);
         CommonService commonService = mock(CommonService.class);
-        when(mapper.selectContracts(525L, Date.valueOf("2026-10-06"), Date.valueOf("2026-10-09")))
+        when(mapper.selectContracts(any(ContractQueryCriteria.class)))
                 .thenReturn(Collections.emptyList());
         ContractQueryServiceImpl service = new ContractQueryServiceImpl(mapper, commonService);
 
         assertEquals(0, service.queryContracts(request(3)).size());
 
-        verify(mapper).selectContracts(525L, Date.valueOf("2026-10-06"), Date.valueOf("2026-10-09"));
+        org.mockito.ArgumentCaptor<ContractQueryCriteria> captor =
+                org.mockito.ArgumentCaptor.forClass(ContractQueryCriteria.class);
+        verify(mapper).selectContracts(captor.capture());
+        assertEquals(Long.valueOf(525L), captor.getValue().getManagerId());
+        assertEquals(Date.valueOf("2026-10-06"), captor.getValue().getStartDate());
+        assertEquals(Date.valueOf("2026-10-09"), captor.getValue().getEndDate());
     }
 
     @Test
     public void zeroDaysShouldUseSameStartAndEndDate() {
         TpifCpwdkMapper mapper = mock(TpifCpwdkMapper.class);
         CommonService commonService = mock(CommonService.class);
-        when(mapper.selectContracts(525L, Date.valueOf("2026-10-09"), Date.valueOf("2026-10-09")))
+        when(mapper.selectContracts(any(ContractQueryCriteria.class)))
                 .thenReturn(Collections.emptyList());
 
         new ContractQueryServiceImpl(mapper, commonService).queryContracts(request(0));
 
-        verify(mapper).selectContracts(525L, Date.valueOf("2026-10-09"), Date.valueOf("2026-10-09"));
+        org.mockito.ArgumentCaptor<ContractQueryCriteria> captor =
+                org.mockito.ArgumentCaptor.forClass(ContractQueryCriteria.class);
+        verify(mapper).selectContracts(captor.capture());
+        assertEquals(Date.valueOf("2026-10-09"), captor.getValue().getStartDate());
+        assertEquals(Date.valueOf("2026-10-09"), captor.getValue().getEndDate());
+    }
+
+    @Test
+    public void pagedQueryShouldBuildCriteriaObjectAndReturnPaginationMetadata() {
+        TpifCpwdkMapper mapper = mock(TpifCpwdkMapper.class);
+        CommonService commonService = mock(CommonService.class);
+        com.github.pagehelper.Page<ContractInfo> mapperPage = new com.github.pagehelper.Page<>(2, 20);
+        when(mapper.selectContracts(any(ContractQueryCriteria.class))).thenReturn(mapperPage);
+
+        ContractPageQueryRequest request = new ContractPageQueryRequest();
+        request.setManagerId(525L);
+        request.setBaseDate(LocalDate.parse("2026-10-09"));
+        request.setQueryDays(3);
+        request.setPageNum(2);
+        request.setPageSize(20);
+
+        try {
+            com.citics.glxt.contractchange.common.page.PageResult result =
+                    new ContractQueryServiceImpl(mapper, commonService).queryContractsPage(request);
+
+            org.mockito.ArgumentCaptor<ContractQueryCriteria> captor =
+                    org.mockito.ArgumentCaptor.forClass(ContractQueryCriteria.class);
+            verify(mapper).selectContracts(captor.capture());
+            assertEquals(Long.valueOf(525L), captor.getValue().getManagerId());
+            assertEquals(Date.valueOf("2026-10-06"), captor.getValue().getStartDate());
+            assertEquals(Date.valueOf("2026-10-09"), captor.getValue().getEndDate());
+            assertEquals(2, result.getPageNum());
+            assertEquals(20, result.getPageSize());
+            assertEquals(0L, result.getTotalSize());
+        } finally {
+            com.github.pagehelper.PageHelper.clearPage();
+        }
     }
 
     @Test

@@ -1,14 +1,11 @@
 package com.citics.glxt.contractchange.contractquery.model;
 
-import com.citics.glxt.contractchange.common.page.PageRequest;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 import com.fasterxml.jackson.annotation.JsonFormat;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Getter;
 import lombok.Setter;
 
-import javax.validation.constraints.AssertTrue;
 import javax.validation.constraints.Max;
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
@@ -18,7 +15,7 @@ import java.time.LocalDate;
 @Setter
 @Getter
 @ApiModel("合同文档分页查询请求")
-public class ContractPageQueryRequest extends PageRequest {
+public class ContractPageQueryRequest {
     private static final long serialVersionUID = 1L;
 
     @NotNull(message = "管理人ID不能为空")
@@ -35,11 +32,15 @@ public class ContractPageQueryRequest extends PageRequest {
     @Max(value = 6, message = "查询天数不能大于6")
     private Integer queryDays = 0;
 
-    /** 仅对本分页接口校验公共分页参数，避免改变其他 PageRequest 使用方行为。 */
-    @AssertTrue(message = "页码必须大于等于1，且每页数量必须在1到100之间")
-    @JsonIgnore
-    public boolean isPageParametersValid() {
-        return getPageNum() >= 1 && getPageSize() >= 1 && getPageSize() <= 100;
-    }
+    @NotNull(message = "当前页码不能为空")
+    @Min(value = 1, message = "当前页码必须大于等于1")
+    @ApiModelProperty(value = "当前页码，从1开始；省略时默认为1", example = "1")
+    private Integer pageNum = 1;
+
+    @NotNull(message = "每页数量不能为空")
+    @Min(value = 1, message = "每页数量必须大于等于1")
+    @Max(value = 100, message = "每页数量不能大于100")
+    @ApiModelProperty(value = "每页数量，范围1到100", required = true, example = "20")
+    private Integer pageSize;
 
 }

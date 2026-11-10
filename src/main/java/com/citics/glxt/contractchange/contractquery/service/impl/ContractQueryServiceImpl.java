@@ -8,6 +8,7 @@ import com.citics.glxt.contractchange.contractquery.model.ContractQueryRequest;
 import com.citics.glxt.contractchange.contractquery.model.ContractDownloadRequest;
 import com.citics.glxt.contractchange.contractquery.model.ContractDownloadPayload;
 import com.citics.glxt.contractchange.contractquery.model.ContractPageQueryRequest;
+import com.citics.glxt.contractchange.contractquery.model.ContractQueryCriteria;
 import com.citics.glxt.contractchange.common.page.PageResult;
 import com.citics.glxt.contractchange.common.utils.page.PageUtils;
 import com.github.pagehelper.PageHelper;
@@ -54,7 +55,7 @@ public class ContractQueryServiceImpl implements ContractQueryService {
         long startedAt = System.currentTimeMillis();
         log.info("合同文档查询开始, managerId={}, startDate={}, endDate={}", managerId, startDate, baseDate);
         List<ContractInfo> contracts = tpifCpwdkMapper.selectContracts(
-                managerId, Date.valueOf(startDate), Date.valueOf(baseDate));
+                createQueryCriteria(managerId, startDate, baseDate));
         log.info("合同文档查询完成, managerId={}, startDate={}, endDate={}, resultCount={}, elapsedMs={}",
                 managerId, startDate, baseDate, contracts.size(), System.currentTimeMillis() - startedAt);
         return contracts;
@@ -69,12 +70,20 @@ public class ContractQueryServiceImpl implements ContractQueryService {
                 request.getManagerId(), startDate, baseDate, request.getPageNum(), request.getPageSize());
         PageHelper.startPage(request.getPageNum(), request.getPageSize());
         List<ContractInfo> contracts = tpifCpwdkMapper.selectContracts(
-                request.getManagerId(), Date.valueOf(startDate), Date.valueOf(baseDate));
+                createQueryCriteria(request.getManagerId(), startDate, baseDate));
         PageInfo<ContractInfo> pageInfo = new PageInfo<>(contracts);
         PageResult result = PageUtils.getPageResult(pageInfo);
         log.info("合同文档分页查询完成, managerId={}, resultCount={}, totalSize={}, elapsedMs={}",
                 request.getManagerId(), contracts.size(), pageInfo.getTotal(), System.currentTimeMillis() - startedAt);
         return result;
+    }
+
+    private ContractQueryCriteria createQueryCriteria(Long managerId, LocalDate startDate, LocalDate endDate) {
+        ContractQueryCriteria criteria = new ContractQueryCriteria();
+        criteria.setManagerId(managerId);
+        criteria.setStartDate(Date.valueOf(startDate));
+        criteria.setEndDate(Date.valueOf(endDate));
+        return criteria;
     }
 
     @Override

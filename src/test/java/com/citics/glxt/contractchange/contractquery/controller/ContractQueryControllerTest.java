@@ -63,7 +63,7 @@ public class ContractQueryControllerTest {
         org.mockito.ArgumentCaptor<ContractPageQueryRequest> captor =
                 org.mockito.ArgumentCaptor.forClass(ContractPageQueryRequest.class);
         verify(queryService).queryContractsPage(captor.capture());
-        org.junit.Assert.assertEquals(1, captor.getValue().getPageNum());
+        org.junit.Assert.assertTrue(Integer.valueOf(1).equals(captor.getValue().getPageNum()));
         org.junit.Assert.assertEquals(Integer.valueOf(0), captor.getValue().getQueryDays());
     }
 
