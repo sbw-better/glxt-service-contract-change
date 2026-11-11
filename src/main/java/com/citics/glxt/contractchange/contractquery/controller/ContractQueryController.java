@@ -6,7 +6,7 @@ import com.citics.glxt.contractchange.contractquery.model.ContractInfo;
 import com.citics.glxt.contractchange.contractquery.model.ContractDownloadRequest;
 import com.citics.glxt.contractchange.contractquery.model.ContractDownloadPayload;
 import com.citics.glxt.contractchange.contractquery.model.ContractPageQueryRequest;
-import com.citics.glxt.contractchange.common.page.PageResult;
+import com.citics.glxt.contractchange.common.page.PageInfoResponse;
 import com.citics.glxt.contractchange.contractquery.service.ContractQueryService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -44,7 +44,7 @@ public class ContractQueryController {
     /** 分页查询有效合同文档，分页参数与筛选条件均通过JSON请求体传入。 */
     @PostMapping(value = "/doc/page", consumes = "application/json")
     @ApiOperation("分页查询管理人名下有效合同文档")
-    public ContractChangeResult<PageResult> queryContractsPage(
+    public ContractChangeResult<PageInfoResponse<ContractInfo>> queryContractsPage(
             @Valid @RequestBody ContractPageQueryRequest request) {
         return ContractChangeResult.success(queryService.queryContractsPage(request));
     }

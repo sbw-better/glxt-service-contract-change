@@ -74,7 +74,7 @@ public class ContractQueryServiceImplTest {
         request.setPageSize(20);
 
         try {
-            com.citics.glxt.contractchange.common.page.PageResult result =
+            com.citics.glxt.contractchange.common.page.PageInfoResponse<ContractInfo> result =
                     new ContractQueryServiceImpl(mapper, commonService).queryContractsPage(request);
 
             org.mockito.ArgumentCaptor<ContractQueryCriteria> captor =
@@ -85,7 +85,9 @@ public class ContractQueryServiceImplTest {
             assertEquals(Date.valueOf("2026-10-09"), captor.getValue().getEndDate());
             assertEquals(2, result.getPageNum());
             assertEquals(20, result.getPageSize());
-            assertEquals(0L, result.getTotalSize());
+            assertEquals(0L, result.getTotal());
+            assertEquals(0, result.getSize());
+            assertEquals(Collections.emptyList(), result.getList());
         } finally {
             com.github.pagehelper.PageHelper.clearPage();
         }

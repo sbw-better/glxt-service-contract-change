@@ -9,7 +9,7 @@ import com.citics.glxt.contractchange.contractquery.model.ContractDownloadReques
 import com.citics.glxt.contractchange.contractquery.model.ContractDownloadPayload;
 import com.citics.glxt.contractchange.contractquery.model.ContractPageQueryRequest;
 import com.citics.glxt.contractchange.contractquery.model.ContractQueryCriteria;
-import com.citics.glxt.contractchange.common.page.PageResult;
+import com.citics.glxt.contractchange.common.page.PageInfoResponse;
 import com.citics.glxt.contractchange.common.utils.page.PageUtils;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
@@ -62,7 +62,7 @@ public class ContractQueryServiceImpl implements ContractQueryService {
     }
 
     @Override
-    public PageResult queryContractsPage(ContractPageQueryRequest request) {
+    public PageInfoResponse<ContractInfo> queryContractsPage(ContractPageQueryRequest request) {
         LocalDate baseDate = request.getBaseDate();
         LocalDate startDate = baseDate.minusDays(request.getQueryDays().longValue());
         long startedAt = System.currentTimeMillis();
@@ -72,7 +72,7 @@ public class ContractQueryServiceImpl implements ContractQueryService {
         List<ContractInfo> contracts = tpifCpwdkMapper.selectContracts(
                 createQueryCriteria(request.getManagerId(), startDate, baseDate));
         PageInfo<ContractInfo> pageInfo = new PageInfo<>(contracts);
-        PageResult result = PageUtils.getPageResult(pageInfo);
+        PageInfoResponse<ContractInfo> result = PageUtils.getPageInfoResponse(pageInfo);
         log.info("合同文档分页查询完成, managerId={}, resultCount={}, totalSize={}, elapsedMs={}",
                 request.getManagerId(), contracts.size(), pageInfo.getTotal(), System.currentTimeMillis() - startedAt);
         return result;

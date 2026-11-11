@@ -5,7 +5,7 @@ import com.citics.glxt.contractchange.contractquery.model.ContractQueryRequest;
 import com.citics.glxt.contractchange.contractquery.model.ContractDownloadRequest;
 import com.citics.glxt.contractchange.contractquery.model.ContractDownloadPayload;
 import com.citics.glxt.contractchange.contractquery.model.ContractPageQueryRequest;
-import com.citics.glxt.contractchange.common.page.PageResult;
+import com.citics.glxt.contractchange.common.page.PageInfoResponse;
 
 import java.util.List;
 
@@ -13,7 +13,7 @@ import java.util.List;
 public interface ContractQueryService {
     List<ContractInfo> queryContracts(ContractQueryRequest request);
 
-    PageResult queryContractsPage(ContractPageQueryRequest request);
+    PageInfoResponse<ContractInfo> queryContractsPage(ContractPageQueryRequest request);
 
     /** 批量校验管理人对文件的归属后下载原始文件。 */
     ContractDownloadPayload downloadContracts(ContractDownloadRequest request);

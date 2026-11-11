@@ -7,8 +7,8 @@ import com.citics.glxt.contractchange.contractquery.model.ContractQueryRequest;
 import com.citics.glxt.contractchange.contractquery.model.ContractDownloadRequest;
 import com.citics.glxt.contractchange.contractquery.model.ContractDownloadPayload;
 import com.citics.glxt.contractchange.contractquery.model.ContractPageQueryRequest;
-import com.citics.glxt.contractchange.common.page.PageResult;
 import com.citics.glxt.contractchange.common.page.PageRequest;
+import com.citics.glxt.contractchange.common.page.PageInfoResponse;
 import com.citics.glxt.contractchange.contractquery.service.ContractQueryService;
 import org.junit.Before;
 import org.junit.Test;
@@ -37,12 +37,14 @@ public class ContractQueryControllerTest {
         queryService = mock(ContractQueryService.class);
         when(queryService.queryContracts(org.mockito.ArgumentMatchers.any(ContractQueryRequest.class)))
                 .thenReturn(Collections.<ContractInfo>emptyList());
-        PageResult pageResult = new PageResult();
+        PageInfoResponse<ContractInfo> pageResult = new PageInfoResponse<>();
         pageResult.setPageNum(1);
         pageResult.setPageSize(20);
-        pageResult.setTotalSize(0);
-        pageResult.setTotalPages(0);
-        pageResult.setContent(Collections.emptyList());
+        pageResult.setSize(0);
+        pageResult.setTotal(0);
+        pageResult.setPages(0);
+        pageResult.setList(Collections.emptyList());
+        pageResult.setNavigatepageNums(null);
         when(queryService.queryContractsPage(org.mockito.ArgumentMatchers.any(ContractPageQueryRequest.class)))
                 .thenReturn(pageResult);
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
@@ -58,8 +60,22 @@ public class ContractQueryControllerTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.pageNum").value(1))
                 .andExpect(jsonPath("$.data.pageSize").value(20))
-                .andExpect(jsonPath("$.data.totalSize").value(0))
-                .andExpect(jsonPath("$.data.content").isArray());
+                .andExpect(jsonPath("$.data.size").value(0))
+                .andExpect(jsonPath("$.data.total").value(0))
+                .andExpect(jsonPath("$.data.pages").value(0))
+                .andExpect(jsonPath("$.data.list").isArray())
+                .andExpect(jsonPath("$.data.hasPreviousPage").value(false))
+                .andExpect(jsonPath("$.data.hasNextPage").value(false))
+                .andExpect(jsonPath("$.data.navigatepageNums").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.startRow").exists())
+                .andExpect(jsonPath("$.data.endRow").exists())
+                .andExpect(jsonPath("$.data.prePage").exists())
+                .andExpect(jsonPath("$.data.nextPage").exists())
+                .andExpect(jsonPath("$.data.navigatePages").exists())
+                .andExpect(jsonPath("$.data.navigateFirstPage").exists())
+                .andExpect(jsonPath("$.data.navigateLastPage").exists())
+                .andExpect(jsonPath("$.data.firstPage").exists())
+                .andExpect(jsonPath("$.data.lastPage").exists());
         org.mockito.ArgumentCaptor<ContractPageQueryRequest> captor =
                 org.mockito.ArgumentCaptor.forClass(ContractPageQueryRequest.class);
         verify(queryService).queryContractsPage(captor.capture());
