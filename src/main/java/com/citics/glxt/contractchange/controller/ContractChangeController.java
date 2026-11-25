@@ -23,6 +23,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import com.citics.glxt.contractchange.model.SampleImportRequest;
+import com.citics.glxt.contractchange.model.SampleAddRequest;
+import com.citics.glxt.contractchange.model.SampleAddResponse;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.validation.Valid;
@@ -66,6 +68,18 @@ public class ContractChangeController {
         return response.isSuccess()
                 ? ContractChangeResult.success(response)
                 : ContractChangeResult.of(CommonConstants.BAD_REQUEST, "Excel导入校验失败", response);
+    }
+
+    /** 单条新增历史段落，复用Excel导入的校验、向量化、事务入库和索引刷新流程。 */
+    @PostMapping(value = "/samples/add", consumes = "application/json")
+    @ApiOperation(value = "新增单条历史合同段落",
+            notes = "JSON传入paragraph、changeTypeCodes及userId；相同段落同标签幂等跳过，标签冲突返回409")
+    public ContractChangeResult<SampleAddResponse> addSample(@Valid @RequestBody SampleAddRequest request) {
+        SampleAddResponse response = libraryImporter.addSample(request);
+        if ("INDEX_PENDING".equals(response.getStatus())) {
+            return ContractChangeResult.success("历史样本已入库，索引待恢复；请重载索引，不要重复提交", response);
+        }
+        return ContractChangeResult.success(response);
     }
 
     /** 识别一个新合同段落可能对应的多个变更类型。 */

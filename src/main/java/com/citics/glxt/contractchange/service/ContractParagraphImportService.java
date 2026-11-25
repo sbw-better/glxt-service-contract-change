@@ -95,6 +95,28 @@ public class ContractParagraphImportService {
         return parse(bytes);
     }
 
+    /**
+     * 将单条接口参数转换成与Excel行一致的已校验数据结构，后续复用相同的查重、向量化和入库流程。
+     * 这里不调用模型、不访问数据库；校验失败时在样本库加锁之前直接拒绝请求。
+     */
+    ParsedExcel prepareSingleSample(String paragraph, String rawCodes) {
+        ParsedExcel parsed = new ParsedExcel();
+        parsed.totalRows = 1;
+        try {
+            String normalized = ContractTextNormalizer.normalize(paragraph);
+            validateParagraph(normalized);
+            String codes = ChangeTypeCodes.canonicalize(rawCodes);
+            String hash = HashUtils.sha256(normalized);
+            parsed.rows.put(hash, new PreparedRow(1,
+                    ContractTextNormalizer.replaceUnicodeSpaceCharacters(paragraph).trim(),
+                    normalized, hash, codes));
+            return parsed;
+        } catch (ContractChangeBusinessException ex) {
+            parsed.errors.add(new ImportErrorItem(1, ex.getMessage()));
+            return parsed;
+        }
+    }
+
     ImportResponse importPrepared(ParsedExcel parsed, String userId,
             com.citics.glxt.contractchange.domain.SampleLibraryControlDO source, SampleLibraryStore store) {
         ContractChangeProperties.Embedding snapshot=new ContractChangeProperties.Embedding();

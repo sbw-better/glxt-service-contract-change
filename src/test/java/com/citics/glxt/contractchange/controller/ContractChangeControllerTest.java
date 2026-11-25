@@ -4,6 +4,7 @@ import com.citics.glxt.contractchange.common.handler.GlobalExceptionHandler;
 import com.citics.glxt.contractchange.model.ImportErrorItem;
 import com.citics.glxt.contractchange.model.ImportResponse;
 import com.citics.glxt.contractchange.model.DocumentChangeTypeSummaryResponse;
+import com.citics.glxt.contractchange.model.SampleAddResponse;
 import com.citics.glxt.contractchange.service.ContractDocumentChangePredictionService;
 import com.citics.glxt.contractchange.service.ContractParagraphImportService;
 import com.citics.glxt.contractchange.service.ContractParagraphPredictionService;
@@ -88,6 +89,20 @@ public class ContractChangeControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("Excel文件路径不能为空"));
+    }
+
+    @Test
+    public void shouldAddSingleHistoricalSampleAndReturnIndexState() throws Exception {
+        when(importService.addSample(any())).thenReturn(
+                new SampleAddResponse("INSERTED", "op-1", 1, 0, 0, true, false));
+        mockMvc.perform(post("/service/contract-change/samples/add")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"paragraph\":\"历史合同段落\",\"changeTypeCodes\":\"TYPE01；TYPE02\",\"userId\":\"employee-001\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.status").value("INSERTED"))
+                .andExpect(jsonPath("$.data.indexReloaded").value(true));
+        verify(importService).addSample(any());
     }
 
     @Test

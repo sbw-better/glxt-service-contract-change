@@ -76,6 +76,69 @@ public class SampleLibraryRebuildTest {
         verify(embedding,times(2)).embed(anyList(),eq("body-user"));
     }
 
+    @Test public void singleSampleAddUsesSharedRebuildAndReportsInserted() {
+        SampleAddRequest request = singleSample("新增条款", "71;72");
+        SampleAddResponse result = service.addSample(request);
+        assertEquals("INSERTED", result.getStatus());
+        assertEquals(1, result.getInserted());
+        assertEquals(0, result.getSkipped());
+        assertTrue(result.isIndexReloaded());
+        assertTrue(result.isRebuild());
+        assertEquals("IDLE", control.getOperationStatus());
+        verify(embedding, times(2)).embed(anyList(), eq("audit-user"));
+    }
+
+    @Test public void singleSampleDuplicateWithSameTagsIsIdempotentlySkipped() {
+        when(paragraphs.selectActiveParagraphs("new-v2", 3))
+                .thenReturn(Collections.singletonList(row("历史条款", "49", "new-v2")));
+        SampleAddResponse result = service.addSample(singleSample("历史条款", "49"));
+        assertEquals("SKIPPED_DUPLICATE", result.getStatus());
+        assertEquals(0, result.getInserted());
+        assertEquals(1, result.getSkipped());
+        assertTrue(result.isIndexReloaded());
+    }
+
+    @Test public void singleSampleTagConflictIsRejectedBeforeEmbedding() {
+        try {
+            service.addSample(singleSample("历史条款", "50"));
+            fail("相同段落的不同标签必须冲突");
+        } catch (ContractChangeBusinessException expected) {
+            assertEquals(409, expected.getCode());
+        }
+        verifyZeroInteractions(embedding);
+        assertEquals("IDLE", control.getOperationStatus());
+    }
+
+    @Test public void invalidSingleSampleIsRejectedBeforeClaimAndEmbedding() {
+        try {
+            service.addSample(singleSample("   ", "49"));
+            fail("空段落必须被拒绝");
+        } catch (ContractChangeBusinessException expected) {
+            assertEquals(400, expected.getCode());
+        }
+        verify(library, never()).claim(anyString());
+        verifyZeroInteractions(embedding);
+    }
+
+    @Test public void singleSampleReportsCommittedIndexPendingStateWithoutRetryingInsert() {
+        when(paragraphs.selectActiveParagraphs("new-v2", 3)).thenThrow(new IllegalStateException("index unavailable"));
+        SampleAddResponse result = service.addSample(singleSample("新增条款", "71"));
+        assertEquals("INDEX_PENDING", result.getStatus());
+        assertEquals(1, result.getInserted());
+        assertFalse(result.isIndexReloaded());
+        assertEquals("DB_COMMITTED", control.getOperationStatus());
+        assertNotNull(control.getOperationId());
+        verify(persistence, times(1)).saveAll(anyList());
+    }
+
+    private SampleAddRequest singleSample(String paragraph, String codes) {
+        SampleAddRequest request = new SampleAddRequest();
+        request.setParagraph(paragraph);
+        request.setChangeTypeCodes(codes);
+        request.setUserId("audit-user");
+        return request;
+    }
+
     @Test public void downloadFailureMustNotClaimLibraryOrCallModel() {
         when(fileLoader.loadExcel(anyString())).thenThrow(new ContractChangeBusinessException("Excel文件下载失败"));
         SampleImportRequest request=new SampleImportRequest(); request.setFileGetPath("/missing.xlsx"); request.setUserId("user");

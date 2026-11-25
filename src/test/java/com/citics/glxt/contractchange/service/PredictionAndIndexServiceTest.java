@@ -36,6 +36,8 @@ public class PredictionAndIndexServiceTest {
         properties.getSearch().setMinSimilarity(0.5D);
         properties.getSearch().setCandidateThreshold(0.55D);
         properties.getSearch().setHighThreshold(0.80D);
+        properties.getSearch().setCandidateMinSimilarity(0.80D);
+        properties.getSearch().setStrongMatchThreshold(0.80D);
         properties.getSearch().setMinSupportCount(2);
 
         ContractParagraphMapper mapper = mock(ContractParagraphMapper.class);

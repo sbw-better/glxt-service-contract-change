@@ -171,6 +171,7 @@ Java对象用`String`承载持久化内容，Mapper查询、新增、更新显�
 
 ```http
 POST /service/contract-change/samples/import
+POST /service/contract-change/samples/add
 POST /service/contract-change/predict
 POST /service/contract-change/index/reload
 GET  /service/contract-change/index/status
@@ -190,6 +191,19 @@ POST /service/contract-compare/export
 两个字段均必填。服务与`/compare`共用主备SFTP配置读取文件，路径须指向SFTP服务器上的xlsx文件，
 并非LiveBOS客户端本地路径。文件最大20MB；下载或Excel校验失败不会占用样本库或调用模型。
 导入结果和同步模型升级重建流程不变。LiveBOS调用示例见[历史段落路径导入调用说明](docs/technical-guides/LiveBOS历史段落路径导入调用说明.md)。
+
+少量新增历史样本可直接调用`/samples/add`，请求体不需要上传Excel：
+
+```json
+{
+  "paragraph": "历史合同段落内容",
+  "changeTypeCodes": "TYPE01;TYPE02",
+  "userId": "employee-001"
+}
+```
+
+段落和类型编码必填，类型编码支持分号或逗号分隔。相同段落和相同编码会幂等跳过；相同段落但编码不同返回冲突，不自动合并。
+响应中的`status`为`INSERTED`、`REACTIVATED`、`SKIPPED_DUPLICATE`或`INDEX_PENDING`。若为`INDEX_PENDING`，表示数据库已提交、内存索引待恢复，请先重载索引，不要重复提交该样本。
 
 独立段落预测接口必须携带：
 

@@ -6,6 +6,9 @@ import com.citics.glxt.contractchange.domain.*;
 import com.citics.glxt.contractchange.mapper.ContractParagraphMapper;
 import com.citics.glxt.contractchange.model.SampleRebuildResponse;
 import com.citics.glxt.contractchange.model.SampleImportRequest;
+import com.citics.glxt.contractchange.model.SampleAddRequest;
+import com.citics.glxt.contractchange.model.SampleAddResponse;
+import com.citics.glxt.contractchange.model.ImportResponse;
 import com.citics.glxt.contractchange.contractcompare.service.SftpContractFileLoader;
 import com.citics.glxt.contractchange.util.*;
 import lombok.extern.slf4j.Slf4j;
@@ -73,7 +76,77 @@ public class SampleLibraryImportService {
         return importParsed(parsed,request.getUserId(),operationId,started);
     }
 
+    /**
+     * 处理少量历史样本的单条新增请求。参数先复用导入服务的行校验，再进入相同的样本库互斥、
+     * 事务入库、向量版本切换和索引刷新流程；段落正文与类型编码不会写入日志。
+     */
+    public SampleAddResponse addSample(SampleAddRequest request) {
+        String operationId = UUID.randomUUID().toString();
+        long started = System.currentTimeMillis();
+        if (request == null || request.getUserId() == null || request.getUserId().trim().isEmpty()) {
+            log.warn("单条历史样本新增参数校验失败, operationId={}, reason=userId为空", operationId);
+            throw new ContractChangeBusinessException("userId不能为空");
+        }
+        ParsedExcel parsed = importer.prepareSingleSample(request.getParagraph(), request.getChangeTypeCodes());
+        if (!parsed.errors.isEmpty()) {
+            log.warn("单条历史样本新增参数校验失败, operationId={}, errorCount={}, elapsedMs={}",
+                    operationId, parsed.errors.size(), System.currentTimeMillis() - started);
+            throw new ContractChangeBusinessException(parsed.errors.get(0).getMessage());
+        }
+        PreparedRow row = parsed.rows.values().iterator().next();
+        log.info("单条历史样本新增开始, operationId={}, textHash={}, modelVersion={}",
+                operationId, row.textHash, properties.getEmbedding().getModelVersion());
+        Object result = importParsed(parsed, request.getUserId(), operationId, started, true);
+        if (result instanceof SampleAddResponse) {
+            SampleAddResponse added = (SampleAddResponse) result;
+            log.info("单条历史样本新增全量重建完成, operationId={}, textHash={}, status={}, inserted={}, skipped={}, indexReloaded={}, elapsedMs={}",
+                    operationId, row.textHash, added.getStatus(), added.getInserted(), added.getSkipped(),
+                    added.isIndexReloaded(), System.currentTimeMillis() - started);
+            return added;
+        }
+        if (result instanceof ImportResponse) {
+            ImportResponse imported = (ImportResponse) result;
+            if (!imported.isSuccess()) {
+                String reason = imported.getErrors() == null || imported.getErrors().isEmpty()
+                        ? "单条历史样本校验失败" : imported.getErrors().get(0).getMessage();
+                log.warn("单条历史样本新增冲突, operationId={}, textHash={}, errorCount={}, elapsedMs={}",
+                        operationId, row.textHash,
+                        imported.getErrors() == null ? 0 : imported.getErrors().size(),
+                        System.currentTimeMillis() - started);
+                throw new ContractChangeBusinessException(409, reason);
+            }
+            boolean pending = !imported.isIndexReloaded();
+            String status = pending ? "INDEX_PENDING"
+                    : imported.getInserted() > 0 ? "INSERTED"
+                    : imported.getUpdated() > 0 ? "REACTIVATED" : "SKIPPED_DUPLICATE";
+            log.info("单条历史样本新增完成, operationId={}, textHash={}, status={}, inserted={}, updated={}, skipped={}, indexReloaded={}, elapsedMs={}",
+                    operationId, row.textHash, status, imported.getInserted(), imported.getUpdated(), imported.getSkipped(),
+                    imported.isIndexReloaded(), System.currentTimeMillis() - started);
+            return new SampleAddResponse(status, operationId, imported.getInserted(), imported.getUpdated(),
+                    imported.getSkipped(), imported.isIndexReloaded(), false);
+        }
+        SampleRebuildResponse rebuilt = (SampleRebuildResponse) result;
+        return new SampleAddResponse("INSERTED", rebuilt.getOperationId(), 1, 0, 0,
+                rebuilt.isIndexReloaded(), true);
+    }
+
+    private boolean containsSameSample(List<ContractParagraphDO> active, PreparedRow row) {
+        if (active == null) return false;
+        for (ContractParagraphDO paragraph : active) {
+            String normalized = ContractTextNormalizer.normalize(paragraph.getOriginalText());
+            String hash = HashUtils.sha256(normalized);
+            if (row.textHash.equals(hash)
+                    && row.changeTypeCodes.equals(ChangeTypeCodes.canonicalize(paragraph.getChangeTypeCodes()))) return true;
+        }
+        return false;
+    }
+
     private Object importParsed(ParsedExcel parsed,String userId,String id,long started) {
+        return importParsed(parsed, userId, id, started, false);
+    }
+
+    private Object importParsed(ParsedExcel parsed,String userId,String id,long started,
+                                boolean returnCommittedIndexFailure) {
         // Excel有行级错误时直接返回校验结果，避免占用样本库并触发任何模型调用。
         if (!parsed.errors.isEmpty()) {
             log.warn("历史样本导入校验失败, operationId={}, totalRows={}, uniqueRows={}, errorCount={}, elapsedMs={}",
@@ -111,10 +184,19 @@ public class SampleLibraryImportService {
             log.info("全量重建读取有效样本完成, operationId={}, activeCount={}",id,active.size());
             stage="全量重建";
             List<PreparedRow> merged=merge(active,parsed,source);
+            boolean singleSampleDuplicate = returnCommittedIndexFailure
+                    && containsSameSample(active, parsed.rows.values().iterator().next());
             log.info("全量重建样本合并完成, operationId={}, sourceCount={}, importedUniqueCount={}, mergedCount={}",
                     id,active.size(),parsed.rows.size(),merged.size());
             String sourceVersion=source.getModelVersion();
-            rebuild(source,target,merged,active.size(),userId);
+            boolean indexReloaded = rebuild(source,target,merged,active.size(),userId,
+                    returnCommittedIndexFailure);
+            if (returnCommittedIndexFailure) {
+                return new SampleAddResponse(!indexReloaded ? "INDEX_PENDING"
+                        : singleSampleDuplicate ? "SKIPPED_DUPLICATE" : "INSERTED",
+                        id, singleSampleDuplicate ? 0 : 1, 0, singleSampleDuplicate ? 1 : 0,
+                        indexReloaded, true);
+            }
             log.info("历史样本全量重建请求完成, operationId={}, sourceVersion={}, targetVersion={}, sampleCount={}, elapsedMs={}",
                     id,sourceVersion,target.getModelVersion(),merged.size(),System.currentTimeMillis()-started);
             return new SampleRebuildResponse(id,sourceVersion,target.getModelVersion(),merged.size(),active.size());
@@ -188,8 +270,9 @@ public class SampleLibraryImportService {
         return new ArrayList<>(merged.values());
     }
 
-    private void rebuild(SampleLibraryControlDO source,ContractChangeProperties.Embedding target,
-                         List<PreparedRow> rows,int sourceCount,String userId) {
+    private boolean rebuild(SampleLibraryControlDO source,ContractChangeProperties.Embedding target,
+                            List<PreparedRow> rows,int sourceCount,String userId,
+                            boolean returnCommittedIndexFailure) {
         boolean committed=false;
         String stage="准备向量化";
         try {
@@ -219,11 +302,17 @@ public class SampleLibraryImportService {
             log.info("历史样本重建索引重载开始, operationId={}, expectedSampleCount={}",source.getOperationId(),rows.size());
             index.reloadForOperation(source.getOperationId(),rows.size());
             log.info("历史样本重建索引重载完成, operationId={}, sampleCount={}",source.getOperationId(),rows.size());
+            return true;
         } catch (RuntimeException ex) {
             String detail=safeFailureDetail(ex);
             // 只记录受控诊断信息，不记录底层SQL、请求正文、模型响应或凭据。
             log.error("历史样本重建失败, stage={}, operationId={}, exceptionType={}, detail={}",
                     stage,source.getOperationId(),ex.getClass().getSimpleName(),detail);
+            if (committed && returnCommittedIndexFailure) {
+                log.error("单条历史样本已提交但索引恢复失败, operationId={}, expectedSamples={}, action=通过索引重载恢复且不要重复提交",
+                        source.getOperationId(), rows.size());
+                return false;
+            }
             String message=committed
                     ? "数据库已切换，索引待恢复；请重载索引，不要重复导入"
                     : "重建失败，旧有效版本未改变，失败阶段="+stage;
